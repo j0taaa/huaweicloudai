@@ -58,7 +58,7 @@ export async function POST(request: Request) {
         {
           type: "function",
           function: {
-            name: "eval_in_browser",
+            name: "eval_code",
             description:
               "Execute JavaScript code on the server and return the result.",
             parameters: {
