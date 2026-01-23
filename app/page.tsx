@@ -147,6 +147,16 @@ const bufferToHex = (buffer: ArrayBuffer) => {
     .join("");
 };
 
+const getSubtleCrypto = () => {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) {
+    throw new Error(
+      "Web Crypto API is unavailable. Use a secure context (https or localhost) and a modern browser.",
+    );
+  }
+  return subtle;
+};
+
 const hashPayload = async (data?: string | Record<string, unknown> | null) => {
   if (!data || data === "") {
     return EMPTY_BODY_SHA256;
@@ -154,27 +164,27 @@ const hashPayload = async (data?: string | Record<string, unknown> | null) => {
 
   const body = typeof data === "string" ? data : JSON.stringify(data);
   const encoded = new TextEncoder().encode(body);
-  const digest = await crypto.subtle.digest("SHA-256", encoded);
+  const digest = await getSubtleCrypto().digest("SHA-256", encoded);
   return bufferToHex(digest);
 };
 
 const hexHash = async (value: string) => {
   const encoded = new TextEncoder().encode(value);
-  const digest = await crypto.subtle.digest("SHA-256", encoded);
+  const digest = await getSubtleCrypto().digest("SHA-256", encoded);
   return bufferToHex(digest);
 };
 
 const hmacSHA256 = async (secret: string, value: string) => {
   const keyData = new TextEncoder().encode(secret);
   const data = new TextEncoder().encode(value);
-  const key = await crypto.subtle.importKey(
+  const key = await getSubtleCrypto().importKey(
     "raw",
     keyData,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
   );
-  const signature = await crypto.subtle.sign("HMAC", key, data);
+  const signature = await getSubtleCrypto().sign("HMAC", key, data);
   return bufferToHex(signature);
 };
 
