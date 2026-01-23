@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ProxyAgent } from "undici";
 
 type ChatMessage = {
   role: "user" | "assistant" | "system";
@@ -29,9 +30,16 @@ export async function POST(request: Request) {
     );
   }
 
-  const endpoint = new URL("/chat/completions", baseUrl).toString();
+  const normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  const endpoint = new URL("chat/completions", normalizedBaseUrl).toString();
 
-  const response = await fetch(endpoint, {
+  const proxyUrl =
+    process.env.HTTPS_PROXY ||
+    process.env.HTTP_PROXY ||
+    process.env.https_proxy ||
+    process.env.http_proxy;
+  const dispatcher = proxyUrl ? new ProxyAgent(proxyUrl) : undefined;
+  const fetchOptions = {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -41,7 +49,10 @@ export async function POST(request: Request) {
       model: "glm-4.7",
       messages,
     }),
-  });
+    dispatcher,
+  } satisfies RequestInit & { dispatcher?: unknown };
+
+  const response = await fetch(endpoint, fetchOptions);
 
   if (!response.ok) {
     const errorText = await response.text();
