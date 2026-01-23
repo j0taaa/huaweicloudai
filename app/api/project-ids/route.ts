@@ -50,43 +50,70 @@ const getDateTime = () => {
   return `${yyyy}${mm}${dd}T${hh}${min}${ss}Z`;
 };
 
+const urlEncode = (value: string) => {
+  const input = typeof value === "string" ? value : String(value);
+  const noEscape = new Set(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.~",
+  );
+  let output = "";
+
+  for (const character of input) {
+    if (noEscape.has(character)) {
+      output += character;
+    } else {
+      const hex = character.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0");
+      output += `%${hex}`;
+    }
+  }
+
+  return output;
+};
+
 const buildCanonicalURI = (path: string) => {
   if (!path) {
     return "/";
   }
-  return path
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
+
+  const segments = path.split("/").map((segment) => urlEncode(segment));
+  let uri = segments.join("/");
+
+  if (!uri.endsWith("/")) {
+    uri += "/";
+  }
+
+  return uri;
 };
 
-const buildCanonicalQueryString = (params: Record<string, string | string[]>) =>
-  Object.keys(params)
-    .sort()
-    .map((key) => {
-      const value = params[key];
-      if (Array.isArray(value)) {
-        return value
-          .map(
-            (item) =>
-              `${encodeURIComponent(key)}=${encodeURIComponent(item)}`,
-          )
-          .join("&");
-      }
-      return `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
-    })
-    .join("&");
+const buildCanonicalQueryString = (params: Record<string, string | string[]>) => {
+  const keys = Object.keys(params).sort();
+  const pairs: string[] = [];
+
+  keys.forEach((key) => {
+    const encodedKey = urlEncode(key);
+    const value = params[key];
+    if (Array.isArray(value)) {
+      const sortedValues = [...value].sort();
+      sortedValues.forEach((item) => {
+        pairs.push(`${encodedKey}=${urlEncode(item)}`);
+      });
+    } else {
+      pairs.push(`${encodedKey}=${urlEncode(value)}`);
+    }
+  });
+
+  return pairs.join("&");
+};
 
 const buildCanonicalHeaders = (headers: Record<string, string>) =>
   Object.keys(headers)
-    .sort()
+    .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
     .map((key) => `${key.toLowerCase()}:${headers[key].trim()}\n`)
     .join("");
 
 const buildSignedHeaders = (headers: Record<string, string>) =>
   Object.keys(headers)
+    .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
     .map((key) => key.toLowerCase())
-    .sort()
     .join(";");
 
 const buildCanonicalRequest = (
