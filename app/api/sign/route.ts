@@ -1,14 +1,13 @@
 import { NextResponse } from "next/server";
 
-type ProjectIdEntry = {
-  region: string;
-  projectId: string;
-  name?: string;
-};
-
-type ProjectIdsRequest = {
-  accessKey?: string;
-  secretKey?: string;
+type SignRequest = {
+  method?: string;
+  url: string;
+  headers?: Record<string, string>;
+  params?: Record<string, string | string[]>;
+  data?: string;
+  ak: string;
+  sk: string;
 };
 
 const encoder = new TextEncoder();
@@ -195,116 +194,26 @@ const signRequest = async (
   };
 };
 
-const fetchRegions = async (ak: string, sk: string) => {
-  const url = "https://iam.myhuaweicloud.com/v3/regions";
-  const headers = await signRequest(
-    { method: "GET", url, headers: { "content-type": "application/json" } },
-    ak,
-    sk,
-  );
-
-  const response = await fetch(url, { method: "GET", headers });
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || "Unable to fetch Huawei Cloud regions.");
-  }
-
-  const data = (await response.json()) as {
-    regions?: Array<{
-      id?: string;
-      region_id?: string;
-    }>;
-  };
-
-  return (
-    data.regions
-      ?.map((region) => region.id ?? region.region_id)
-      .filter((region): region is string => Boolean(region)) ?? []
-  );
-};
-
-const fetchProjectsForRegion = async (
-  region: string,
-  ak: string,
-  sk: string,
-) => {
-  const url = `https://iam.${region}.myhuaweicloud.com/v3/projects`;
-  const headers = await signRequest(
-    { method: "GET", url, headers: { "content-type": "application/json" } },
-    ak,
-    sk,
-  );
-  const response = await fetch(url, { method: "GET", headers });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      errorText || `Unable to fetch projects for region ${region}.`,
-    );
-  }
-
-  const data = (await response.json()) as {
-    projects?: Array<{ id: string; name?: string }>;
-  };
-
-  return (
-    data.projects?.map((project) => ({
-      region: project.name || region,
-      projectId: project.id,
-      name: project.name,
-    })) ?? []
-  );
-};
-
-const fetchProjectIds = async (ak: string, sk: string) => {
-  const regions = await fetchRegions(ak, sk);
-  const results = await Promise.allSettled(
-    regions.map((region) => fetchProjectsForRegion(region, ak, sk)),
-  );
-
-  const entries: ProjectIdEntry[] = [];
-  const errors: string[] = [];
-  const seenProjectIds = new Set<string>();
-
-  results.forEach((result, index) => {
-    if (result.status === "fulfilled") {
-      result.value.forEach((project) => {
-        if (!seenProjectIds.has(project.projectId)) {
-          seenProjectIds.add(project.projectId);
-          entries.push(project);
-        }
-      });
-    } else {
-      const errorMessage = result.reason instanceof Error ? result.reason.message : String(result.reason);
-      errors.push(`${regions[index]}: ${errorMessage}`);
-    }
-  });
-
-  return { entries, errors };
-};
-
 export async function POST(request: Request) {
-  const body = (await request.json()) as ProjectIdsRequest;
-  const accessKey = body.accessKey?.trim();
-  const secretKey = body.secretKey?.trim();
+  const body = (await request.json()) as SignRequest;
 
-  if (!accessKey || !secretKey) {
+  if (!body.url || !body.ak || !body.sk) {
     return NextResponse.json(
-      { error: "Access key and secret key are required." },
+      { error: "url, ak, and sk are required." },
       { status: 400 },
     );
   }
 
   try {
-    const { entries, errors } = await fetchProjectIds(accessKey, secretKey);
-    return NextResponse.json({ entries, errors });
+    const headers = await signRequest(body, body.ak, body.sk);
+    return NextResponse.json({ headers });
   } catch (error) {
     return NextResponse.json(
       {
         error:
           error instanceof Error
             ? error.message
-            : "Unable to fetch Huawei Cloud projects.",
+            : "Unable to sign request.",
       },
       { status: 500 },
     );

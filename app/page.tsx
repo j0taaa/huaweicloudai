@@ -82,6 +82,7 @@ export default function Home() {
   >("idle");
   const [projectIds, setProjectIds] = useState<ProjectIdEntry[]>([]);
   const [projectIdError, setProjectIdError] = useState<string | null>(null);
+  const [projectIdsOpen, setProjectIdsOpen] = useState(false);
   const [activeToolPreview, setActiveToolPreview] =
     useState<ToolPreview | null>(null);
   const [pendingChoice, setPendingChoice] = useState<{
@@ -216,7 +217,7 @@ export default function Home() {
       return "Logs information to the browser console.";
     }
 
-    return "Runs browser-side JavaScript to compute a result.";
+    return "Runs server-side JavaScript to compute a result.";
   };
 
   const formatToolResult = async (result: unknown): Promise<string> => {
@@ -252,13 +253,25 @@ export default function Home() {
     }
 
     try {
-      const evalResult = window.eval(payload.code);
-      const resolvedResult =
-        evalResult instanceof Promise ? await evalResult : evalResult;
-      const serializedResult = await formatToolResult(resolvedResult);
+      const response = await fetch("/api/eval", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: payload.code }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          role: "tool",
+          content: errorText || "Error executing code on server.",
+          tool_call_id: toolCall.id,
+        };
+      }
+
+      const data = (await response.json()) as { result?: string; error?: string };
       return {
         role: "tool",
-        content: serializedResult,
+        content: data.error ?? data.result ?? "No result returned from server.",
         tool_call_id: toolCall.id,
       };
     } catch (evalError) {
@@ -280,7 +293,7 @@ export default function Home() {
         }
 
         return {
-          role: "tool",
+          role: "tool" as const,
           content: `Unsupported tool: ${toolCall.function.name}`,
           tool_call_id: toolCall.id,
         };
@@ -293,7 +306,6 @@ export default function Home() {
     response: ChatResponse,
   ) => {
     let currentResponse = response;
-    let safetyCounter = 0;
 
     while (currentResponse.toolCalls && currentResponse.toolCalls.length > 0) {
       const assistantToolMessage: ChatMessage = {
@@ -337,11 +349,6 @@ export default function Home() {
           setIsLoading(false);
           return;
         }
-      }
-
-      safetyCounter += 1;
-      if (safetyCounter > 3) {
-        throw new Error("Tool call loop exceeded safety limit.");
       }
 
       currentResponse = await sendMessages(workingMessages);
@@ -428,13 +435,15 @@ export default function Home() {
         trimmedSecretKey,
       );
       setProjectIds(entries);
-      setCredentialStatus("saved");
-      if (errors.length > 0) {
+      if (entries.length === 0) {
+        setCredentialStatus("error");
         setProjectIdError(
-          `Some regions failed to load: ${errors
-            .map((errorMessage) => errorMessage)
-            .join("; ")}`,
+          "Failed to load any project IDs. Please check your AK/SK."
         );
+      } else {
+        setCredentialStatus("saved");
+        setProjectIdError(null);
+        setProjectIdsOpen(true);
       }
     } catch (caughtError) {
       const message =
@@ -550,19 +559,38 @@ export default function Home() {
                       : "Save credentials"}
                 </button>
                 {credentialStatus === "saved" ? (
-                  <span className="text-xs text-emerald-600 dark:text-emerald-400">
-                    Project IDs loaded: {projectIds.length}
-                  </span>
+                  <div className="flex flex-col gap-2">
+                    <span className="text-xs text-emerald-600 dark:text-emerald-400">
+                      Project IDs loaded: {projectIds.length}
+                    </span>
+                    <button
+                      className="text-left text-xs text-zinc-600 underline dark:text-zinc-300"
+                      type="button"
+                      onClick={() => setProjectIdsOpen((prev) => !prev)}
+                    >
+                      {projectIdsOpen ? "Hide" : "Show"} project IDs
+                    </button>
+                    {projectIdsOpen ? (
+                      <div className="max-h-40 overflow-y-auto rounded-xl border border-zinc-200 bg-zinc-50 p-2 text-xs dark:border-white/10 dark:bg-white/5">
+                        {projectIds.map((project) => (
+                          <div
+                            key={project.projectId}
+                            className="flex justify-between border-b border-zinc-200 py-1 last:border-0 dark:border-white/10"
+                          >
+                            <span className="text-zinc-600 dark:text-zinc-300">
+                              {project.region}
+                            </span>
+                            <span className="font-mono text-zinc-900 dark:text-zinc-100">
+                              {project.projectId}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
                 {credentialStatus === "error" && projectIdError ? (
                   <span className="text-xs text-red-600 dark:text-red-400">
-                    {projectIdError}
-                  </span>
-                ) : null}
-                {credentialStatus === "saved" &&
-                projectIdError &&
-                projectIds.length > 0 ? (
-                  <span className="text-xs text-amber-600 dark:text-amber-400">
                     {projectIdError}
                   </span>
                 ) : null}

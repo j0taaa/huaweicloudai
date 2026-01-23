@@ -60,14 +60,13 @@ export async function POST(request: Request) {
           function: {
             name: "eval_in_browser",
             description:
-              "Execute JavaScript code in the user's browser window and return the result.",
+              "Execute JavaScript code on the server and return the result.",
             parameters: {
               type: "object",
               properties: {
                 code: {
                   type: "string",
-                  description:
-                    "JavaScript source to execute in the browser window context.",
+                  description: "JavaScript source to execute on the server.",
                 },
               },
               required: ["code"],
