@@ -1,7 +1,7 @@
 "use client";
 
 import ReactMarkdown from "react-markdown";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type ChatMessage = {
   role: "user" | "assistant" | "tool" | "system";
@@ -38,6 +38,309 @@ type ToolPreview = {
   summary: string;
 };
 
+type ProjectIdEntry = {
+  region: string;
+  projectId: string;
+  name?: string;
+};
+
+const EMPTY_BODY_SHA256 =
+  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+const urlEncode = (input: string) => {
+  const str = typeof input === "string" ? input : String(input);
+  const noEscape = new Set(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.~".split(
+      "",
+    ),
+  );
+  let out = "";
+
+  for (let i = 0; i < str.length; i += 1) {
+    const char = str.charAt(i);
+    if (noEscape.has(char)) {
+      out += char;
+    } else {
+      const hex = str.charCodeAt(i).toString(16).toUpperCase().padStart(2, "0");
+      out += `%${hex}`;
+    }
+  }
+
+  return out;
+};
+
+const getDateTime = () => {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(now.getUTCDate()).padStart(2, "0");
+  const hours = String(now.getUTCHours()).padStart(2, "0");
+  const minutes = String(now.getUTCMinutes()).padStart(2, "0");
+  const seconds = String(now.getUTCSeconds()).padStart(2, "0");
+  return `${year}${month}${day}T${hours}${minutes}${seconds}Z`;
+};
+
+const buildCanonicalURI = (path: string) => {
+  if (!path) {
+    return "/";
+  }
+
+  const segments = path.split("/");
+  const encodedSegments = segments.map((segment) => urlEncode(segment));
+  let uri = encodedSegments.join("/");
+
+  if (!uri.endsWith("/")) {
+    uri += "/";
+  }
+
+  return uri;
+};
+
+const buildCanonicalQueryString = (
+  params: Record<string, string | string[]>,
+) => {
+  const keys = Object.keys(params).sort();
+  const pairs: string[] = [];
+
+  keys.forEach((key) => {
+    const encodedKey = urlEncode(key);
+    const value = params[key];
+
+    if (Array.isArray(value)) {
+      [...value].sort().forEach((item) => {
+        pairs.push(`${encodedKey}=${urlEncode(item)}`);
+      });
+    } else {
+      pairs.push(`${encodedKey}=${urlEncode(value)}`);
+    }
+  });
+
+  return pairs.join("&");
+};
+
+const buildCanonicalHeaders = (headers: Record<string, string>) => {
+  const sortedKeys = Object.keys(headers).sort((a, b) =>
+    a.toLowerCase().localeCompare(b.toLowerCase()),
+  );
+
+  return sortedKeys
+    .map((key) => {
+      const lowerKey = key.toLowerCase();
+      const value = headers[key];
+      const trimmedValue = String(value).trim();
+      return `${lowerKey}:${trimmedValue}\n`;
+    })
+    .join("");
+};
+
+const buildSignedHeaders = (headers: Record<string, string>) => {
+  const sortedKeys = Object.keys(headers).sort((a, b) =>
+    a.toLowerCase().localeCompare(b.toLowerCase()),
+  );
+  return sortedKeys.map((key) => key.toLowerCase()).join(";");
+};
+
+const bufferToHex = (buffer: ArrayBuffer) => {
+  const bytes = new Uint8Array(buffer);
+  return Array.from(bytes)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+};
+
+const hashPayload = async (data?: string | Record<string, unknown> | null) => {
+  if (!data || data === "") {
+    return EMPTY_BODY_SHA256;
+  }
+
+  const body = typeof data === "string" ? data : JSON.stringify(data);
+  const encoded = new TextEncoder().encode(body);
+  const digest = await crypto.subtle.digest("SHA-256", encoded);
+  return bufferToHex(digest);
+};
+
+const hexHash = async (value: string) => {
+  const encoded = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", encoded);
+  return bufferToHex(digest);
+};
+
+const hmacSHA256 = async (secret: string, value: string) => {
+  const keyData = new TextEncoder().encode(secret);
+  const data = new TextEncoder().encode(value);
+  const key = await crypto.subtle.importKey(
+    "raw",
+    keyData,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, data);
+  return bufferToHex(signature);
+};
+
+const buildCanonicalRequest = (
+  method: string,
+  uri: string,
+  queryString: string,
+  canonicalHeaders: string,
+  signedHeaders: string,
+  payloadHash: string,
+) => {
+  return [
+    method.toUpperCase(),
+    uri,
+    queryString,
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash,
+  ].join("\n");
+};
+
+const signRequest = async (
+  options: {
+    method?: string;
+    url: string;
+    headers?: Record<string, string>;
+    params?: Record<string, string | string[]>;
+    data?: string | Record<string, unknown> | null;
+  },
+  ak: string,
+  sk: string,
+) => {
+  const method = options.method ?? "GET";
+  const url = new URL(options.url);
+  const host = url.host;
+  const headersToSign: Record<string, string> = {
+    host,
+    "content-type": options.headers?.["content-type"] ?? "application/json",
+  };
+
+  if (options.headers?.["x-project-id"]) {
+    headersToSign["x-project-id"] = options.headers["x-project-id"];
+  }
+
+  const dateTime = getDateTime();
+  headersToSign["x-sdk-date"] = dateTime;
+
+  const mergedParams: Record<string, string | string[]> = {
+    ...(options.params ?? {}),
+  };
+  url.searchParams.forEach((value, key) => {
+    if (mergedParams[key]) {
+      const existing = mergedParams[key];
+      mergedParams[key] = Array.isArray(existing)
+        ? [...existing, value]
+        : [existing, value];
+    } else {
+      mergedParams[key] = value;
+    }
+  });
+
+  const canonicalURI = buildCanonicalURI(url.pathname);
+  const canonicalQueryString = buildCanonicalQueryString(mergedParams);
+  const canonicalHeaders = buildCanonicalHeaders(headersToSign);
+  const signedHeaders = buildSignedHeaders(headersToSign);
+  const payloadHash = await hashPayload(options.data ?? "");
+  const canonicalRequest = buildCanonicalRequest(
+    method,
+    canonicalURI,
+    canonicalQueryString,
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash,
+  );
+  const canonicalRequestHash = await hexHash(canonicalRequest);
+  const stringToSign = `SDK-HMAC-SHA256\n${dateTime}\n${canonicalRequestHash}`;
+  const signature = await hmacSHA256(sk, stringToSign);
+  const authHeader = `SDK-HMAC-SHA256 Access=${ak}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  return {
+    ...headersToSign,
+    Authorization: authHeader,
+  };
+};
+
+const fetchRegions = async (ak: string, sk: string) => {
+  const url = "https://iam.myhuaweicloud.com/v3/regions";
+  const headers = await signRequest(
+    { method: "GET", url, headers: { "content-type": "application/json" } },
+    ak,
+    sk,
+  );
+
+  const response = await fetch(url, { method: "GET", headers });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Unable to fetch Huawei Cloud regions.");
+  }
+
+  const data = (await response.json()) as {
+    regions?: Array<{
+      id?: string;
+      region_id?: string;
+    }>;
+  };
+
+  return (
+    data.regions
+      ?.map((region) => region.id ?? region.region_id)
+      .filter((region): region is string => Boolean(region)) ?? []
+  );
+};
+
+const fetchProjectsForRegion = async (
+  region: string,
+  ak: string,
+  sk: string,
+) => {
+  const url = `https://iam.${region}.myhuaweicloud.com/v3/projects`;
+  const headers = await signRequest(
+    { method: "GET", url, headers: { "content-type": "application/json" } },
+    ak,
+    sk,
+  );
+  const response = await fetch(url, { method: "GET", headers });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      errorText || `Unable to fetch projects for region ${region}.`,
+    );
+  }
+
+  const data = (await response.json()) as {
+    projects?: Array<{ id: string; name?: string }>;
+  };
+
+  return (
+    data.projects?.map((project) => ({
+      region,
+      projectId: project.id,
+      name: project.name,
+    })) ?? []
+  );
+};
+
+const fetchProjectIds = async (ak: string, sk: string) => {
+  const regions = await fetchRegions(ak, sk);
+  const results = await Promise.allSettled(
+    regions.map((region) => fetchProjectsForRegion(region, ak, sk)),
+  );
+
+  const entries: ProjectIdEntry[] = [];
+  const errors: string[] = [];
+
+  results.forEach((result, index) => {
+    if (result.status === "fulfilled") {
+      entries.push(...result.value);
+    } else {
+      errors.push(`${regions[index]}: ${result.reason}`);
+    }
+  });
+
+  return { entries, errors };
+};
+
 export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -46,6 +349,11 @@ export default function Home() {
   const [accessKey, setAccessKey] = useState("");
   const [secretKey, setSecretKey] = useState("");
   const [credentialsOpen, setCredentialsOpen] = useState(false);
+  const [credentialStatus, setCredentialStatus] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+  const [projectIds, setProjectIds] = useState<ProjectIdEntry[]>([]);
+  const [projectIdError, setProjectIdError] = useState<string | null>(null);
   const [activeToolPreview, setActiveToolPreview] =
     useState<ToolPreview | null>(null);
   const [pendingChoice, setPendingChoice] = useState<{
@@ -62,13 +370,25 @@ export default function Home() {
   const systemPrompt = useMemo(() => {
     const akValue = accessKey.trim() || "[not provided]";
     const skValue = secretKey.trim() || "[not provided]";
+    const projectLines =
+      projectIds.length > 0
+        ? [
+            "Huawei Cloud Project IDs:",
+            ...projectIds.map((entry) =>
+              entry.name
+                ? `- ${entry.region}: ${entry.projectId} (${entry.name})`
+                : `- ${entry.region}: ${entry.projectId}`,
+            ),
+          ]
+        : [];
 
     return [
       "You are a helpful assistant for Huawei Cloud workflows.",
       `Huawei Cloud Access Key (AK): ${akValue}`,
       `Huawei Cloud Secret Key (SK): ${skValue}`,
+      ...projectLines,
     ].join("\n");
-  }, [accessKey, secretKey]);
+  }, [accessKey, projectIds, secretKey]);
   const toolResults = useMemo(() => {
     const results = new Map<string, string>();
 
@@ -187,7 +507,7 @@ export default function Home() {
 
     try {
       return JSON.stringify(result);
-    } catch (stringifyError) {
+    } catch {
       return String(result);
     }
   };
@@ -355,6 +675,50 @@ export default function Home() {
     setIsLoading(false);
   };
 
+  useEffect(() => {
+    setCredentialStatus("idle");
+    setProjectIds([]);
+    setProjectIdError(null);
+  }, [accessKey, secretKey]);
+
+  const handleSaveCredentials = async () => {
+    const trimmedAccessKey = accessKey.trim();
+    const trimmedSecretKey = secretKey.trim();
+
+    if (!trimmedAccessKey || !trimmedSecretKey) {
+      setCredentialStatus("error");
+      setProjectIdError("Please enter both the access key and secret key.");
+      return;
+    }
+
+    setCredentialStatus("saving");
+    setProjectIdError(null);
+
+    try {
+      const { entries, errors } = await fetchProjectIds(
+        trimmedAccessKey,
+        trimmedSecretKey,
+      );
+      setProjectIds(entries);
+      setCredentialStatus("saved");
+      if (errors.length > 0) {
+        setProjectIdError(
+          `Some regions failed to load: ${errors
+            .map((errorMessage) => errorMessage)
+            .join("; ")}`,
+        );
+      }
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to fetch project IDs.";
+      setProjectIds([]);
+      setCredentialStatus("error");
+      setProjectIdError(message);
+    }
+  };
+
   const handleChoiceSubmit = async (
     event: React.FormEvent<HTMLFormElement>,
   ) => {
@@ -440,6 +804,41 @@ export default function Home() {
                 These values are used as context in the system prompt and are
                 kept in this browser session.
               </p>
+              <div className="flex flex-col gap-2 text-sm text-zinc-600 dark:text-zinc-300">
+                <button
+                  className="rounded-2xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
+                  type="button"
+                  onClick={handleSaveCredentials}
+                  disabled={
+                    credentialStatus === "saving" ||
+                    !accessKey.trim() ||
+                    !secretKey.trim()
+                  }
+                >
+                  {credentialStatus === "saving"
+                    ? "Saving..."
+                    : credentialStatus === "saved"
+                      ? "Saved"
+                      : "Save credentials"}
+                </button>
+                {credentialStatus === "saved" ? (
+                  <span className="text-xs text-emerald-600 dark:text-emerald-400">
+                    Project IDs loaded: {projectIds.length}
+                  </span>
+                ) : null}
+                {credentialStatus === "error" && projectIdError ? (
+                  <span className="text-xs text-red-600 dark:text-red-400">
+                    {projectIdError}
+                  </span>
+                ) : null}
+                {credentialStatus === "saved" &&
+                projectIdError &&
+                projectIds.length > 0 ? (
+                  <span className="text-xs text-amber-600 dark:text-amber-400">
+                    {projectIdError}
+                  </span>
+                ) : null}
+              </div>
             </div>
           ) : null}
         </div>
