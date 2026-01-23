@@ -2,8 +2,14 @@ import { NextResponse } from "next/server";
 import { ProxyAgent } from "undici";
 
 type ChatMessage = {
-  role: "user" | "assistant" | "system";
+  role: "user" | "assistant" | "system" | "tool";
   content: string;
+  tool_call_id?: string;
+  tool_calls?: Array<{
+    id: string;
+    type: "function";
+    function: { name: string; arguments: string };
+  }>;
 };
 
 type ChatRequest = {
@@ -48,6 +54,28 @@ export async function POST(request: Request) {
     body: JSON.stringify({
       model: "glm-4.7",
       messages,
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "eval_in_browser",
+            description:
+              "Execute JavaScript code in the user's browser window and return the result.",
+            parameters: {
+              type: "object",
+              properties: {
+                code: {
+                  type: "string",
+                  description:
+                    "JavaScript source to execute in the browser window context.",
+                },
+              },
+              required: ["code"],
+            },
+          },
+        },
+      ],
+      tool_choice: "auto",
     }),
     dispatcher,
   } satisfies RequestInit & { dispatcher?: unknown };
@@ -63,17 +91,28 @@ export async function POST(request: Request) {
   }
 
   const data = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
+    choices?: Array<{
+      message?: {
+        content?: string;
+        tool_calls?: Array<{
+          id: string;
+          type: "function";
+          function: { name: string; arguments: string };
+        }>;
+      };
+    }>;
   };
 
-  const reply = data?.choices?.[0]?.message?.content?.trim();
+  const message = data?.choices?.[0]?.message;
+  const reply = message?.content?.trim();
+  const toolCalls = message?.tool_calls ?? [];
 
-  if (!reply) {
+  if (!reply && toolCalls.length === 0) {
     return NextResponse.json(
       { error: "No reply returned from Z.AI." },
       { status: 502 },
     );
   }
 
-  return NextResponse.json({ reply });
+  return NextResponse.json({ reply, toolCalls });
 }
