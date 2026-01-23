@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import { useMemo, useRef, useState } from "react";
 
 type ChatMessage = {
   role: "user" | "assistant" | "tool";
@@ -42,6 +43,8 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [activeToolPreview, setActiveToolPreview] =
     useState<ToolPreview | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
 
   const trimmedInput = useMemo(() => input.trim(), [input]);
   const toolResults = useMemo(() => {
@@ -59,10 +62,13 @@ export default function Home() {
   const sendMessages = async (
     nextMessages: ChatMessage[],
   ): Promise<ChatResponse> => {
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages: nextMessages }),
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -194,7 +200,7 @@ export default function Home() {
 
     const nextMessages: ChatMessage[] = [
       ...messages,
-      { role: "user", content: trimmedInput },
+      { role: "user", content: input },
     ];
 
     setMessages(nextMessages);
@@ -243,6 +249,13 @@ export default function Home() {
 
       setMessages(workingMessages);
     } catch (caughtError) {
+      if (
+        caughtError instanceof DOMException &&
+        caughtError.name === "AbortError"
+      ) {
+        setError("Message canceled.");
+        return;
+      }
       const message =
         caughtError instanceof Error
           ? caughtError.message
@@ -250,7 +263,15 @@ export default function Home() {
       setError(message);
     } finally {
       setIsLoading(false);
+      abortControllerRef.current = null;
     }
+  };
+
+  const handleCancel = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    setIsLoading(false);
   };
 
   return (
@@ -296,7 +317,13 @@ export default function Home() {
                                 : "bg-zinc-100 text-zinc-900 dark:bg-white/10 dark:text-zinc-100"
                             }`}
                           >
-                            {message.content}
+                            {message.role === "assistant" ? (
+                              <ReactMarkdown className="markdown-content">
+                                {message.content}
+                              </ReactMarkdown>
+                            ) : (
+                              message.content
+                            )}
                           </div>
                         ) : null}
                         {message.role === "assistant" &&
@@ -394,21 +421,42 @@ export default function Home() {
             </p>
           ) : null}
 
-          <form className="flex flex-col gap-3 sm:flex-row" onSubmit={handleSubmit}>
-            <input
-              className="flex-1 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+          <form
+            className="flex flex-col gap-3 sm:flex-row"
+            onSubmit={handleSubmit}
+            ref={formRef}
+          >
+            <textarea
+              className="min-h-[56px] flex-1 resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
               placeholder="Type your message..."
               value={input}
               onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  formRef.current?.requestSubmit();
+                }
+              }}
               disabled={isLoading}
+              rows={2}
             />
-            <button
-              className="rounded-2xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
-              type="submit"
-              disabled={isLoading || !trimmedInput}
-            >
-              Send
-            </button>
+            <div className="flex gap-2">
+              <button
+                className="rounded-2xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
+                type="submit"
+                disabled={isLoading || !trimmedInput}
+              >
+                Send
+              </button>
+              <button
+                className="rounded-2xl border border-zinc-200 px-6 py-3 text-sm font-semibold text-zinc-600 shadow-sm transition hover:border-zinc-400 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+                type="button"
+                onClick={handleCancel}
+                disabled={!isLoading}
+              >
+                Cancel
+              </button>
+            </div>
           </form>
         </section>
       </main>
