@@ -75,13 +75,7 @@ const buildCanonicalURI = (path: string) => {
   }
 
   const segments = path.split("/").map((segment) => urlEncode(segment));
-  let uri = segments.join("/");
-
-  if (!uri.endsWith("/")) {
-    uri += "/";
-  }
-
-  return uri;
+  return segments.join("/");
 };
 
 const buildCanonicalQueryString = (params: Record<string, string | string[]>) => {
@@ -198,7 +192,7 @@ const signRequest = async (
 };
 
 const fetchRegions = async (ak: string, sk: string) => {
-  const url = "https://iam.myhuaweicloud.com/v3/regions/";
+  const url = "https://iam.myhuaweicloud.com/v3/regions";
   const headers = await signRequest(
     { method: "GET", url, headers: { "content-type": "application/json" } },
     ak,
@@ -230,7 +224,7 @@ const fetchProjectsForRegion = async (
   ak: string,
   sk: string,
 ) => {
-  const url = `https://iam.${region}.myhuaweicloud.com/v3/projects/`;
+  const url = `https://iam.${region}.myhuaweicloud.com/v3/projects`;
   const headers = await signRequest(
     { method: "GET", url, headers: { "content-type": "application/json" } },
     ak,
