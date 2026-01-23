@@ -275,21 +275,9 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 px-6 py-12 text-zinc-900 dark:bg-black dark:text-zinc-50">
-      <main className="mx-auto flex w-full max-w-3xl flex-col gap-8">
-        <header className="space-y-3 text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
-            Simple LLM Chat
-          </p>
-          <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">
-            Ask a question, get an answer.
-          </h1>
-          <p className="text-base text-zinc-600 dark:text-zinc-400">
-            Messages are sent to your Z.AI endpoint and returned in seconds.
-          </p>
-        </header>
-
-        <section className="flex min-h-[360px] flex-col gap-6 rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-zinc-950">
+    <div className="flex h-screen w-screen flex-col bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
+      <main className="flex h-full w-full flex-1 flex-col">
+        <section className="flex h-full flex-1 flex-col gap-6 bg-white p-6 shadow-sm dark:bg-zinc-950">
           <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
             {messages.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-zinc-200 p-6 text-center text-sm text-zinc-500 dark:border-white/10 dark:text-zinc-400">
@@ -318,9 +306,9 @@ export default function Home() {
                             }`}
                           >
                             {message.role === "assistant" ? (
-                              <ReactMarkdown className="markdown-content">
-                                {message.content}
-                              </ReactMarkdown>
+                              <div className="markdown-content">
+                                <ReactMarkdown>{message.content}</ReactMarkdown>
+                              </div>
                             ) : (
                               message.content
                             )}
