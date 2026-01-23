@@ -74,6 +74,30 @@ export async function POST(request: Request) {
             },
           },
         },
+        {
+          type: "function",
+          function: {
+            name: "ask_multiple_choice",
+            description:
+              "Ask the user a multiple-choice question and return their selected or typed answer.",
+            parameters: {
+              type: "object",
+              properties: {
+                question: {
+                  type: "string",
+                  description: "The question to present to the user.",
+                },
+                options: {
+                  type: "array",
+                  description:
+                    "Answer options to show the user (the UI will add a final option to type a custom answer).",
+                  items: { type: "string" },
+                },
+              },
+              required: ["question", "options"],
+            },
+          },
+        },
       ],
       tool_choice: "auto",
     }),

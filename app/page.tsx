@@ -26,6 +26,8 @@ type ChatResponse = {
 
 type ToolPayload = {
   code?: string;
+  question?: string;
+  options?: string[];
   error?: string;
 };
 
@@ -43,6 +45,13 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [activeToolPreview, setActiveToolPreview] =
     useState<ToolPreview | null>(null);
+  const [pendingChoice, setPendingChoice] = useState<{
+    toolCall: ToolCall;
+    question: string;
+    options: string[];
+  } | null>(null);
+  const [selectedChoice, setSelectedChoice] = useState("");
+  const [customChoice, setCustomChoice] = useState("");
   const abortControllerRef = useRef<AbortController | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
 
@@ -80,7 +89,7 @@ export default function Home() {
   };
 
   const parseToolPayload = (toolCall: ToolCall): ToolPayload => {
-    let payload: { code?: string } = {};
+    let payload: { code?: string; question?: string; options?: string[] } = {};
 
     try {
       payload = JSON.parse(toolCall.function.arguments || "{}") as {
@@ -94,13 +103,29 @@ export default function Home() {
       };
     }
 
-    if (!payload.code) {
-      return {
-        error: "Error: No code provided for eval_in_browser.",
-      };
+    if (toolCall.function.name === "eval_in_browser") {
+      if (!payload.code) {
+        return {
+          error: "Error: No code provided for eval_in_browser.",
+        };
+      }
+
+      return { code: payload.code };
     }
 
-    return { code: payload.code };
+    if (toolCall.function.name === "ask_multiple_choice") {
+      if (!payload.question || !payload.options?.length) {
+        return {
+          error: "Error: Invalid payload for ask_multiple_choice.",
+        };
+      }
+
+      return { question: payload.question, options: payload.options };
+    }
+
+    return {
+      error: `Error: Unsupported tool payload for ${toolCall.function.name}.`,
+    };
   };
 
   const summarizeCode = (code: string) => {
@@ -194,9 +219,80 @@ export default function Home() {
     );
   };
 
+  const continueConversation = async (
+    workingMessages: ChatMessage[],
+    response: ChatResponse,
+  ) => {
+    let currentResponse = response;
+    let safetyCounter = 0;
+
+    while (currentResponse.toolCalls && currentResponse.toolCalls.length > 0) {
+      const assistantToolMessage: ChatMessage = {
+        role: "assistant",
+        content: currentResponse.reply ?? "",
+        tool_calls: currentResponse.toolCalls,
+      };
+
+      workingMessages = [...workingMessages, assistantToolMessage];
+      setMessages(workingMessages);
+
+      const multipleChoiceCall = currentResponse.toolCalls.find(
+        (toolCall) => toolCall.function.name === "ask_multiple_choice",
+      );
+      const nonChoiceCalls = currentResponse.toolCalls.filter(
+        (toolCall) => toolCall.function.name !== "ask_multiple_choice",
+      );
+
+      if (nonChoiceCalls.length > 0) {
+        const toolMessages = await runToolCalls(nonChoiceCalls);
+        workingMessages = [...workingMessages, ...toolMessages];
+        setMessages(workingMessages);
+      }
+
+      if (multipleChoiceCall) {
+        const payload = parseToolPayload(multipleChoiceCall);
+        if (payload.error) {
+          const errorMessage: ChatMessage = {
+            role: "tool",
+            content: payload.error,
+            tool_call_id: multipleChoiceCall.id,
+          };
+          workingMessages = [...workingMessages, errorMessage];
+          setMessages(workingMessages);
+        } else if (payload.question && payload.options) {
+          setPendingChoice({
+            toolCall: multipleChoiceCall,
+            question: payload.question,
+            options: payload.options,
+          });
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      safetyCounter += 1;
+      if (safetyCounter > 3) {
+        throw new Error("Tool call loop exceeded safety limit.");
+      }
+
+      currentResponse = await sendMessages(workingMessages);
+    }
+
+    if (!currentResponse.reply) {
+      throw new Error("No reply returned from the model.");
+    }
+
+    workingMessages = [
+      ...workingMessages,
+      { role: "assistant", content: currentResponse.reply },
+    ];
+
+    setMessages(workingMessages);
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!trimmedInput || isLoading) return;
+    if (!trimmedInput || isLoading || pendingChoice) return;
 
     const nextMessages: ChatMessage[] = [
       ...messages,
@@ -209,45 +305,9 @@ export default function Home() {
     setError(null);
 
     try {
-      let workingMessages = [...nextMessages];
-      let response = await sendMessages(workingMessages);
-      let safetyCounter = 0;
-
-      while (response.toolCalls && response.toolCalls.length > 0) {
-        const assistantToolMessage: ChatMessage = {
-          role: "assistant",
-          content: response.reply ?? "",
-          tool_calls: response.toolCalls,
-        };
-
-        workingMessages = [...workingMessages, assistantToolMessage];
-
-        setMessages(workingMessages);
-
-        safetyCounter += 1;
-        if (safetyCounter > 3) {
-          throw new Error("Tool call loop exceeded safety limit.");
-        }
-
-        const toolMessages = await runToolCalls(response.toolCalls);
-
-        workingMessages = [...workingMessages, ...toolMessages];
-
-        setMessages(workingMessages);
-
-        response = await sendMessages(workingMessages);
-      }
-
-      if (!response.reply) {
-        throw new Error("No reply returned from the model.");
-      }
-
-      workingMessages = [
-        ...workingMessages,
-        { role: "assistant", content: response.reply },
-      ];
-
-      setMessages(workingMessages);
+      const workingMessages = [...nextMessages];
+      const response = await sendMessages(workingMessages);
+      await continueConversation(workingMessages, response);
     } catch (caughtError) {
       if (
         caughtError instanceof DOMException &&
@@ -272,6 +332,49 @@ export default function Home() {
       abortControllerRef.current.abort();
     }
     setIsLoading(false);
+  };
+
+  const handleChoiceSubmit = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault();
+    if (!pendingChoice || isLoading) return;
+
+    const isCustom = selectedChoice === "custom";
+    const trimmedCustom = customChoice.trim();
+    const selectedAnswer = isCustom ? trimmedCustom : selectedChoice;
+
+    if (!selectedAnswer) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setPendingChoice(null);
+    setSelectedChoice("");
+    setCustomChoice("");
+
+    const toolMessage: ChatMessage = {
+      role: "tool",
+      content: selectedAnswer,
+      tool_call_id: pendingChoice.toolCall.id,
+    };
+
+    const workingMessages = [...messages, toolMessage];
+    setMessages(workingMessages);
+
+    try {
+      const response = await sendMessages(workingMessages);
+      await continueConversation(workingMessages, response);
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Something went wrong.";
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -321,9 +424,13 @@ export default function Home() {
                             {message.tool_calls.map((toolCall) => {
                               const payload = parseToolPayload(toolCall);
                               const code = payload.code ?? "";
+                              const isChoiceTool =
+                                toolCall.function.name === "ask_multiple_choice";
                               const summary = payload.error
-                                ? "Unable to summarize tool code."
-                                : summarizeCode(code);
+                                ? "Unable to summarize tool details."
+                                : isChoiceTool
+                                  ? `Asks the user: ${payload.question}`
+                                  : summarizeCode(code);
                               const hasResult = toolResults.has(toolCall.id);
                               const result = toolResults.get(toolCall.id) ?? "";
 
@@ -363,7 +470,9 @@ export default function Home() {
                                             summary,
                                           })
                                         }
-                                        disabled={Boolean(payload.error)}
+                                        disabled={
+                                          Boolean(payload.error) || isChoiceTool
+                                        }
                                       >
                                         View code
                                       </button>
@@ -409,6 +518,71 @@ export default function Home() {
             </p>
           ) : null}
 
+          {pendingChoice ? (
+            <form
+              className="rounded-2xl border border-dashed border-zinc-200 bg-white p-4 text-sm text-zinc-700 shadow-sm dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-200"
+              onSubmit={handleChoiceSubmit}
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+                Multiple choice
+              </p>
+              <p className="mt-2 text-base font-semibold text-zinc-900 dark:text-white">
+                {pendingChoice.question}
+              </p>
+              <div className="mt-4 flex flex-col gap-3">
+                {pendingChoice.options.map((option, index) => (
+                  <label
+                    key={`${option}-${index}`}
+                    className="flex cursor-pointer items-center gap-3 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-700 transition hover:border-zinc-300 dark:border-white/10 dark:text-zinc-200 dark:hover:border-white/20"
+                  >
+                    <input
+                      type="radio"
+                      name="multiple-choice"
+                      value={option}
+                      checked={selectedChoice === option}
+                      onChange={() => setSelectedChoice(option)}
+                      className="h-4 w-4"
+                    />
+                    <span>{option}</span>
+                  </label>
+                ))}
+                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-700 transition hover:border-zinc-300 dark:border-white/10 dark:text-zinc-200 dark:hover:border-white/20">
+                  <input
+                    type="radio"
+                    name="multiple-choice"
+                    value="custom"
+                    checked={selectedChoice === "custom"}
+                    onChange={() => setSelectedChoice("custom")}
+                    className="h-4 w-4"
+                  />
+                  <span>Other (type your answer)</span>
+                </label>
+                {selectedChoice === "custom" ? (
+                  <input
+                    className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                    placeholder="Type your answer..."
+                    value={customChoice}
+                    onChange={(event) => setCustomChoice(event.target.value)}
+                    disabled={isLoading}
+                  />
+                ) : null}
+              </div>
+              <div className="mt-4 flex justify-end">
+                <button
+                  className="rounded-2xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
+                  type="submit"
+                  disabled={
+                    isLoading ||
+                    !selectedChoice ||
+                    (selectedChoice === "custom" && !customChoice.trim())
+                  }
+                >
+                  Submit answer
+                </button>
+              </div>
+            </form>
+          ) : null}
+
           <form
             className="flex flex-col gap-3 sm:flex-row"
             onSubmit={handleSubmit}
@@ -425,14 +599,14 @@ export default function Home() {
                   formRef.current?.requestSubmit();
                 }
               }}
-              disabled={isLoading}
+              disabled={isLoading || Boolean(pendingChoice)}
               rows={2}
             />
             <div className="flex gap-2">
               <button
                 className="rounded-2xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
                 type="submit"
-                disabled={isLoading || !trimmedInput}
+                disabled={isLoading || !trimmedInput || Boolean(pendingChoice)}
               >
                 Send
               </button>
