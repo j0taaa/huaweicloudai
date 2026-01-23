@@ -24,3 +24,58 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.markdown-content {
+  line-height: 1.6;
+}
+
+.markdown-content > * + * {
+  margin-top: 0.75rem;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4 {
+  font-weight: 600;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  padding-left: 1.25rem;
+}
+
+.markdown-content li + li {
+  margin-top: 0.25rem;
+}
+
+.markdown-content code {
+  border-radius: 0.25rem;
+  background: rgba(120, 113, 108, 0.18);
+  padding: 0.1rem 0.3rem;
+  font-size: 0.85em;
+}
+
+.markdown-content pre code {
+  display: block;
+  padding: 0;
+  background: none;
+  font-size: 0.9em;
+}
+
+.markdown-content pre {
+  border-radius: 0.75rem;
+  background: rgba(15, 23, 42, 0.08);
+  padding: 0.75rem;
+  overflow-x: auto;
+}
+
+@media (prefers-color-scheme: dark) {
+  .markdown-content code {
+    background: rgba(148, 163, 184, 0.25);
+  }
+
+  .markdown-content pre {
+    background: rgba(15, 23, 42, 0.5);
+  }
+}
