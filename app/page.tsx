@@ -4,7 +4,7 @@ import ReactMarkdown from "react-markdown";
 import { useMemo, useRef, useState } from "react";
 
 type ChatMessage = {
-  role: "user" | "assistant" | "tool";
+  role: "user" | "assistant" | "tool" | "system";
   content: string;
   tool_call_id?: string;
   tool_calls?: ToolCall[];
@@ -43,6 +43,9 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [accessKey, setAccessKey] = useState("");
+  const [secretKey, setSecretKey] = useState("");
+  const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [activeToolPreview, setActiveToolPreview] =
     useState<ToolPreview | null>(null);
   const [pendingChoice, setPendingChoice] = useState<{
@@ -56,6 +59,16 @@ export default function Home() {
   const formRef = useRef<HTMLFormElement | null>(null);
 
   const trimmedInput = useMemo(() => input.trim(), [input]);
+  const systemPrompt = useMemo(() => {
+    const akValue = accessKey.trim() || "[not provided]";
+    const skValue = secretKey.trim() || "[not provided]";
+
+    return [
+      "You are a helpful assistant for Huawei Cloud workflows.",
+      `Huawei Cloud Access Key (AK): ${akValue}`,
+      `Huawei Cloud Secret Key (SK): ${skValue}`,
+    ].join("\n");
+  }, [accessKey, secretKey]);
   const toolResults = useMemo(() => {
     const results = new Map<string, string>();
 
@@ -68,6 +81,14 @@ export default function Home() {
     return results;
   }, [messages]);
 
+  const withSystemPrompt = (nextMessages: ChatMessage[]) => {
+    if (nextMessages[0]?.role === "system") {
+      return nextMessages;
+    }
+
+    return [{ role: "system", content: systemPrompt }, ...nextMessages];
+  };
+
   const sendMessages = async (
     nextMessages: ChatMessage[],
   ): Promise<ChatResponse> => {
@@ -76,7 +97,7 @@ export default function Home() {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: nextMessages }),
+      body: JSON.stringify({ messages: withSystemPrompt(nextMessages) }),
       signal: controller.signal,
     });
 
@@ -379,6 +400,50 @@ export default function Home() {
 
   return (
     <div className="flex h-screen w-screen flex-col bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
+      <div className="fixed left-4 top-4 z-40 w-72">
+        <div className="rounded-2xl border border-zinc-200 bg-white/90 p-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/80">
+          <button
+            className="flex w-full items-center justify-between text-left text-sm font-semibold text-zinc-900 dark:text-zinc-100"
+            type="button"
+            onClick={() => setCredentialsOpen((prev) => !prev)}
+            aria-expanded={credentialsOpen}
+          >
+            <span>Huawei Cloud credentials</span>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              {credentialsOpen ? "Hide" : "Show"}
+            </span>
+          </button>
+          {credentialsOpen ? (
+            <div className="mt-4 space-y-3">
+              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+                Access Key (AK)
+                <input
+                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-normal text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                  placeholder="Enter your Huawei Cloud AK"
+                  value={accessKey}
+                  onChange={(event) => setAccessKey(event.target.value)}
+                  autoComplete="off"
+                />
+              </label>
+              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+                Secret Key (SK)
+                <input
+                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-normal text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                  placeholder="Enter your Huawei Cloud SK"
+                  value={secretKey}
+                  onChange={(event) => setSecretKey(event.target.value)}
+                  autoComplete="off"
+                  type="password"
+                />
+              </label>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                These values are used as context in the system prompt and are
+                kept in this browser session.
+              </p>
+            </div>
+          ) : null}
+        </div>
+      </div>
       <main className="flex h-full w-full flex-1 flex-col">
         <section className="flex h-full flex-1 flex-col gap-6 bg-white p-6 shadow-sm dark:bg-zinc-950">
           <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
