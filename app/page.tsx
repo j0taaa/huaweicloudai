@@ -140,21 +140,172 @@ const buildSignedHeaders = (headers: Record<string, string>) => {
   return sortedKeys.map((key) => key.toLowerCase()).join(";");
 };
 
-const bufferToHex = (buffer: ArrayBuffer) => {
-  const bytes = new Uint8Array(buffer);
+const bufferToHex = (buffer: ArrayBuffer | Uint8Array) => {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
   return Array.from(bytes)
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
 };
 
-const getSubtleCrypto = () => {
-  const subtle = globalThis.crypto?.subtle;
-  if (!subtle) {
-    throw new Error(
-      "Web Crypto API is unavailable. Use a secure context (https or localhost) and a modern browser.",
-    );
+const sha256Constants = (() => {
+  const primes: number[] = [];
+  const hash: number[] = [];
+  let candidate = 2;
+
+  while (primes.length < 64) {
+    let isPrime = true;
+    for (let i = 2; i * i <= candidate; i += 1) {
+      if (candidate % i === 0) {
+        isPrime = false;
+        break;
+      }
+    }
+    if (isPrime) {
+      primes.push(candidate);
+    }
+    candidate += 1;
   }
-  return subtle;
+
+  primes.slice(0, 8).forEach((prime) => {
+    const sqrt = Math.sqrt(prime);
+    hash.push(((sqrt - Math.floor(sqrt)) * 2 ** 32) >>> 0);
+  });
+
+  const round = primes.map((prime) => {
+    const cbrt = Math.cbrt(prime);
+    return ((cbrt - Math.floor(cbrt)) * 2 ** 32) >>> 0;
+  });
+
+  return { hash, round };
+})();
+
+const rotateRight = (value: number, bits: number) =>
+  (value >>> bits) | (value << (32 - bits));
+
+const sha256Bytes = (message: Uint8Array) => {
+  const bitLength = message.length * 8;
+  const withPadding = new Uint8Array(
+    ((message.length + 9 + 63) >> 6) << 6,
+  );
+  withPadding.set(message);
+  withPadding[message.length] = 0x80;
+
+  const view = new DataView(withPadding.buffer);
+  view.setUint32(withPadding.length - 4, bitLength >>> 0, false);
+  view.setUint32(withPadding.length - 8, Math.floor(bitLength / 2 ** 32), false);
+
+  const w = new Uint32Array(64);
+  const h = sha256Constants.hash.slice();
+
+  for (let i = 0; i < withPadding.length; i += 64) {
+    for (let j = 0; j < 16; j += 1) {
+      w[j] = view.getUint32(i + j * 4, false);
+    }
+    for (let j = 16; j < 64; j += 1) {
+      const s0 =
+        rotateRight(w[j - 15], 7) ^
+        rotateRight(w[j - 15], 18) ^
+        (w[j - 15] >>> 3);
+      const s1 =
+        rotateRight(w[j - 2], 17) ^
+        rotateRight(w[j - 2], 19) ^
+        (w[j - 2] >>> 10);
+      w[j] = (w[j - 16] + s0 + w[j - 7] + s1) >>> 0;
+    }
+
+    let [a, b, c, d, e, f, g, h0] = h;
+
+    for (let j = 0; j < 64; j += 1) {
+      const S1 = rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25);
+      const ch = (e & f) ^ (~e & g);
+      const temp1 =
+        (h0 + S1 + ch + sha256Constants.round[j] + w[j]) >>> 0;
+      const S0 = rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22);
+      const maj = (a & b) ^ (a & c) ^ (b & c);
+      const temp2 = (S0 + maj) >>> 0;
+
+      h0 = g;
+      g = f;
+      f = e;
+      e = (d + temp1) >>> 0;
+      d = c;
+      c = b;
+      b = a;
+      a = (temp1 + temp2) >>> 0;
+    }
+
+    h[0] = (h[0] + a) >>> 0;
+    h[1] = (h[1] + b) >>> 0;
+    h[2] = (h[2] + c) >>> 0;
+    h[3] = (h[3] + d) >>> 0;
+    h[4] = (h[4] + e) >>> 0;
+    h[5] = (h[5] + f) >>> 0;
+    h[6] = (h[6] + g) >>> 0;
+    h[7] = (h[7] + h0) >>> 0;
+  }
+
+  const output = new Uint8Array(32);
+  const outView = new DataView(output.buffer);
+  h.forEach((value, index) => {
+    outView.setUint32(index * 4, value, false);
+  });
+  return output;
+};
+
+const hmacSha256Bytes = (key: Uint8Array, message: Uint8Array) => {
+  const blockSize = 64;
+  let normalizedKey = key;
+  if (normalizedKey.length > blockSize) {
+    normalizedKey = sha256Bytes(normalizedKey);
+  }
+
+  const paddedKey = new Uint8Array(blockSize);
+  paddedKey.set(normalizedKey);
+
+  const oKeyPad = new Uint8Array(blockSize);
+  const iKeyPad = new Uint8Array(blockSize);
+
+  for (let i = 0; i < blockSize; i += 1) {
+    const byte = paddedKey[i];
+    oKeyPad[i] = byte ^ 0x5c;
+    iKeyPad[i] = byte ^ 0x36;
+  }
+
+  const inner = new Uint8Array(iKeyPad.length + message.length);
+  inner.set(iKeyPad);
+  inner.set(message, iKeyPad.length);
+
+  const innerHash = sha256Bytes(inner);
+  const outer = new Uint8Array(oKeyPad.length + innerHash.length);
+  outer.set(oKeyPad);
+  outer.set(innerHash, oKeyPad.length);
+
+  return sha256Bytes(outer);
+};
+
+const getCryptoDigest = async (data: Uint8Array) => {
+  const subtle = globalThis.crypto?.subtle;
+  if (subtle) {
+    const digest = await subtle.digest("SHA-256", data);
+    return new Uint8Array(digest);
+  }
+  return sha256Bytes(data);
+};
+
+const getCryptoHmac = async (key: Uint8Array, data: Uint8Array) => {
+  const subtle = globalThis.crypto?.subtle;
+  if (subtle) {
+    const cryptoKey = await subtle.importKey(
+      "raw",
+      key,
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    const signature = await subtle.sign("HMAC", cryptoKey, data);
+    return new Uint8Array(signature);
+  }
+  return hmacSha256Bytes(key, data);
 };
 
 const hashPayload = async (data?: string | Record<string, unknown> | null) => {
@@ -164,27 +315,20 @@ const hashPayload = async (data?: string | Record<string, unknown> | null) => {
 
   const body = typeof data === "string" ? data : JSON.stringify(data);
   const encoded = new TextEncoder().encode(body);
-  const digest = await getSubtleCrypto().digest("SHA-256", encoded);
+  const digest = await getCryptoDigest(encoded);
   return bufferToHex(digest);
 };
 
 const hexHash = async (value: string) => {
   const encoded = new TextEncoder().encode(value);
-  const digest = await getSubtleCrypto().digest("SHA-256", encoded);
+  const digest = await getCryptoDigest(encoded);
   return bufferToHex(digest);
 };
 
 const hmacSHA256 = async (secret: string, value: string) => {
   const keyData = new TextEncoder().encode(secret);
   const data = new TextEncoder().encode(value);
-  const key = await getSubtleCrypto().importKey(
-    "raw",
-    keyData,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const signature = await getSubtleCrypto().sign("HMAC", key, data);
+  const signature = await getCryptoHmac(keyData, data);
   return bufferToHex(signature);
 };
 
