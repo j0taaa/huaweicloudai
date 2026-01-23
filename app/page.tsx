@@ -3,8 +3,24 @@
 import { useMemo, useState } from "react";
 
 type ChatMessage = {
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "tool";
   content: string;
+  tool_call_id?: string;
+  tool_calls?: ToolCall[];
+};
+
+type ToolCall = {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
+};
+
+type ChatResponse = {
+  reply?: string;
+  toolCalls?: ToolCall[];
 };
 
 export default function Home() {
@@ -14,6 +30,86 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
 
   const trimmedInput = useMemo(() => input.trim(), [input]);
+
+  const sendMessages = async (
+    nextMessages: ChatMessage[],
+  ): Promise<ChatResponse> => {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: nextMessages }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || "Failed to fetch response.");
+    }
+
+    return (await response.json()) as ChatResponse;
+  };
+
+  const executeEvalTool = (toolCall: ToolCall): ChatMessage => {
+    let payload: { code?: string } = {};
+
+    try {
+      payload = JSON.parse(toolCall.function.arguments || "{}") as {
+        code?: string;
+      };
+    } catch (parseError) {
+      return {
+        role: "tool",
+        content: `Error parsing tool arguments: ${
+          parseError instanceof Error ? parseError.message : "Unknown error."
+        }`,
+        tool_call_id: toolCall.id,
+      };
+    }
+
+    if (!payload.code) {
+      return {
+        role: "tool",
+        content: "Error: No code provided for eval_in_browser.",
+        tool_call_id: toolCall.id,
+      };
+    }
+
+    try {
+      const result = window.eval(payload.code);
+      const serializedResult =
+        typeof result === "string"
+          ? result
+          : result === undefined
+            ? "undefined"
+            : JSON.stringify(result) ?? String(result);
+      return {
+        role: "tool",
+        content: serializedResult,
+        tool_call_id: toolCall.id,
+      };
+    } catch (evalError) {
+      return {
+        role: "tool",
+        content: `Error executing eval_in_browser: ${
+          evalError instanceof Error ? evalError.message : "Unknown error."
+        }`,
+        tool_call_id: toolCall.id,
+      };
+    }
+  };
+
+  const runToolCalls = (toolCalls: ToolCall[]) => {
+    return toolCalls.map((toolCall) => {
+      if (toolCall.function.name === "eval_in_browser") {
+        return executeEvalTool(toolCall);
+      }
+
+      return {
+        role: "tool",
+        content: `Unsupported tool: ${toolCall.function.name}`,
+        tool_call_id: toolCall.id,
+      };
+    });
+  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -30,26 +126,44 @@ export default function Home() {
     setError(null);
 
     try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: nextMessages }),
-      });
+      let workingMessages = [...nextMessages];
+      let response = await sendMessages(workingMessages);
+      let safetyCounter = 0;
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Failed to fetch response.");
+      while (response.toolCalls && response.toolCalls.length > 0) {
+        const assistantToolMessage: ChatMessage = {
+          role: "assistant",
+          content: response.reply ?? "",
+          tool_calls: response.toolCalls,
+        };
+        const toolMessages = runToolCalls(response.toolCalls);
+
+        workingMessages = [
+          ...workingMessages,
+          assistantToolMessage,
+          ...toolMessages,
+        ];
+
+        setMessages(workingMessages);
+
+        safetyCounter += 1;
+        if (safetyCounter > 3) {
+          throw new Error("Tool call loop exceeded safety limit.");
+        }
+
+        response = await sendMessages(workingMessages);
       }
 
-      const data = (await response.json()) as { reply?: string };
-      if (!data.reply) {
+      if (!response.reply) {
         throw new Error("No reply returned from the model.");
       }
 
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: data.reply ?? "" },
-      ]);
+      workingMessages = [
+        ...workingMessages,
+        { role: "assistant", content: response.reply },
+      ];
+
+      setMessages(workingMessages);
     } catch (caughtError) {
       const message =
         caughtError instanceof Error
@@ -83,24 +197,28 @@ export default function Home() {
                 Start the conversation by typing a message below.
               </div>
             ) : (
-              messages.map((message, index) => (
-                <div
-                  key={`${message.role}-${index}`}
-                  className={`flex ${
-                    message.role === "user" ? "justify-end" : "justify-start"
-                  }`}
-                >
+              messages
+                .filter(
+                  (message) => message.role !== "tool" && message.content.trim(),
+                )
+                .map((message, index) => (
                   <div
-                    className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
-                      message.role === "user"
-                        ? "bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900"
-                        : "bg-zinc-100 text-zinc-900 dark:bg-white/10 dark:text-zinc-100"
+                    key={`${message.role}-${index}`}
+                    className={`flex ${
+                      message.role === "user" ? "justify-end" : "justify-start"
                     }`}
                   >
-                    {message.content}
+                    <div
+                      className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+                        message.role === "user"
+                          ? "bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900"
+                          : "bg-zinc-100 text-zinc-900 dark:bg-white/10 dark:text-zinc-100"
+                      }`}
+                    >
+                      {message.content}
+                    </div>
                   </div>
-                </div>
-              ))
+                ))
             )}
             {isLoading ? (
               <div className="rounded-2xl bg-zinc-100 px-4 py-3 text-sm text-zinc-600 dark:bg-white/10 dark:text-zinc-300">
