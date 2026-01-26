@@ -1393,8 +1393,12 @@ export default function Home() {
                 ))
             )}
             {isLoading ? (
-              <div className="rounded-2xl bg-zinc-100 px-4 py-3 text-sm text-zinc-600 dark:bg-white/10 dark:text-zinc-300">
-                Thinking...
+              <div className="flex items-center gap-2 rounded-2xl bg-zinc-100 px-4 py-3 text-sm text-zinc-600 dark:bg-white/10 dark:text-zinc-300">
+                <span
+                  className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600 dark:border-white/20 dark:border-t-white"
+                  aria-hidden="true"
+                />
+                <span>Thinking...</span>
               </div>
             ) : null}
           </div>
@@ -1494,35 +1498,48 @@ export default function Home() {
                 />
                 <button
                   className="absolute bottom-2 right-2 flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
-                  type="submit"
-                  disabled={isLoading || !trimmedInput || Boolean(pendingChoice)}
-                  aria-label="Send message"
+                  type={isLoading || hasRunningToolCalls ? "button" : "submit"}
+                  disabled={
+                    (!isLoading && !hasRunningToolCalls && !trimmedInput) ||
+                    Boolean(pendingChoice)
+                  }
+                  onClick={() => {
+                    if (isLoading || hasRunningToolCalls) {
+                      handleCancel();
+                    }
+                  }}
+                  aria-label={
+                    isLoading || hasRunningToolCalls
+                      ? "Cancel response"
+                      : "Send message"
+                  }
                 >
-                  <svg
-                    className="h-4 w-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M12 19V5" />
-                    <path d="m5 12 7-7 7 7" />
-                  </svg>
+                  {isLoading || hasRunningToolCalls ? (
+                    <svg
+                      className="h-4 w-4"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <rect x="6" y="6" width="12" height="12" rx="2" />
+                    </svg>
+                  ) : (
+                    <svg
+                      className="h-4 w-4"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M12 19V5" />
+                      <path d="m5 12 7-7 7 7" />
+                    </svg>
+                  )}
                 </button>
               </div>
-              {isLoading || hasRunningToolCalls ? (
-                <button
-                  className="rounded-2xl border border-zinc-200 px-6 py-3 text-sm font-semibold text-zinc-600 shadow-sm transition hover:border-zinc-400 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
-                  type="button"
-                  onClick={handleCancel}
-                  disabled={!isLoading && !hasRunningToolCalls}
-                >
-                  Cancel
-                </button>
-              ) : null}
             </div>
           </form>
         </section>
