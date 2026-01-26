@@ -54,6 +54,8 @@ type Conversation = {
 
 const STORAGE_KEY = "huaweicloudai-conversations";
 const ACTIVE_STORAGE_KEY = "huaweicloudai-active-conversation";
+const CREDENTIALS_STORAGE_KEY = "huaweicloudai-credentials";
+const PROJECT_IDS_STORAGE_KEY = "huaweicloudai-project-ids";
 const createConversationId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -120,6 +122,8 @@ export default function Home() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
   const summaryInFlightRef = useRef<Set<string>>(new Set());
+  const credentialHydratedRef = useRef(false);
+  const credentialResetSkipRef = useRef(true);
 
   const activeConversation = useMemo(() => {
     if (!activeConversationId) return null;
@@ -255,8 +259,9 @@ export default function Home() {
       "",
       "## Important",
       "",
-      "* When using the eval_code tool, to return a value as the result, use a return statement at the top level of your code.",
-      "* Example: If you use the tool with code that is just `return \"test\";`, the result will be \"test\".",
+      "* The eval_code tool runs your snippet inside a wrapper function. Only a top-level `return` is captured as the tool result.",
+      "* If you define `function main() { return \"hi\"; }`, you must also `return await main();` at the top level.",
+      "* Example: `return \"test\";` returns \"test\".",
     ].join("\n");
   }, [accessKey, projectIds, secretKey]);
   const toolResults = useMemo(() => {
@@ -274,6 +279,41 @@ export default function Home() {
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     const storedActive = localStorage.getItem(ACTIVE_STORAGE_KEY);
+    const storedCredentials = localStorage.getItem(CREDENTIALS_STORAGE_KEY);
+    const storedProjectIds = localStorage.getItem(PROJECT_IDS_STORAGE_KEY);
+
+    if (storedCredentials) {
+      try {
+        const parsed = JSON.parse(storedCredentials) as {
+          accessKey?: string;
+          secretKey?: string;
+        };
+        if (typeof parsed.accessKey === "string") {
+          setAccessKey(parsed.accessKey);
+        }
+        if (typeof parsed.secretKey === "string") {
+          setSecretKey(parsed.secretKey);
+        }
+      } catch {
+        // Ignore invalid stored credentials.
+      }
+    }
+
+    if (storedProjectIds) {
+      try {
+        const parsed = JSON.parse(storedProjectIds) as ProjectIdEntry[];
+        if (Array.isArray(parsed)) {
+          setProjectIds(parsed);
+          if (parsed.length > 0) {
+            setCredentialStatus("saved");
+          }
+        }
+      } catch {
+        // Ignore invalid stored project IDs.
+      }
+    }
+    credentialHydratedRef.current = true;
+
     if (stored) {
       try {
         const parsed = JSON.parse(stored) as Conversation[];
@@ -304,6 +344,27 @@ export default function Home() {
     if (!activeConversationId) return;
     localStorage.setItem(ACTIVE_STORAGE_KEY, activeConversationId);
   }, [activeConversationId]);
+
+  useEffect(() => {
+    if (!credentialHydratedRef.current) return;
+    if (accessKey || secretKey) {
+      localStorage.setItem(
+        CREDENTIALS_STORAGE_KEY,
+        JSON.stringify({ accessKey, secretKey }),
+      );
+    } else {
+      localStorage.removeItem(CREDENTIALS_STORAGE_KEY);
+    }
+  }, [accessKey, secretKey]);
+
+  useEffect(() => {
+    if (!credentialHydratedRef.current) return;
+    if (projectIds.length > 0) {
+      localStorage.setItem(PROJECT_IDS_STORAGE_KEY, JSON.stringify(projectIds));
+    } else {
+      localStorage.removeItem(PROJECT_IDS_STORAGE_KEY);
+    }
+  }, [projectIds]);
 
   const withSystemPrompt = (nextMessages: ChatMessage[]) => {
     if (nextMessages[0]?.role === "system") {
@@ -588,9 +649,15 @@ export default function Home() {
   };
 
   useEffect(() => {
+    if (!credentialHydratedRef.current) return;
+    if (credentialResetSkipRef.current) {
+      credentialResetSkipRef.current = false;
+      return;
+    }
     setCredentialStatus("idle");
     setProjectIds([]);
     setProjectIdError(null);
+    localStorage.removeItem(PROJECT_IDS_STORAGE_KEY);
   }, [accessKey, secretKey]);
 
   const handleSaveCredentials = async () => {
@@ -707,6 +774,33 @@ export default function Home() {
     setCustomChoice("");
   };
 
+  const handleDeleteConversation = (conversationId: string) => {
+    setConversations((prev) => {
+      const next = prev.filter((conversation) => conversation.id !== conversationId);
+      if (next.length === 0) {
+        const seed = createEmptyConversation();
+        setActiveConversationId(seed.id);
+        setInput("");
+        setIsLoading(false);
+        setError(null);
+        setPendingChoice(null);
+        setSelectedChoice("");
+        setCustomChoice("");
+        return [seed];
+      }
+      if (conversationId === activeConversationId) {
+        setActiveConversationId(next[0].id);
+        setInput("");
+        setIsLoading(false);
+        setError(null);
+        setPendingChoice(null);
+        setSelectedChoice("");
+        setCustomChoice("");
+      }
+      return next;
+    });
+  };
+
   const requestSummary = async (
     conversationMessages: ChatMessage[],
   ): Promise<string | null> => {
@@ -796,29 +890,45 @@ export default function Home() {
         </div>
         <div className="flex-1 space-y-2 overflow-y-auto pr-1">
           {conversations.map((conversation) => (
-            <button
+            <div
               key={conversation.id}
-              className={`flex w-full flex-col gap-1 rounded-2xl border px-3 py-2 text-left text-sm transition ${
+              className={`flex w-full items-start justify-between gap-3 rounded-2xl border px-3 py-2 text-left text-sm transition ${
                 conversation.id === activeConversationId
                   ? "border-zinc-900 bg-zinc-900 text-white shadow-sm dark:border-white/70 dark:bg-white/10"
                   : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 dark:border-white/10 dark:bg-black/40 dark:text-zinc-200"
               }`}
-              type="button"
-              onClick={() => setActiveConversationId(conversation.id)}
             >
-              <span className="font-semibold">
-                {conversation.title || "New conversation"}
-              </span>
-              <span
-                className={`text-xs ${
-                  conversation.id === activeConversationId
-                    ? "text-zinc-200"
-                    : "text-zinc-500 dark:text-zinc-400"
-                }`}
+              <button
+                className="flex flex-1 flex-col gap-1 text-left"
+                type="button"
+                onClick={() => setActiveConversationId(conversation.id)}
               >
-                {conversation.messages.length} messages
-              </span>
-            </button>
+                <span className="font-semibold">
+                  {conversation.title || "New conversation"}
+                </span>
+                <span
+                  className={`text-xs ${
+                    conversation.id === activeConversationId
+                      ? "text-zinc-200"
+                      : "text-zinc-500 dark:text-zinc-400"
+                  }`}
+                >
+                  {conversation.messages.length} messages
+                </span>
+              </button>
+              <button
+                className={`rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] transition ${
+                  conversation.id === activeConversationId
+                    ? "border-white/40 text-white hover:border-white/70"
+                    : "border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:text-zinc-700 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+                }`}
+                type="button"
+                onClick={() => handleDeleteConversation(conversation.id)}
+                aria-label={`Delete ${conversation.title || "conversation"}`}
+              >
+                Delete
+              </button>
+            </div>
           ))}
         </div>
         <div className="rounded-2xl border border-zinc-200 bg-white/90 p-4 shadow-sm dark:border-white/10 dark:bg-black/80">
@@ -858,7 +968,7 @@ export default function Home() {
               </label>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
                 These values are used as context in the system prompt and are
-                kept in this browser session.
+                stored locally in this browser.
               </p>
               <div className="flex flex-col gap-2 text-sm text-zinc-600 dark:text-zinc-300">
                 <button
