@@ -1,6 +1,7 @@
 "use client";
 
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type ChatMessage = {
@@ -59,6 +60,8 @@ const PROJECT_IDS_STORAGE_KEY = "huaweicloudai-project-ids";
 const PENDING_REQUEST_STORAGE_KEY = "huaweicloudai-pending-request";
 const TOOL_RESULT_COLLAPSE_THRESHOLD = 900;
 const TOOL_RESULT_COLLAPSE_LINES = 16;
+const INPUT_MIN_HEIGHT = 48;
+const INPUT_MAX_HEIGHT = 220;
 const createConversationId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -124,6 +127,7 @@ export default function Home() {
   const [customChoice, setCustomChoice] = useState("");
   const abortControllerRef = useRef<AbortController | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const summaryInFlightRef = useRef<Set<string>>(new Set());
   const credentialHydratedRef = useRef(false);
   const credentialResetSkipRef = useRef(true);
@@ -278,6 +282,27 @@ export default function Home() {
 
     return results;
   }, [messages]);
+  const hasRunningToolCalls = useMemo(() => {
+    return messages.some(
+      (message) =>
+        message.role === "assistant" &&
+        message.tool_calls?.some((toolCall) => !toolResults.has(toolCall.id)),
+    );
+  }, [messages, toolResults]);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    const scrollHeight = textarea.scrollHeight;
+    const nextHeight = Math.min(
+      INPUT_MAX_HEIGHT,
+      Math.max(INPUT_MIN_HEIGHT, scrollHeight),
+    );
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY =
+      scrollHeight > INPUT_MAX_HEIGHT ? "auto" : "hidden";
+  }, [input]);
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -1195,7 +1220,9 @@ export default function Home() {
                           >
                             {message.role === "assistant" ? (
                               <div className="markdown-content">
-                                <ReactMarkdown>{message.content}</ReactMarkdown>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                  {message.content}
+                                </ReactMarkdown>
                               </div>
                             ) : (
                               message.content
@@ -1384,40 +1411,58 @@ export default function Home() {
           ) : null}
 
           <form
-            className="flex flex-col gap-3 sm:flex-row"
+            className="flex flex-col gap-3"
             onSubmit={handleSubmit}
             ref={formRef}
           >
-            <textarea
-              className="min-h-[56px] flex-1 resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
-              placeholder="Type your message..."
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  formRef.current?.requestSubmit();
-                }
-              }}
-              disabled={isLoading || Boolean(pendingChoice)}
-              rows={2}
-            />
-            <div className="flex gap-2">
-              <button
-                className="rounded-2xl bg-zinc-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
-                type="submit"
-                disabled={isLoading || !trimmedInput || Boolean(pendingChoice)}
-              >
-                Send
-              </button>
-              <button
-                className="rounded-2xl border border-zinc-200 px-6 py-3 text-sm font-semibold text-zinc-600 shadow-sm transition hover:border-zinc-400 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
-                type="button"
-                onClick={handleCancel}
-                disabled={!isLoading}
-              >
-                Cancel
-              </button>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="relative flex-1">
+                <textarea
+                  ref={textareaRef}
+                  className="min-h-[48px] w-full resize-none rounded-3xl border border-zinc-200 bg-white px-4 py-3 pr-14 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                  placeholder="Type your message..."
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      formRef.current?.requestSubmit();
+                    }
+                  }}
+                  disabled={isLoading || Boolean(pendingChoice)}
+                  rows={1}
+                />
+                <button
+                  className="absolute bottom-2 right-2 flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
+                  type="submit"
+                  disabled={isLoading || !trimmedInput || Boolean(pendingChoice)}
+                  aria-label="Send message"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 19V5" />
+                    <path d="m5 12 7-7 7 7" />
+                  </svg>
+                </button>
+              </div>
+              {isLoading || hasRunningToolCalls ? (
+                <button
+                  className="rounded-2xl border border-zinc-200 px-6 py-3 text-sm font-semibold text-zinc-600 shadow-sm transition hover:border-zinc-400 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+                  type="button"
+                  onClick={handleCancel}
+                  disabled={!isLoading && !hasRunningToolCalls}
+                >
+                  Cancel
+                </button>
+              ) : null}
             </div>
           </form>
         </section>
