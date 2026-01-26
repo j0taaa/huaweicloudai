@@ -232,8 +232,6 @@ export default function Home() {
       "",
       "  return await res.text();",
       "}",
-      "",
-      "main().catch(console.error);",
       "```",
       "",
       "## Asking for missing information",
@@ -263,10 +261,10 @@ export default function Home() {
       "",
       "## Important",
       "",
-      "* The eval_code tool runs your snippet inside an async wrapper, so you may use `await` at the top level.",
-      "* Only a top-level `return` is captured as the tool result.",
-      "* If you define `function main() { return \"hi\"; }`, you must also `return await main();` at the top level.",
-      "* Example: `return \"test\";` returns \"test\".",
+      "* The eval_code tool executes your snippet and then calls `main()` for you.",
+      "* Always define a `main` function with no parameters (it can be `async`).",
+      "* Your `main()` must include a `return` statement so the tool can capture the result.",
+      "* Do not use a top-level `return` or call `main()` yourself.",
     ].join("\n");
   }, [accessKey, projectIds, secretKey]);
   const toolResults = useMemo(() => {
@@ -1140,8 +1138,38 @@ export default function Home() {
         <section className="flex h-full flex-1 flex-col gap-6 bg-white p-6 shadow-sm dark:bg-zinc-950">
           <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
             {messages.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-zinc-200 p-6 text-center text-sm text-zinc-500 dark:border-white/10 dark:text-zinc-400">
-                Start the conversation by typing a message below.
+              <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-6 text-sm text-zinc-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500">
+                  Getting started
+                </p>
+                <h3 className="mt-2 text-lg font-semibold text-zinc-900 dark:text-white">
+                  Learn how to use this Huawei Cloud assistant
+                </h3>
+                <ol className="mt-4 flex flex-col gap-3">
+                  <li>
+                    <span className="font-semibold text-zinc-900 dark:text-white">
+                      1. Add your AK/SK credentials.
+                    </span>{" "}
+                    Use the sidebar to enter your Access Key (AK) and Secret Key
+                    (SK). They are required to sign API requests on your behalf.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-zinc-900 dark:text-white">
+                      2. Understand account access.
+                    </span>{" "}
+                    When you run actions, the assistant uses your AK/SK to make
+                    Huawei Cloud API calls, which can read or modify resources in
+                    your account.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-zinc-900 dark:text-white">
+                      3. Ask for workflows or API help.
+                    </span>{" "}
+                    Try “list my projects,” “create an ECS instance,” or “show
+                    available APIs,” and the assistant will guide you through the
+                    required parameters.
+                  </li>
+                </ol>
               </div>
             ) : (
               messages
@@ -1248,16 +1276,16 @@ export default function Home() {
                                     </p>
                                     {hasResult ? (
                                       shouldCollapseResult ? (
-                                        <details className="mt-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700 dark:border-white/10 dark:bg-black/60 dark:text-zinc-200">
+                                        <details className="mt-2 w-full max-w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700 dark:border-white/10 dark:bg-black/60 dark:text-zinc-200">
                                           <summary className="cursor-pointer text-xs font-semibold text-zinc-600 dark:text-zinc-300">
                                             Show full result ({resultLineCount} lines)
                                           </summary>
-                                          <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-zinc-700 dark:text-zinc-200">
+                                          <pre className="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap break-words text-xs text-zinc-700 dark:text-zinc-200">
                                             {result}
                                           </pre>
                                         </details>
                                       ) : (
-                                        <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-zinc-700 dark:text-zinc-200">
+                                        <pre className="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap break-words text-xs text-zinc-700 dark:text-zinc-200">
                                           {result}
                                         </pre>
                                       )
