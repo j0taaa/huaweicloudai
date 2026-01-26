@@ -70,6 +70,27 @@ body {
   overflow-x: auto;
 }
 
+.markdown-content table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.markdown-content th,
+.markdown-content td {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.markdown-content thead {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.markdown-content tbody tr:nth-child(even) {
+  background: rgba(148, 163, 184, 0.08);
+}
+
 @media (prefers-color-scheme: dark) {
   .markdown-content code {
     background: rgba(148, 163, 184, 0.25);
@@ -77,5 +98,18 @@ body {
 
   .markdown-content pre {
     background: rgba(15, 23, 42, 0.5);
+  }
+
+  .markdown-content th,
+  .markdown-content td {
+    border-color: rgba(148, 163, 184, 0.28);
+  }
+
+  .markdown-content thead {
+    background: rgba(148, 163, 184, 0.18);
+  }
+
+  .markdown-content tbody tr:nth-child(even) {
+    background: rgba(148, 163, 184, 0.12);
   }
 }
