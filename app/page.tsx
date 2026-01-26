@@ -44,6 +44,28 @@ type ProjectIdEntry = {
   name?: string;
 };
 
+type Conversation = {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  updatedAt: number;
+  lastSummaryMessageCount: number;
+};
+
+const STORAGE_KEY = "huaweicloudai-conversations";
+const ACTIVE_STORAGE_KEY = "huaweicloudai-active-conversation";
+const createConversationId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `conversation-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const createEmptyConversation = (): Conversation => ({
+  id: createConversationId(),
+  title: "New conversation",
+  messages: [],
+  updatedAt: Date.now(),
+  lastSummaryMessageCount: 0,
+});
+
 const fetchProjectIds = async (ak: string, sk: string) => {
   const response = await fetch("/api/project-ids", {
     method: "POST",
@@ -70,7 +92,10 @@ const fetchProjectIds = async (ak: string, sk: string) => {
 };
 
 export default function Home() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<
+    string | null
+  >(null);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,6 +119,16 @@ export default function Home() {
   const [customChoice, setCustomChoice] = useState("");
   const abortControllerRef = useRef<AbortController | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
+  const summaryInFlightRef = useRef<Set<string>>(new Set());
+
+  const activeConversation = useMemo(() => {
+    if (!activeConversationId) return null;
+    return (
+      conversations.find((conversation) => conversation.id === activeConversationId) ??
+      null
+    );
+  }, [activeConversationId, conversations]);
+  const messages = activeConversation?.messages ?? [];
 
   const trimmedInput = useMemo(() => input.trim(), [input]);
   const systemPrompt = useMemo(() => {
@@ -235,6 +270,40 @@ export default function Home() {
 
     return results;
   }, [messages]);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    const storedActive = localStorage.getItem(ACTIVE_STORAGE_KEY);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as Conversation[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setConversations(parsed);
+          const activeId = parsed.find((conv) => conv.id === storedActive)
+            ? storedActive
+            : parsed[0].id;
+          setActiveConversationId(activeId);
+          return;
+        }
+      } catch {
+        // Ignore storage parse errors and seed a new conversation.
+      }
+    }
+
+    const seed = createEmptyConversation();
+    setConversations([seed]);
+    setActiveConversationId(seed.id);
+  }, []);
+
+  useEffect(() => {
+    if (conversations.length === 0) return;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
+  }, [conversations]);
+
+  useEffect(() => {
+    if (!activeConversationId) return;
+    localStorage.setItem(ACTIVE_STORAGE_KEY, activeConversationId);
+  }, [activeConversationId]);
 
   const withSystemPrompt = (nextMessages: ChatMessage[]) => {
     if (nextMessages[0]?.role === "system") {
@@ -421,7 +490,7 @@ export default function Home() {
       };
 
       workingMessages = [...workingMessages, assistantToolMessage];
-      setMessages(workingMessages);
+      updateActiveMessages(workingMessages);
 
       const multipleChoiceCall = currentResponse.toolCalls.find(
         (toolCall) => toolCall.function.name === "ask_multiple_choice",
@@ -433,7 +502,7 @@ export default function Home() {
       if (nonChoiceCalls.length > 0) {
         const toolMessages = await runToolCalls(nonChoiceCalls);
         workingMessages = [...workingMessages, ...toolMessages];
-        setMessages(workingMessages);
+        updateActiveMessages(workingMessages);
       }
 
       if (multipleChoiceCall) {
@@ -445,7 +514,7 @@ export default function Home() {
             tool_call_id: multipleChoiceCall.id,
           };
           workingMessages = [...workingMessages, errorMessage];
-          setMessages(workingMessages);
+          updateActiveMessages(workingMessages);
         } else if (payload.question && payload.options) {
           setPendingChoice({
             toolCall: multipleChoiceCall,
@@ -469,19 +538,21 @@ export default function Home() {
       { role: "assistant", content: currentResponse.reply },
     ];
 
-    setMessages(workingMessages);
+    updateActiveMessages(workingMessages);
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!trimmedInput || isLoading || pendingChoice) return;
+    if (!trimmedInput || isLoading || pendingChoice || !activeConversationId) {
+      return;
+    }
 
     const nextMessages: ChatMessage[] = [
       ...messages,
       { role: "user", content: input },
     ];
 
-    setMessages(nextMessages);
+    updateActiveMessages(nextMessages);
     setInput("");
     setIsLoading(true);
     setError(null);
@@ -566,7 +637,7 @@ export default function Home() {
     event: React.FormEvent<HTMLFormElement>,
   ) => {
     event.preventDefault();
-    if (!pendingChoice || isLoading) return;
+    if (!pendingChoice || isLoading || !activeConversationId) return;
 
     const isCustom = selectedChoice === "custom";
     const trimmedCustom = customChoice.trim();
@@ -589,7 +660,7 @@ export default function Home() {
     };
 
     const workingMessages = [...messages, toolMessage];
-    setMessages(workingMessages);
+    updateActiveMessages(workingMessages);
 
     try {
       const response = await sendMessages(workingMessages);
@@ -605,10 +676,152 @@ export default function Home() {
     }
   };
 
+  const updateActiveMessages = (nextMessages: ChatMessage[]) => {
+    if (!activeConversationId) return;
+    setConversations((prev) =>
+      prev.map((conversation) =>
+        conversation.id === activeConversationId
+          ? {
+              ...conversation,
+              messages: nextMessages,
+              updatedAt: Date.now(),
+            }
+          : conversation,
+      ),
+    );
+  };
+
+  const handleNewConversation = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    const newConversation = createEmptyConversation();
+    setConversations((prev) => [newConversation, ...prev]);
+    setActiveConversationId(newConversation.id);
+    setInput("");
+    setIsLoading(false);
+    setError(null);
+    setPendingChoice(null);
+    setSelectedChoice("");
+    setCustomChoice("");
+  };
+
+  const requestSummary = async (
+    conversationMessages: ChatMessage[],
+  ): Promise<string | null> => {
+    const relevantMessages = conversationMessages
+      .filter((message) => message.role === "user" || message.role === "assistant")
+      .slice(-12);
+
+    if (relevantMessages.length === 0) return null;
+
+    const summaryPrompt: ChatMessage[] = [
+      {
+        role: "system",
+        content:
+          "Summarize this conversation in 3-5 words. Keep it short, clear, and avoid punctuation.",
+      },
+      ...relevantMessages,
+    ];
+
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: summaryPrompt }),
+    });
+
+    if (!response.ok) return null;
+    const data = (await response.json()) as ChatResponse;
+    if (!data.reply) return null;
+
+    const summary = data.reply.replace(/[".]/g, "").trim();
+    if (!summary) return null;
+
+    return summary.length > 48 ? `${summary.slice(0, 45).trim()}...` : summary;
+  };
+
+  useEffect(() => {
+    if (!activeConversation) return;
+    if (isLoading || pendingChoice) return;
+    if (activeConversation.messages.length < 2) return;
+    if (
+      activeConversation.lastSummaryMessageCount ===
+      activeConversation.messages.length
+    ) {
+      return;
+    }
+
+    const lastMessage =
+      activeConversation.messages[activeConversation.messages.length - 1];
+    if (lastMessage.role !== "assistant") return;
+
+    if (summaryInFlightRef.current.has(activeConversation.id)) return;
+    summaryInFlightRef.current.add(activeConversation.id);
+
+    void requestSummary(activeConversation.messages)
+      .then((summary) => {
+        if (!summary) return;
+        setConversations((prev) =>
+          prev.map((conversation) =>
+            conversation.id === activeConversation.id
+              ? {
+                  ...conversation,
+                  title: summary,
+                  lastSummaryMessageCount: conversation.messages.length,
+                }
+              : conversation,
+          ),
+        );
+      })
+      .finally(() => {
+        summaryInFlightRef.current.delete(activeConversation.id);
+      });
+  }, [activeConversation, isLoading, pendingChoice]);
+
   return (
-    <div className="flex h-screen w-screen flex-col bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
-      <div className="fixed left-4 top-4 z-40 w-72">
-        <div className="rounded-2xl border border-zinc-200 bg-white/90 p-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/80">
+    <div className="flex h-screen w-screen bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
+      <aside className="flex w-72 flex-col gap-4 border-r border-zinc-200 bg-white/80 p-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/70">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+            Conversations
+          </h2>
+          <button
+            className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+            type="button"
+            onClick={handleNewConversation}
+          >
+            New
+          </button>
+        </div>
+        <div className="flex-1 space-y-2 overflow-y-auto pr-1">
+          {conversations.map((conversation) => (
+            <button
+              key={conversation.id}
+              className={`flex w-full flex-col gap-1 rounded-2xl border px-3 py-2 text-left text-sm transition ${
+                conversation.id === activeConversationId
+                  ? "border-zinc-900 bg-zinc-900 text-white shadow-sm dark:border-white/70 dark:bg-white/10"
+                  : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 dark:border-white/10 dark:bg-black/40 dark:text-zinc-200"
+              }`}
+              type="button"
+              onClick={() => setActiveConversationId(conversation.id)}
+            >
+              <span className="font-semibold">
+                {conversation.title || "New conversation"}
+              </span>
+              <span
+                className={`text-xs ${
+                  conversation.id === activeConversationId
+                    ? "text-zinc-200"
+                    : "text-zinc-500 dark:text-zinc-400"
+                }`}
+              >
+                {conversation.messages.length} messages
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="rounded-2xl border border-zinc-200 bg-white/90 p-4 shadow-sm dark:border-white/10 dark:bg-black/80">
           <button
             className="flex w-full items-center justify-between text-left text-sm font-semibold text-zinc-900 dark:text-zinc-100"
             type="button"
@@ -704,7 +917,7 @@ export default function Home() {
             </div>
           ) : null}
         </div>
-      </div>
+      </aside>
       <main className="flex h-full w-full flex-1 flex-col">
         <section className="flex h-full flex-1 flex-col gap-6 bg-white p-6 shadow-sm dark:bg-zinc-950">
           <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
