@@ -60,7 +60,7 @@ export async function POST(request: Request) {
           function: {
             name: "eval_code",
             description:
-              "Execute JavaScript code on the server and return the result.",
+              "Execute JavaScript code on the server inside an async wrapper and return the result. Top-level await is supported; return a value to emit a result.",
             parameters: {
               type: "object",
               properties: {

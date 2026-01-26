@@ -28,10 +28,12 @@ export async function POST(request: Request) {
   }
 
   try {
-    const fn = new Function("signRequest", code);
+    const fn = new Function(
+      "signRequest",
+      `return (async () => { ${code} })();`,
+    );
     const evalResult = fn(signRequest);
-    const resolvedResult =
-      evalResult instanceof Promise ? await evalResult : evalResult;
+    const resolvedResult = await evalResult;
 
     let serializedResult: string;
     if (typeof resolvedResult === "string") {
