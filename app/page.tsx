@@ -56,6 +56,9 @@ const STORAGE_KEY = "huaweicloudai-conversations";
 const ACTIVE_STORAGE_KEY = "huaweicloudai-active-conversation";
 const CREDENTIALS_STORAGE_KEY = "huaweicloudai-credentials";
 const PROJECT_IDS_STORAGE_KEY = "huaweicloudai-project-ids";
+const PENDING_REQUEST_STORAGE_KEY = "huaweicloudai-pending-request";
+const TOOL_RESULT_COLLAPSE_THRESHOLD = 900;
+const TOOL_RESULT_COLLAPSE_LINES = 16;
 const createConversationId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -124,6 +127,7 @@ export default function Home() {
   const summaryInFlightRef = useRef<Set<string>>(new Set());
   const credentialHydratedRef = useRef(false);
   const credentialResetSkipRef = useRef(true);
+  const pendingResumeRef = useRef(false);
 
   const activeConversation = useMemo(() => {
     if (!activeConversationId) return null;
@@ -259,7 +263,8 @@ export default function Home() {
       "",
       "## Important",
       "",
-      "* The eval_code tool runs your snippet inside a wrapper function. Only a top-level `return` is captured as the tool result.",
+      "* The eval_code tool runs your snippet inside an async wrapper, so you may use `await` at the top level.",
+      "* Only a top-level `return` is captured as the tool result.",
       "* If you define `function main() { return \"hi\"; }`, you must also `return await main();` at the top level.",
       "* Example: `return \"test\";` returns \"test\".",
     ].join("\n");
@@ -365,6 +370,73 @@ export default function Home() {
       localStorage.removeItem(PROJECT_IDS_STORAGE_KEY);
     }
   }, [projectIds]);
+
+  useEffect(() => {
+    if (
+      !credentialHydratedRef.current ||
+      pendingResumeRef.current ||
+      conversations.length === 0 ||
+      pendingChoice
+    ) {
+      return;
+    }
+
+    const storedPending = localStorage.getItem(PENDING_REQUEST_STORAGE_KEY);
+    if (!storedPending) {
+      pendingResumeRef.current = true;
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(storedPending) as {
+        conversationId?: string;
+        messages?: ChatMessage[];
+      };
+
+      if (!parsed.conversationId || !Array.isArray(parsed.messages)) {
+        localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
+        pendingResumeRef.current = true;
+        return;
+      }
+
+      const pendingConversation = conversations.find(
+        (conversation) => conversation.id === parsed.conversationId,
+      );
+      if (!pendingConversation) {
+        localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
+        pendingResumeRef.current = true;
+        return;
+      }
+
+      pendingResumeRef.current = true;
+      if (activeConversationId !== parsed.conversationId) {
+        setActiveConversationId(parsed.conversationId);
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      void sendMessages(parsed.messages)
+        .then((response) =>
+          continueConversation([...parsed.messages], response),
+        )
+        .catch((caughtError) => {
+          const message =
+            caughtError instanceof Error
+              ? caughtError.message
+              : "Something went wrong.";
+          setError(message);
+        })
+        .finally(() => {
+          setIsLoading(false);
+          abortControllerRef.current = null;
+          localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
+        });
+    } catch {
+      localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
+      pendingResumeRef.current = true;
+    }
+  }, [activeConversationId, conversations, pendingChoice]);
 
   const withSystemPrompt = (nextMessages: ChatMessage[]) => {
     if (nextMessages[0]?.role === "system") {
@@ -617,6 +689,13 @@ export default function Home() {
     setInput("");
     setIsLoading(true);
     setError(null);
+    localStorage.setItem(
+      PENDING_REQUEST_STORAGE_KEY,
+      JSON.stringify({
+        conversationId: activeConversationId,
+        messages: nextMessages,
+      }),
+    );
 
     try {
       const workingMessages = [...nextMessages];
@@ -638,6 +717,7 @@ export default function Home() {
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
+      localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
     }
   };
 
@@ -646,6 +726,7 @@ export default function Home() {
       abortControllerRef.current.abort();
     }
     setIsLoading(false);
+    localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
   };
 
   useEffect(() => {
@@ -728,6 +809,13 @@ export default function Home() {
 
     const workingMessages = [...messages, toolMessage];
     updateActiveMessages(workingMessages);
+    localStorage.setItem(
+      PENDING_REQUEST_STORAGE_KEY,
+      JSON.stringify({
+        conversationId: activeConversationId,
+        messages: workingMessages,
+      }),
+    );
 
     try {
       const response = await sendMessages(workingMessages);
@@ -740,6 +828,7 @@ export default function Home() {
       setError(message);
     } finally {
       setIsLoading(false);
+      localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
     }
   };
 
@@ -763,6 +852,7 @@ export default function Home() {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
     const newConversation = createEmptyConversation();
     setConversations((prev) => [newConversation, ...prev]);
     setActiveConversationId(newConversation.id);
@@ -777,6 +867,9 @@ export default function Home() {
   const handleDeleteConversation = (conversationId: string) => {
     setConversations((prev) => {
       const next = prev.filter((conversation) => conversation.id !== conversationId);
+      if (conversationId === activeConversationId) {
+        localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
+      }
       if (next.length === 0) {
         const seed = createEmptyConversation();
         setActiveConversationId(seed.id);
@@ -899,15 +992,15 @@ export default function Home() {
               }`}
             >
               <button
-                className="flex flex-1 flex-col gap-1 text-left"
+                className="flex min-w-0 flex-1 flex-col gap-1 text-left"
                 type="button"
                 onClick={() => setActiveConversationId(conversation.id)}
               >
-                <span className="font-semibold">
+                <span className="truncate font-semibold">
                   {conversation.title || "New conversation"}
                 </span>
                 <span
-                  className={`text-xs ${
+                  className={`truncate text-xs ${
                     conversation.id === activeConversationId
                       ? "text-zinc-200"
                       : "text-zinc-500 dark:text-zinc-400"
@@ -926,7 +1019,22 @@ export default function Home() {
                 onClick={() => handleDeleteConversation(conversation.id)}
                 aria-label={`Delete ${conversation.title || "conversation"}`}
               >
-                Delete
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4h8v2" />
+                  <path d="M6 6l1 14h10l1-14" />
+                  <path d="M10 11v6" />
+                  <path d="M14 11v6" />
+                </svg>
               </button>
             </div>
           ))}
@@ -1082,6 +1190,10 @@ export default function Home() {
                                   : summarizeCode(code);
                               const hasResult = toolResults.has(toolCall.id);
                               const result = toolResults.get(toolCall.id) ?? "";
+                              const resultLineCount = result.split("\n").length;
+                              const shouldCollapseResult =
+                                result.length > TOOL_RESULT_COLLAPSE_THRESHOLD ||
+                                resultLineCount > TOOL_RESULT_COLLAPSE_LINES;
 
                               return (
                                 <div
@@ -1135,9 +1247,20 @@ export default function Home() {
                                       Tool result
                                     </p>
                                     {hasResult ? (
-                                      <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-zinc-700 dark:text-zinc-200">
-                                        {result}
-                                      </pre>
+                                      shouldCollapseResult ? (
+                                        <details className="mt-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700 dark:border-white/10 dark:bg-black/60 dark:text-zinc-200">
+                                          <summary className="cursor-pointer text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                                            Show full result ({resultLineCount} lines)
+                                          </summary>
+                                          <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-zinc-700 dark:text-zinc-200">
+                                            {result}
+                                          </pre>
+                                        </details>
+                                      ) : (
+                                        <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-zinc-700 dark:text-zinc-200">
+                                          {result}
+                                        </pre>
+                                      )
                                     ) : (
                                       <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
                                         Awaiting response from the tool...
