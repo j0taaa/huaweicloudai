@@ -30,7 +30,13 @@ export async function POST(request: Request) {
   try {
     const fn = new Function(
       "signRequest",
-      `return (async () => { ${code} })();`,
+      `return (async () => {
+        ${code}
+        if (typeof main !== "function") {
+          throw new Error("main() is not defined. Please define a main() function.");
+        }
+        return await main();
+      })();`,
     );
     const evalResult = fn(signRequest);
     const resolvedResult = await evalResult;
