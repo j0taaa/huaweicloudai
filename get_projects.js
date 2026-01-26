@@ -1,8 +1,8 @@
 const https = require('https');
 const HuaweiCloudSigner = require('./huawei_signer.js');
 
-const ACCESS_KEY = 'HPUAN9Q5XBMYMCBIYJOB';
-const SECRET_KEY = 'zOPTPPsAT9DAMZaiJvlXJaZRv0FJUb4ZQuRrGFPz';
+const ACCESS_KEY = process.env.HUAWEI_ACCESS_KEY;
+const SECRET_KEY = process.env.HUAWEI_SECRET_KEY;
 const REGION = 'sa-brazil-1';
 
 function httpsRequest(options, data = '') {
@@ -25,6 +25,9 @@ function httpsRequest(options, data = '') {
 }
 
 async function getProjects() {
+  if (!ACCESS_KEY || !SECRET_KEY) {
+    throw new Error('Missing Huawei Cloud credentials. Set HUAWEI_ACCESS_KEY and HUAWEI_SECRET_KEY.');
+  }
   const url = `https://iam.${REGION}.myhuaweicloud.com/v3/projects`;
   
   const options = {
