@@ -1433,7 +1433,7 @@ export default function Home() {
                   rows={1}
                 />
                 <button
-                  className="absolute bottom-2 right-2 flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
+                  className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
                   type="submit"
                   disabled={isLoading || !trimmedInput || Boolean(pendingChoice)}
                   aria-label="Send message"
