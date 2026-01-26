@@ -1480,10 +1480,10 @@ export default function Home() {
             ref={formRef}
           >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <div className="relative flex-1">
+              <div className="relative grid flex-1">
                 <textarea
                   ref={textareaRef}
-                  className="min-h-[48px] w-full resize-none rounded-3xl border border-zinc-200 bg-white px-4 py-3 pr-14 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                  className="col-start-1 row-start-1 min-h-[48px] w-full resize-none rounded-3xl border border-zinc-200 bg-white px-4 py-3 pr-14 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
                   placeholder="Type your message..."
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
@@ -1497,7 +1497,7 @@ export default function Home() {
                   rows={1}
                 />
                 <button
-                  className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
+                  className="col-start-1 row-start-1 mr-2 flex h-9 w-9 items-center justify-center justify-self-end self-center rounded-full bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
                   type={isLoading || hasRunningToolCalls ? "button" : "submit"}
                   disabled={
                     (!isLoading && !hasRunningToolCalls && !trimmedInput) ||
