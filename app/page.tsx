@@ -116,6 +116,7 @@ export default function Home() {
   const [projectIds, setProjectIds] = useState<ProjectIdEntry[]>([]);
   const [projectIdError, setProjectIdError] = useState<string | null>(null);
   const [projectIdsOpen, setProjectIdsOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeToolPreview, setActiveToolPreview] =
     useState<ToolPreview | null>(null);
   const [pendingChoice, setPendingChoice] = useState<{
@@ -303,6 +304,11 @@ export default function Home() {
     textarea.style.overflowY =
       scrollHeight > INPUT_MAX_HEIGHT ? "auto" : "hidden";
   }, [input]);
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -990,8 +996,20 @@ export default function Home() {
   }, [activeConversation, isLoading, pendingChoice]);
 
   return (
-    <div className="flex h-screen w-screen bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
-      <aside className="flex w-72 flex-col gap-4 border-r border-zinc-200 bg-white/80 p-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/70">
+    <div className="flex h-dvh w-screen flex-col bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50 lg:flex-row">
+      {sidebarOpen ? (
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+          aria-label="Close conversations"
+        />
+      ) : null}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 flex w-80 max-w-full flex-col gap-4 border-r border-zinc-200 bg-white/95 p-4 shadow-lg backdrop-blur transition-transform duration-200 dark:border-white/10 dark:bg-black/90 lg:static lg:w-72 lg:translate-x-0 lg:shadow-sm ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        }`}
+      >
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
             Conversations
@@ -999,7 +1017,10 @@ export default function Home() {
           <button
             className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
             type="button"
-            onClick={handleNewConversation}
+            onClick={() => {
+              handleNewConversation();
+              setSidebarOpen(false);
+            }}
           >
             New
           </button>
@@ -1017,7 +1038,10 @@ export default function Home() {
               <button
                 className="flex min-w-0 flex-1 flex-col gap-1 text-left"
                 type="button"
-                onClick={() => setActiveConversationId(conversation.id)}
+                onClick={() => {
+                  setActiveConversationId(conversation.id);
+                  setSidebarOpen(false);
+                }}
               >
                 <span className="truncate font-semibold">
                   {conversation.title || "New conversation"}
@@ -1160,7 +1184,43 @@ export default function Home() {
         </div>
       </aside>
       <main className="flex h-full w-full flex-1 flex-col">
-        <section className="flex h-full flex-1 flex-col gap-6 bg-white p-6 shadow-sm dark:bg-zinc-950">
+        <header className="flex items-center justify-between border-b border-zinc-200 bg-white/90 px-4 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/80 lg:hidden">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 text-zinc-600 shadow-sm transition hover:border-zinc-300 hover:text-zinc-900 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+            aria-label="Open conversations"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3 6h18" />
+              <path d="M3 12h18" />
+              <path d="M3 18h18" />
+            </svg>
+          </button>
+          <div className="flex flex-1 flex-col items-center">
+            <span className="text-sm font-semibold">Huawei Cloud AI</span>
+            <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              Chat workspace
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleNewConversation}
+            className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+          >
+            New
+          </button>
+        </header>
+        <section className="flex h-full flex-1 flex-col gap-6 bg-white px-4 py-5 shadow-sm dark:bg-zinc-950 sm:px-6 sm:py-6">
           <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
             {messages.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-6 text-sm text-zinc-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
@@ -1411,7 +1471,7 @@ export default function Home() {
           ) : null}
 
           <form
-            className="flex flex-col gap-3"
+            className="flex flex-col gap-3 pb-[env(safe-area-inset-bottom)]"
             onSubmit={handleSubmit}
             ref={formRef}
           >
@@ -1433,7 +1493,7 @@ export default function Home() {
                   rows={1}
                 />
                 <button
-                  className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
+                  className="absolute bottom-2 right-2 flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
                   type="submit"
                   disabled={isLoading || !trimmedInput || Boolean(pendingChoice)}
                   aria-label="Send message"
