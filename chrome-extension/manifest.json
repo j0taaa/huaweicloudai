@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Huawei Cloud Chat Overlay",
+  "description": "Shows a small chat window on Huawei Cloud pages.",
+  "version": "1.0.0",
+  "action": {
+    "default_title": "Huawei Cloud Chat Overlay"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.huaweicloud.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"]
+    }
+  ],
+  "host_permissions": ["*://*.huaweicloud.com/*"]
+}
