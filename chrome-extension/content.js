@@ -408,6 +408,24 @@ if (!existingWidget) {
     return bubble;
   };
 
+  const renderThinkingBubble = () => {
+    const bubble = document.createElement("div");
+    bubble.className =
+      "hwc-chat-bubble hwc-chat-bubble-assistant hwc-chat-bubble-thinking";
+    bubble.innerHTML = `
+      <span class="hwc-chat-thinking-spinner" aria-hidden="true"></span>
+      <span>Thinking...</span>
+    `;
+    messages.append(bubble);
+    messages.scrollTop = messages.scrollHeight;
+    return bubble;
+  };
+
+  const finalizeAssistantBubble = (bubble, text) => {
+    bubble.classList.remove("hwc-chat-bubble-thinking");
+    bubble.textContent = text;
+  };
+
   const parseToolArguments = (toolCall) => {
     const rawArgs = toolCall?.function?.arguments ?? "";
     if (!rawArgs) {
@@ -603,6 +621,7 @@ if (!existingWidget) {
   };
 
   const updateAssistantBubble = (bubble, text) => {
+    bubble.classList.remove("hwc-chat-bubble-thinking");
     bubble.innerHTML = `<div class="hwc-chat-markdown">${renderMarkdown(
       text,
     )}</div>`;
@@ -903,7 +922,7 @@ if (!existingWidget) {
       updateToolCardStatus(toolCall.id, "complete");
       clearPendingChoice();
 
-      const assistantBubble = renderBubble("assistant", "Thinking...");
+      const assistantBubble = renderThinkingBubble();
 
       try {
         const { data } = await sendMessages(chatHistory, {
@@ -912,10 +931,10 @@ if (!existingWidget) {
         await handleResponse(data, assistantBubble);
         setStatus("Connected", "success");
       } catch (error) {
-        assistantBubble.textContent =
-          error instanceof Error
-            ? error.message
-            : "Unable to reach server.";
+        finalizeAssistantBubble(
+          assistantBubble,
+          error instanceof Error ? error.message : "Unable to reach server.",
+        );
         setStatus("Connection failed", "error");
       } finally {
         isSending = false;
@@ -939,14 +958,17 @@ if (!existingWidget) {
       const toolCalls = currentResponse?.toolCalls ?? [];
 
       if (!reply && toolCalls.length === 0) {
-        activeBubble.textContent = "No response returned.";
+        finalizeAssistantBubble(activeBubble, "No response returned.");
         return;
       }
 
       if (reply) {
         updateAssistantBubble(activeBubble, reply);
       } else {
-        activeBubble.textContent = "Received tool calls. Review details below.";
+        finalizeAssistantBubble(
+          activeBubble,
+          "Received tool calls. Review details below.",
+        );
       }
 
       chatHistory.push({
@@ -1000,7 +1022,7 @@ if (!existingWidget) {
         }
       }
 
-      activeBubble = renderBubble("assistant", "Thinking...");
+      activeBubble = renderThinkingBubble();
       const { data } = await sendMessages(chatHistory, { allowFallback: false });
       currentResponse = data;
     }
@@ -1130,7 +1152,7 @@ if (!existingWidget) {
     resizeInput();
     input.focus();
 
-    const assistantBubble = renderBubble("assistant", "Thinking...");
+    const assistantBubble = renderThinkingBubble();
 
     try {
       isSending = true;
@@ -1150,10 +1172,10 @@ if (!existingWidget) {
         "success",
       );
     } catch (error) {
-      assistantBubble.textContent =
-        error instanceof Error
-          ? error.message
-          : "Unable to reach server.";
+      finalizeAssistantBubble(
+        assistantBubble,
+        error instanceof Error ? error.message : "Unable to reach server.",
+      );
       setStatus("Connection failed", "error");
     } finally {
       isSending = false;
