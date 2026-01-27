@@ -217,6 +217,8 @@ if (!existingWidget) {
   const messages = document.createElement("div");
   messages.className = "hwc-chat-messages";
   const SCROLL_BOTTOM_THRESHOLD = 24;
+  const THINKING_COLLAPSE_THRESHOLD = 1200;
+  const THINKING_PREVIEW_CHARS = 320;
   let shouldAutoScroll = true;
   const updateAutoScroll = () => {
     const distanceFromBottom =
@@ -506,22 +508,67 @@ if (!existingWidget) {
     return bubble;
   };
 
-  const renderThinkingBubble = () => {
+  const updateThinkingBlock = (container, thinkingText) => {
+    const trimmed = thinkingText?.trim();
+    if (!trimmed) {
+      container.hidden = true;
+      container.innerHTML = "";
+      return;
+    }
+
+    const isLong = trimmed.length > THINKING_COLLAPSE_THRESHOLD;
+    const preview = isLong
+      ? trimmed.slice(-THINKING_PREVIEW_CHARS)
+      : trimmed;
+
+    container.hidden = false;
+    const previewHtml = `
+      <pre class="hwc-chat-thinking-preview">${escapeHtml(preview)}</pre>
+    `;
+    const detailsHtml = isLong
+      ? `
+        <details class="hwc-chat-thinking-details">
+          <summary>Show full thinking</summary>
+          <pre>${escapeHtml(trimmed)}</pre>
+        </details>
+      `
+      : "";
+
+    container.innerHTML = `
+      <p class="hwc-chat-thinking-title">Model thinking</p>
+      ${previewHtml}
+      ${detailsHtml}
+    `;
+  };
+
+  const createAssistantBubble = () => {
     const bubble = document.createElement("div");
-    bubble.className =
-      "hwc-chat-bubble hwc-chat-bubble-assistant hwc-chat-bubble-thinking";
-    bubble.innerHTML = `
+    bubble.className = "hwc-chat-bubble hwc-chat-bubble-assistant";
+
+    const status = document.createElement("div");
+    status.className = "hwc-chat-thinking-status";
+    status.innerHTML = `
       <span class="hwc-chat-thinking-spinner" aria-hidden="true"></span>
       <span>Thinking...</span>
     `;
+
+    const content = document.createElement("div");
+    content.className = "hwc-chat-markdown";
+
+    const thinking = document.createElement("div");
+    thinking.className = "hwc-chat-thinking-block";
+    thinking.hidden = true;
+
+    bubble.append(status, content, thinking);
     messages.append(bubble);
     scrollToBottomIfNeeded();
-    return bubble;
+    return { bubble, status, content, thinking };
   };
 
-  const finalizeAssistantBubble = (bubble, text) => {
-    bubble.classList.remove("hwc-chat-bubble-thinking");
-    bubble.textContent = text;
+  const finalizeAssistantBubble = (bubbleState, text) => {
+    bubbleState.status.hidden = true;
+    bubbleState.content.textContent = text;
+    updateThinkingBlock(bubbleState.thinking, "");
   };
 
   const parseToolArguments = (toolCall) => {
@@ -718,11 +765,11 @@ if (!existingWidget) {
     scrollToBottomIfNeeded();
   };
 
-  const updateAssistantBubble = (bubble, text) => {
-    bubble.classList.remove("hwc-chat-bubble-thinking");
-    bubble.innerHTML = `<div class="hwc-chat-markdown">${renderMarkdown(
-      text,
-    )}</div>`;
+  const updateAssistantBubble = (bubbleState, text, thinkingText = "") => {
+    const trimmed = text?.trim() ?? "";
+    bubbleState.status.hidden = Boolean(trimmed || thinkingText?.trim());
+    bubbleState.content.innerHTML = trimmed ? renderMarkdown(text) : "";
+    updateThinkingBlock(bubbleState.thinking, thinkingText);
   };
 
   const normalizeServerUrl = (value) => {
@@ -738,6 +785,39 @@ if (!existingWidget) {
     } catch (error) {
       return DEFAULT_SERVER_URL;
     }
+  };
+
+  const createSseParser = (onEvent) => {
+    let buffer = "";
+    let eventName = "message";
+    let dataLines = [];
+
+    const flushEvent = () => {
+      if (dataLines.length === 0) return;
+      const data = dataLines.join("\n");
+      dataLines = [];
+      onEvent({ event: eventName || "message", data });
+      eventName = "message";
+    };
+
+    return (chunk) => {
+      buffer += chunk;
+      let newlineIndex = buffer.indexOf("\n");
+      while (newlineIndex !== -1) {
+        const line = buffer.slice(0, newlineIndex).replace(/\r$/, "");
+        buffer = buffer.slice(newlineIndex + 1);
+
+        if (!line.trim()) {
+          flushEvent();
+        } else if (line.startsWith("event:")) {
+          eventName = line.slice(6).trim() || "message";
+        } else if (line.startsWith("data:")) {
+          dataLines.push(line.slice(5).trimStart());
+        }
+
+        newlineIndex = buffer.indexOf("\n");
+      }
+    };
   };
 
   const requestServer = async (serverUrl, endpoint, payload) => {
@@ -787,7 +867,10 @@ if (!existingWidget) {
     return response.json();
   };
 
-  const sendMessages = async (messagesToSend, { allowFallback = true } = {}) => {
+  const sendMessages = async (
+    messagesToSend,
+    { allowFallback = true, onStreamUpdate } = {},
+  ) => {
     const trimmedAccessKey = accessKeyInput.value.trim();
     const trimmedSecretKey = secretKeyInput.value.trim();
     const serverUrl = normalizeServerUrl(activeServerUrl);
@@ -809,13 +892,110 @@ if (!existingWidget) {
           : { mode: "default" },
     };
 
+    const streamFromServer = async (targetUrl) => {
+      let reply = "";
+      let thinking = "";
+      let toolCalls = [];
+
+      const parser = createSseParser(({ event, data }) => {
+        if (data === "[DONE]") {
+          return;
+        }
+        let parsed = null;
+        try {
+          parsed = JSON.parse(data);
+        } catch {
+          parsed = { chunk: data };
+        }
+
+        if (event === "content") {
+          const chunk = parsed?.chunk ?? "";
+          if (chunk) {
+            reply += chunk;
+            onStreamUpdate?.({ content: reply, thinking });
+          }
+        } else if (event === "thinking") {
+          const chunk = parsed?.chunk ?? "";
+          if (chunk) {
+            thinking += chunk;
+            onStreamUpdate?.({ content: reply, thinking });
+          }
+        } else if (event === "done") {
+          reply = parsed?.reply ?? reply;
+          thinking = parsed?.thinking ?? thinking;
+          toolCalls = parsed?.toolCalls ?? toolCalls;
+        } else if (event === "error") {
+          throw new Error(parsed?.message ?? "Stream error.");
+        }
+      });
+
+      if (
+        typeof chrome !== "undefined" &&
+        chrome.runtime &&
+        typeof chrome.runtime.connect === "function"
+      ) {
+        await new Promise((resolve, reject) => {
+          const port = chrome.runtime.connect({ name: "hwc-chat-stream" });
+
+          port.onMessage.addListener((message) => {
+            if (message?.type === "chunk") {
+              parser(message.chunk || "");
+            } else if (message?.type === "done") {
+              resolve();
+            } else if (message?.type === "error") {
+              reject(new Error(message.error || "Server error."));
+            }
+          });
+
+          port.onDisconnect.addListener(() => {
+            resolve();
+          });
+
+          port.postMessage({
+            type: "start",
+            serverUrl: targetUrl,
+            endpoint: "/api/chat",
+            payload,
+          });
+        });
+      } else {
+        const response = await fetch(`${targetUrl}/api/chat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || "Server error.");
+        }
+
+        if (!response.body) {
+          throw new Error("No response stream available.");
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          parser(decoder.decode(value, { stream: true }));
+        }
+      }
+
+      return { reply, toolCalls, thinking };
+    };
+
     try {
-      const data = await requestServer(serverUrl, "/api/chat", payload);
+      const data = await streamFromServer(serverUrl);
       return { data, usedFallback: false, serverUrl };
     } catch (error) {
       if (allowFallback && /^https:\/\//i.test(serverUrl)) {
         const fallbackUrl = serverUrl.replace(/^https:\/\//i, "http://");
-        const data = await requestServer(fallbackUrl, "/api/chat", payload);
+        const data = await streamFromServer(fallbackUrl);
         serverUrlInput.value = fallbackUrl;
         activeServerUrl = fallbackUrl;
         storageSet({ serverUrl: fallbackUrl });
@@ -1029,11 +1209,14 @@ if (!existingWidget) {
       updateToolCardStatus(toolCall.id, "complete");
       clearPendingChoice();
 
-      const assistantBubble = renderThinkingBubble();
+      const assistantBubble = createAssistantBubble();
 
       try {
         const { data } = await sendMessages(chatHistory, {
           allowFallback: false,
+          onStreamUpdate: ({ content, thinking }) => {
+            updateAssistantBubble(assistantBubble, content, thinking);
+          },
         });
         await handleResponse(data, assistantBubble);
         setStatus("Connected", "success");
@@ -1063,6 +1246,7 @@ if (!existingWidget) {
     while (true) {
       const reply = currentResponse?.reply?.trim() ?? "";
       const toolCalls = currentResponse?.toolCalls ?? [];
+      const thinking = currentResponse?.thinking ?? "";
 
       if (!reply && toolCalls.length === 0) {
         finalizeAssistantBubble(activeBubble, "No response returned.");
@@ -1070,11 +1254,12 @@ if (!existingWidget) {
       }
 
       if (reply) {
-        updateAssistantBubble(activeBubble, reply);
+        updateAssistantBubble(activeBubble, reply, thinking);
       } else {
-        finalizeAssistantBubble(
+        updateAssistantBubble(
           activeBubble,
           "Received tool calls. Review details below.",
+          thinking,
         );
       }
 
@@ -1129,8 +1314,13 @@ if (!existingWidget) {
         }
       }
 
-      activeBubble = renderThinkingBubble();
-      const { data } = await sendMessages(chatHistory, { allowFallback: false });
+      activeBubble = createAssistantBubble();
+      const { data } = await sendMessages(chatHistory, {
+        allowFallback: false,
+        onStreamUpdate: ({ content, thinking }) => {
+          updateAssistantBubble(activeBubble, content, thinking);
+        },
+      });
       currentResponse = data;
     }
   };
@@ -1259,7 +1449,7 @@ if (!existingWidget) {
     resizeInput();
     input.focus();
 
-    const assistantBubble = renderThinkingBubble();
+    const assistantBubble = createAssistantBubble();
 
     try {
       isSending = true;
@@ -1270,6 +1460,9 @@ if (!existingWidget) {
         chatHistory,
         {
           allowFallback: true,
+          onStreamUpdate: ({ content, thinking }) => {
+            updateAssistantBubble(assistantBubble, content, thinking);
+          },
         },
       );
       activeServerUrl = serverUrl;

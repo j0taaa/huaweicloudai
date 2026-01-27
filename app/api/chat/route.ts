@@ -31,6 +31,20 @@ type ChatRequest = {
   };
 };
 
+type StreamToolCall = {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
+};
+
+type StreamEvent = {
+  event: string;
+  data: string;
+};
+
 const buildSystemPrompt = (context: ChatRequest["context"] = {}) => {
   const akValue = context.accessKey?.trim() || "[not provided]";
   const skValue = context.secretKey?.trim() || "[not provided]";
@@ -161,6 +175,199 @@ const buildSystemPrompt = (context: ChatRequest["context"] = {}) => {
   ].join("\n");
 };
 
+const createSseParser = (onEvent: (event: StreamEvent) => void) => {
+  let buffer = "";
+  let eventName = "message";
+  let dataLines: string[] = [];
+
+  const flushEvent = () => {
+    if (dataLines.length === 0) return;
+    const data = dataLines.join("\n");
+    onEvent({ event: eventName, data });
+    dataLines = [];
+    eventName = "message";
+  };
+
+  return (chunk: string) => {
+    buffer += chunk;
+    let newlineIndex = buffer.indexOf("\n");
+    while (newlineIndex !== -1) {
+      const line = buffer.slice(0, newlineIndex);
+      buffer = buffer.slice(newlineIndex + 1);
+      const trimmed = line.replace(/\r$/, "");
+
+      if (!trimmed) {
+        flushEvent();
+        newlineIndex = buffer.indexOf("\n");
+        continue;
+      }
+
+      if (trimmed.startsWith("event:")) {
+        eventName = trimmed.slice(6).trim() || "message";
+      } else if (trimmed.startsWith("data:")) {
+        dataLines.push(trimmed.slice(5).trimStart());
+      }
+
+      newlineIndex = buffer.indexOf("\n");
+    }
+  };
+};
+
+const extractThinkingDelta = (delta: Record<string, unknown>) => {
+  const candidates = [
+    delta.reasoning_content,
+    delta.reasoning,
+    delta.thinking,
+    delta.analysis,
+  ];
+
+  const firstString = candidates.find((value) => typeof value === "string");
+  return typeof firstString === "string" ? firstString : "";
+};
+
+const buildToolCallsFromDeltas = (entries: Array<Record<string, unknown>>) => {
+  const toolCalls = new Map<number, StreamToolCall>();
+
+  entries.forEach((entry) => {
+    const index = typeof entry.index === "number" ? entry.index : 0;
+    const existing =
+      toolCalls.get(index) ??
+      ({
+        id: "",
+        type: "function",
+        function: { name: "", arguments: "" },
+      } satisfies StreamToolCall);
+
+    if (typeof entry.id === "string") {
+      existing.id = entry.id;
+    }
+    if (typeof entry.type === "string" && entry.type === "function") {
+      existing.type = "function";
+    }
+
+    const func = entry.function as Record<string, unknown> | undefined;
+    if (func) {
+      if (typeof func.name === "string") {
+        existing.function.name = func.name;
+      }
+      if (typeof func.arguments === "string") {
+        existing.function.arguments += func.arguments;
+      }
+    }
+
+    toolCalls.set(index, existing);
+  });
+
+  return toolCalls;
+};
+
+const streamResponse = (
+  response: Response,
+  fallbackPayload?: {
+    reply: string;
+    toolCalls: StreamToolCall[];
+    thinking: string;
+  },
+) => {
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  return new ReadableStream({
+    async start(controller) {
+      const sendEvent = (event: string, data: unknown) => {
+        const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+        controller.enqueue(encoder.encode(payload));
+      };
+
+      if (!response.body || fallbackPayload) {
+        const payload = fallbackPayload ?? {
+          reply: "",
+          toolCalls: [],
+          thinking: "",
+        };
+        sendEvent("done", payload);
+        controller.close();
+        return;
+      }
+
+      const reader = response.body.getReader();
+      let reply = "";
+      let thinking = "";
+      const toolCallsByIndex = new Map<number, StreamToolCall>();
+      const parser = createSseParser((event) => {
+        if (event.data === "[DONE]") {
+          return;
+        }
+
+        let parsed: Record<string, unknown> | null = null;
+        try {
+          parsed = JSON.parse(event.data) as Record<string, unknown>;
+        } catch {
+          return;
+        }
+
+        const choices = parsed?.choices as Array<Record<string, unknown>> | undefined;
+        const choice = choices?.[0];
+        if (!choice) {
+          return;
+        }
+        const delta =
+          (choice.delta as Record<string, unknown> | undefined) ??
+          (choice.message as Record<string, unknown> | undefined) ??
+          {};
+
+        const content = typeof delta.content === "string" ? delta.content : "";
+        if (content) {
+          reply += content;
+          sendEvent("content", { chunk: content });
+        }
+
+        const thoughtDelta = extractThinkingDelta(delta);
+        if (thoughtDelta) {
+          thinking += thoughtDelta;
+          sendEvent("thinking", { chunk: thoughtDelta });
+        }
+
+        const toolCallsDelta = delta.tool_calls as Array<Record<string, unknown>> | undefined;
+        if (Array.isArray(toolCallsDelta) && toolCallsDelta.length > 0) {
+          const toolCalls = buildToolCallsFromDeltas(toolCallsDelta);
+          toolCalls.forEach((toolCall, index) => {
+            const existing = toolCallsByIndex.get(index);
+            if (!existing) {
+              toolCallsByIndex.set(index, toolCall);
+              return;
+            }
+            existing.id = toolCall.id || existing.id;
+            existing.function.name =
+              toolCall.function.name || existing.function.name;
+            existing.function.arguments += toolCall.function.arguments;
+          });
+        }
+      });
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          parser(decoder.decode(value, { stream: true }));
+        }
+      } catch (error) {
+        sendEvent("error", {
+          message: error instanceof Error ? error.message : "Stream error.",
+        });
+        controller.close();
+        return;
+      }
+
+      const toolCalls = Array.from(toolCallsByIndex.values()).filter(
+        (toolCall) => toolCall.id || toolCall.function.name,
+      );
+      sendEvent("done", { reply, toolCalls, thinking });
+      controller.close();
+    },
+  });
+};
+
 export async function POST(request: Request) {
   const { messages, context, inference } = (await request.json()) as ChatRequest;
 
@@ -224,6 +431,7 @@ export async function POST(request: Request) {
         { role: "system", content: buildSystemPrompt(context) },
         ...messages.filter((message) => message.role !== "system"),
       ],
+      stream: true,
       tools: [
         {
           type: "function",
@@ -283,29 +491,53 @@ export async function POST(request: Request) {
     );
   }
 
-  const data = (await response.json()) as {
-    choices?: Array<{
-      message?: {
-        content?: string;
-        tool_calls?: Array<{
-          id: string;
-          type: "function";
-          function: { name: string; arguments: string };
-        }>;
-      };
-    }>;
-  };
+  const contentType = response.headers.get("content-type") ?? "";
 
-  const message = data?.choices?.[0]?.message;
-  const reply = message?.content?.trim();
-  const toolCalls = message?.tool_calls ?? [];
+  if (!contentType.includes("text/event-stream")) {
+    const data = (await response.json()) as {
+      choices?: Array<{
+        message?: {
+          content?: string;
+          reasoning?: string;
+          reasoning_content?: string;
+          tool_calls?: Array<{
+            id: string;
+            type: "function";
+            function: { name: string; arguments: string };
+          }>;
+        };
+      }>;
+    };
 
-  if (!reply && toolCalls.length === 0) {
-    return NextResponse.json(
-      { error: "No reply returned from Z.AI." },
-      { status: 502 },
-    );
+    const message = data?.choices?.[0]?.message;
+    const reply = message?.content?.trim() ?? "";
+    const toolCalls = message?.tool_calls ?? [];
+    const thinking =
+      message?.reasoning_content?.trim() ?? message?.reasoning?.trim() ?? "";
+
+    if (!reply && toolCalls.length === 0) {
+      return NextResponse.json(
+        { error: "No reply returned from Z.AI." },
+        { status: 502 },
+      );
+    }
+
+    const stream = streamResponse(response, { reply, toolCalls, thinking });
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+      },
+    });
   }
 
-  return NextResponse.json({ reply, toolCalls });
+  const stream = streamResponse(response);
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+    },
+  });
 }
