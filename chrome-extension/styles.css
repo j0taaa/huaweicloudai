@@ -224,6 +224,62 @@
   color: #0f172a;
 }
 
+.hwc-chat-markdown {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hwc-chat-markdown p {
+  margin: 0;
+}
+
+.hwc-chat-markdown h1,
+.hwc-chat-markdown h2,
+.hwc-chat-markdown h3,
+.hwc-chat-markdown h4,
+.hwc-chat-markdown h5,
+.hwc-chat-markdown h6 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.hwc-chat-markdown ul,
+.hwc-chat-markdown ol {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.hwc-chat-markdown code {
+  background: rgba(15, 23, 42, 0.08);
+  padding: 2px 4px;
+  border-radius: 6px;
+  font-family: "JetBrains Mono", "SFMono-Regular", monospace;
+  font-size: 11px;
+}
+
+.hwc-chat-markdown pre {
+  margin: 0;
+  padding: 8px;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 11px;
+  overflow-x: auto;
+}
+
+.hwc-chat-markdown pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.hwc-chat-markdown a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
 .hwc-chat-form {
   display: flex;
   gap: 8px;

@@ -192,13 +192,149 @@ if (!existingWidget) {
     status.dataset.state = state;
   };
 
-  const renderBubble = (role, text) => {
+  const escapeHtml = (value) =>
+    value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+
+  const renderInlineMarkdown = (value) => {
+    let output = escapeHtml(value);
+    output = output.replace(/`([^`]+)`/g, "<code>$1</code>");
+    output = output.replace(
+      /\[([^\]]+)\]\(([^)]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
+    );
+    output = output.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    output = output.replace(/__([^_]+)__/g, "<strong>$1</strong>");
+    output = output.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    output = output.replace(/_([^_]+)_/g, "<em>$1</em>");
+    return output;
+  };
+
+  const renderMarkdown = (text) => {
+    const lines = text.split(/\r?\n/);
+    const blocks = [];
+    let paragraph = [];
+    let list = null;
+    let inCode = false;
+    let codeLang = "";
+    let codeLines = [];
+
+    const flushParagraph = () => {
+      if (paragraph.length === 0) return;
+      blocks.push(`<p>${renderInlineMarkdown(paragraph.join(" "))}</p>`);
+      paragraph = [];
+    };
+
+    const flushList = () => {
+      if (!list) return;
+      const items = list.items
+        .map((item) => `<li>${renderInlineMarkdown(item)}</li>`)
+        .join("");
+      blocks.push(`<${list.type}>${items}</${list.type}>`);
+      list = null;
+    };
+
+    const flushCode = () => {
+      const languageClass = codeLang ? ` class="language-${codeLang}"` : "";
+      const code = escapeHtml(codeLines.join("\n"));
+      blocks.push(`<pre><code${languageClass}>${code}</code></pre>`);
+      codeLines = [];
+      codeLang = "";
+    };
+
+    lines.forEach((line) => {
+      if (line.trim().startsWith("```")) {
+        if (inCode) {
+          inCode = false;
+          flushCode();
+          return;
+        }
+        flushParagraph();
+        flushList();
+        inCode = true;
+        codeLang = line.trim().slice(3).trim();
+        return;
+      }
+
+      if (inCode) {
+        codeLines.push(line);
+        return;
+      }
+
+      if (!line.trim()) {
+        flushParagraph();
+        flushList();
+        return;
+      }
+
+      const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+      if (headingMatch) {
+        flushParagraph();
+        flushList();
+        const level = headingMatch[1].length;
+        blocks.push(
+          `<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`,
+        );
+        return;
+      }
+
+      const unorderedMatch = line.match(/^\s*[-*]\s+(.*)$/);
+      if (unorderedMatch) {
+        flushParagraph();
+        if (!list || list.type !== "ul") {
+          flushList();
+          list = { type: "ul", items: [] };
+        }
+        list.items.push(unorderedMatch[1]);
+        return;
+      }
+
+      const orderedMatch = line.match(/^\s*\d+\.\s+(.*)$/);
+      if (orderedMatch) {
+        flushParagraph();
+        if (!list || list.type !== "ol") {
+          flushList();
+          list = { type: "ol", items: [] };
+        }
+        list.items.push(orderedMatch[1]);
+        return;
+      }
+
+      paragraph.push(line.trim());
+    });
+
+    if (inCode) {
+      flushCode();
+    }
+    flushParagraph();
+    flushList();
+
+    return blocks.join("");
+  };
+
+  const renderBubble = (role, text, { markdown = false } = {}) => {
     const bubble = document.createElement("div");
     bubble.className = `hwc-chat-bubble hwc-chat-bubble-${role}`;
-    bubble.textContent = text;
+    if (markdown) {
+      bubble.innerHTML = `<div class="hwc-chat-markdown">${renderMarkdown(
+        text,
+      )}</div>`;
+    } else {
+      bubble.textContent = text;
+    }
     messages.append(bubble);
     messages.scrollTop = messages.scrollHeight;
     return bubble;
+  };
+
+  const updateAssistantBubble = (bubble, text) => {
+    bubble.innerHTML = `<div class="hwc-chat-markdown">${renderMarkdown(
+      text,
+    )}</div>`;
   };
 
   const normalizeServerUrl = (value) => {
@@ -268,25 +404,11 @@ if (!existingWidget) {
     const trimmedSecretKey = secretKeyInput.value.trim();
     const serverUrl = normalizeServerUrl(serverUrlInput.value);
     const payload = {
-      messages: [
-        ...(trimmedAccessKey || trimmedSecretKey
-          ? [
-              {
-                role: "system",
-                content: `Huawei Cloud Access Key (AK): ${
-                  trimmedAccessKey || "[not provided]"
-                }`,
-              },
-              {
-                role: "system",
-                content: `Huawei Cloud Secret Key (SK): ${
-                  trimmedSecretKey || "[not provided]"
-                }`,
-              },
-            ]
-          : []),
-        ...chatHistory,
-      ],
+      messages: [...chatHistory],
+      context: {
+        accessKey: trimmedAccessKey,
+        secretKey: trimmedSecretKey,
+      },
     };
 
     try {
@@ -382,7 +504,7 @@ if (!existingWidget) {
       }
 
       if (reply) {
-        assistantBubble.textContent = reply;
+        updateAssistantBubble(assistantBubble, reply);
         chatHistory.push({ role: "assistant", content: reply });
       } else {
         assistantBubble.textContent =
