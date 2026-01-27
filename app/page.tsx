@@ -1474,6 +1474,9 @@ export default function Home() {
                       className="max-w-[80%]"
                     >
                       <div className="flex flex-col gap-3">
+                        {message.role === "assistant"
+                          ? renderThinkingBlock(message.thinking)
+                          : null}
                         {message.content.trim() ? (
                           <div
                             className={`rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
@@ -1493,9 +1496,6 @@ export default function Home() {
                             )}
                           </div>
                         ) : null}
-                        {message.role === "assistant"
-                          ? renderThinkingBlock(message.thinking)
-                          : null}
                         {message.role === "assistant" &&
                         message.tool_calls &&
                         message.tool_calls.length > 0 ? (
