@@ -1,5 +1,5 @@
-const requestChat = async (serverUrl, payload) => {
-  const response = await fetch(`${serverUrl}/api/chat`, {
+const requestChat = async (serverUrl, endpoint, payload) => {
+  const response = await fetch(`${serverUrl}${endpoint}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -20,11 +20,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return false;
   }
 
-  const { serverUrl, payload } = message;
+  const { serverUrl, payload, endpoint = "/api/chat" } = message;
 
   (async () => {
     try {
-      const data = await requestChat(serverUrl, payload);
+      const data = await requestChat(serverUrl, endpoint, payload);
       sendResponse({ ok: true, data });
     } catch (error) {
       sendResponse({
