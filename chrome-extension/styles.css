@@ -100,11 +100,40 @@
 }
 
 .hwc-chat-section-title {
+  appearance: none;
+  background: none;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: #475569;
+  cursor: pointer;
+  padding: 0;
+}
+
+.hwc-chat-section-title::after {
+  content: "▾";
+  font-size: 12px;
+  transition: transform 0.2s ease;
+}
+
+.hwc-chat-section-title[aria-expanded="true"]::after {
+  transform: rotate(180deg);
+}
+
+.hwc-chat-credentials-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hwc-chat-credentials-collapsed .hwc-chat-credentials-body {
+  display: none;
 }
 
 .hwc-chat-label {
