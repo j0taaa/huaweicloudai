@@ -216,6 +216,23 @@ if (!existingWidget) {
     }
   };
 
+  const requestChat = async (serverUrl, payload) => {
+    const response = await fetch(`${serverUrl}/api/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || "Server error.");
+    }
+
+    return response.json();
+  };
+
   const connectToServer = async () => {
     const trimmedAccessKey = accessKeyInput.value.trim();
     const trimmedSecretKey = secretKeyInput.value.trim();
@@ -242,20 +259,19 @@ if (!existingWidget) {
       ],
     };
 
-    const response = await fetch(`${serverUrl}/api/chat`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || "Server error.");
+    try {
+      const data = await requestChat(serverUrl, payload);
+      return { data, usedFallback: false };
+    } catch (error) {
+      if (/^https:\/\//i.test(serverUrl)) {
+        const fallbackUrl = serverUrl.replace(/^https:\/\//i, "http://");
+        const data = await requestChat(fallbackUrl, payload);
+        serverUrlInput.value = fallbackUrl;
+        storageSet({ serverUrl: fallbackUrl });
+        return { data, usedFallback: true };
+      }
+      throw error;
     }
-
-    return response.json();
   };
 
   toggleButton.addEventListener("click", () => {
@@ -325,7 +341,7 @@ if (!existingWidget) {
       sendButton.disabled = true;
       setStatus("Connecting to server...", "loading");
 
-      const data = await connectToServer();
+      const { data, usedFallback } = await connectToServer();
       const reply = data?.reply?.trim();
       const toolCalls = data?.toolCalls ?? [];
 
@@ -343,7 +359,10 @@ if (!existingWidget) {
           "Received tool calls. Check the server for results.";
       }
 
-      setStatus("Connected", "success");
+      setStatus(
+        usedFallback ? "Connected (HTTP fallback)" : "Connected",
+        "success",
+      );
     } catch (error) {
       assistantBubble.textContent =
         error instanceof Error
