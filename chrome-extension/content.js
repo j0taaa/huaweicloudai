@@ -240,6 +240,14 @@ if (!existingWidget) {
     return output;
   };
 
+  const parseTableRow = (line) => {
+    const trimmed = line.trim().replace(/^(\|)/, "").replace(/(\|)$/, "");
+    return trimmed.split("|").map((cell) => cell.trim());
+  };
+
+  const isTableDivider = (line) =>
+    /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/.test(line);
+
   const renderMarkdown = (text) => {
     const lines = text.split(/\r?\n/);
     const blocks = [];
@@ -272,29 +280,30 @@ if (!existingWidget) {
       codeLang = "";
     };
 
-    lines.forEach((line) => {
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
       if (line.trim().startsWith("```")) {
         if (inCode) {
           inCode = false;
           flushCode();
-          return;
+          continue;
         }
         flushParagraph();
         flushList();
         inCode = true;
         codeLang = line.trim().slice(3).trim();
-        return;
+        continue;
       }
 
       if (inCode) {
         codeLines.push(line);
-        return;
+        continue;
       }
 
       if (!line.trim()) {
         flushParagraph();
         flushList();
-        return;
+        continue;
       }
 
       const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
@@ -305,7 +314,49 @@ if (!existingWidget) {
         blocks.push(
           `<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`,
         );
-        return;
+        continue;
+      }
+
+      const nextLine = lines[index + 1];
+      if (
+        line.includes("|") &&
+        typeof nextLine === "string" &&
+        isTableDivider(nextLine)
+      ) {
+        flushParagraph();
+        flushList();
+        const headers = parseTableRow(line);
+        index += 1;
+        const rows = [];
+        for (let rowIndex = index + 1; rowIndex < lines.length; rowIndex += 1) {
+          const rowLine = lines[rowIndex];
+          if (!rowLine.trim()) {
+            index = rowIndex;
+            break;
+          }
+          if (!rowLine.includes("|")) {
+            index = rowIndex - 1;
+            break;
+          }
+          rows.push(parseTableRow(rowLine));
+          index = rowIndex;
+        }
+
+        const headerCells = headers
+          .map((cell) => `<th>${renderInlineMarkdown(cell)}</th>`)
+          .join("");
+        const bodyRows = rows
+          .map((row) => {
+            const cells = row
+              .map((cell) => `<td>${renderInlineMarkdown(cell)}</td>`)
+              .join("");
+            return `<tr>${cells}</tr>`;
+          })
+          .join("");
+        blocks.push(
+          `<table><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table>`,
+        );
+        continue;
       }
 
       const unorderedMatch = line.match(/^\s*[-*]\s+(.*)$/);
@@ -316,7 +367,7 @@ if (!existingWidget) {
           list = { type: "ul", items: [] };
         }
         list.items.push(unorderedMatch[1]);
-        return;
+        continue;
       }
 
       const orderedMatch = line.match(/^\s*\d+\.\s+(.*)$/);
@@ -327,11 +378,11 @@ if (!existingWidget) {
           list = { type: "ol", items: [] };
         }
         list.items.push(orderedMatch[1]);
-        return;
+        continue;
       }
 
       paragraph.push(line.trim());
-    });
+    }
 
     if (inCode) {
       flushCode();
