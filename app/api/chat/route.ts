@@ -261,6 +261,99 @@ const buildToolCallsFromDeltas = (entries: Array<Record<string, unknown>>) => {
   return toolCalls;
 };
 
+const parseApiError = (rawError: string) => {
+  try {
+    const parsed = JSON.parse(rawError) as {
+      error?: { code?: string | number; message?: string };
+    };
+    const code = parsed?.error?.code;
+    const message = parsed?.error?.message;
+    return {
+      code: typeof code === "number" ? String(code) : code,
+      message,
+    };
+  } catch {
+    return { code: undefined, message: undefined };
+  }
+};
+
+const isInvalidParameterError = (rawError: string) => {
+  const parsed = parseApiError(rawError);
+  const code = parsed.code?.trim();
+  const message = parsed.message ?? rawError;
+  return code === "1210" || message.includes("Invalid API parameter");
+};
+
+const buildRequestPayload = (
+  params: {
+    model: string;
+    messages: ChatMessage[];
+    includeTools: boolean;
+    includeThinkingOptions: boolean;
+  },
+) => {
+  const payload: Record<string, unknown> = {
+    model: params.model,
+    messages: params.messages,
+    stream: true,
+  };
+
+  if (params.includeThinkingOptions) {
+    payload.reasoning = true;
+    payload.stream_options = { include_reasoning: true };
+  }
+
+  if (params.includeTools) {
+    payload.tools = [
+      {
+        type: "function",
+        function: {
+          name: "eval_code",
+          description:
+            "Execute JavaScript code on the server. Define a main() function (can be async, takes no parameters) and return a value from it; the environment calls main() and returns its result.",
+          parameters: {
+            type: "object",
+            properties: {
+              code: {
+                type: "string",
+                description: "JavaScript source to execute on the server.",
+              },
+            },
+            required: ["code"],
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "ask_multiple_choice",
+          description:
+            "Ask the user a multiple-choice question and return their selected or typed answer.",
+          parameters: {
+            type: "object",
+            properties: {
+              question: {
+                type: "string",
+                description: "The question to present to the user.",
+              },
+              options: {
+                type: "array",
+                description:
+                  "Answer options to show the user (the UI will add a final option to type a custom answer).",
+                items: { type: "string" },
+              },
+            },
+            required: ["question", "options"],
+          },
+        },
+      },
+    ];
+    payload.tool_choice = "auto";
+  }
+
+  return payload;
+};
+
 const streamResponse = (
   response: Response,
   fallbackPayload?: {
@@ -419,69 +512,78 @@ export async function POST(request: Request) {
     process.env.https_proxy ||
     process.env.http_proxy;
   const dispatcher = proxyUrl ? new ProxyAgent(proxyUrl) : undefined;
-  const fetchOptions = {
+  const modelName = inferenceMode === "custom" ? customModel : "glm-4.7";
+  const systemMessage: ChatMessage = {
+    role: "system",
+    content: buildSystemPrompt(context),
+  };
+  const requestMessages = [
+    systemMessage,
+    ...messages.filter((message) => message.role !== "system"),
+  ];
+
+  const baseFetchOptions = {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: inferenceMode === "custom" ? customModel : "glm-4.7",
-      messages: [
-        { role: "system", content: buildSystemPrompt(context) },
-        ...messages.filter((message) => message.role !== "system"),
-      ],
-      stream: true,
-      tools: [
-        {
-          type: "function",
-          function: {
-            name: "eval_code",
-            description:
-              "Execute JavaScript code on the server. Define a main() function (can be async, takes no parameters) and return a value from it; the environment calls main() and returns its result.",
-            parameters: {
-              type: "object",
-              properties: {
-                code: {
-                  type: "string",
-                  description: "JavaScript source to execute on the server.",
-                },
-              },
-              required: ["code"],
-            },
-          },
-        },
-        {
-          type: "function",
-          function: {
-            name: "ask_multiple_choice",
-            description:
-              "Ask the user a multiple-choice question and return their selected or typed answer.",
-            parameters: {
-              type: "object",
-              properties: {
-                question: {
-                  type: "string",
-                  description: "The question to present to the user.",
-                },
-                options: {
-                  type: "array",
-                  description:
-                    "Answer options to show the user (the UI will add a final option to type a custom answer).",
-                  items: { type: "string" },
-                },
-              },
-              required: ["question", "options"],
-            },
-          },
-        },
-      ],
-      tool_choice: "auto",
-    }),
     dispatcher,
   } satisfies RequestInit & { dispatcher?: unknown };
 
-  const response = await fetch(endpoint, fetchOptions);
+  const sendRequest = async (payload: Record<string, unknown>) => {
+    return fetch(endpoint, {
+      ...baseFetchOptions,
+      body: JSON.stringify(payload),
+    });
+  };
+
+  let response = await sendRequest(
+    buildRequestPayload({
+      model: modelName,
+      messages: requestMessages,
+      includeTools: true,
+      includeThinkingOptions: true,
+    }),
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    if (isInvalidParameterError(errorText)) {
+      response = await sendRequest(
+        buildRequestPayload({
+          model: modelName,
+          messages: requestMessages,
+          includeTools: false,
+          includeThinkingOptions: true,
+        }),
+      );
+
+      if (!response.ok) {
+        const retryError = await response.text();
+        if (isInvalidParameterError(retryError)) {
+          response = await sendRequest(
+            buildRequestPayload({
+              model: modelName,
+              messages: requestMessages,
+              includeTools: false,
+              includeThinkingOptions: false,
+            }),
+          );
+        } else {
+          return NextResponse.json(
+            { error: retryError || "Z.AI request failed." },
+            { status: response.status },
+          );
+        }
+      }
+    } else {
+      return NextResponse.json(
+        { error: errorText || "Z.AI request failed." },
+        { status: response.status },
+      );
+    }
+  }
 
   if (!response.ok) {
     const errorText = await response.text();

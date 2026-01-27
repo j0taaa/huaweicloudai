@@ -1,7 +1,7 @@
-const crypto = require('crypto');
+import crypto from "crypto";
 
 // Huawei Cloud HMAC-SHA256 Signing Implementation
-class HuaweiCloudSigner {
+export default class HuaweiCloudSigner {
     static EMPTY_BODY_SHA256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
     
     // URL encoding (special rules for Huawei Cloud)
@@ -206,6 +206,3 @@ class HuaweiCloudSigner {
         };
     }
 }
-
-// Export
-module.exports = HuaweiCloudSigner;

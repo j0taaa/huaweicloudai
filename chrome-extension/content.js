@@ -579,7 +579,7 @@ if (!existingWidget) {
 
     try {
       return { parsed: JSON.parse(rawArgs), raw: rawArgs };
-    } catch (error) {
+    } catch {
       return { parsed: null, raw: rawArgs };
     }
   };
@@ -782,7 +782,7 @@ if (!existingWidget) {
     try {
       const url = new URL(withProtocol || DEFAULT_SERVER_URL);
       return `${url.protocol}//${url.host}`;
-    } catch (error) {
+    } catch {
       return DEFAULT_SERVER_URL;
     }
   };
