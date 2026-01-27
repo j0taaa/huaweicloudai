@@ -53,11 +53,27 @@ if (!existingWidget) {
   header.append(title, status);
 
   const credentials = document.createElement("div");
-  credentials.className = "hwc-chat-credentials";
+  credentials.className = "hwc-chat-credentials hwc-chat-credentials-collapsed";
 
-  const credentialsTitle = document.createElement("div");
-  credentialsTitle.className = "hwc-chat-section-title";
-  credentialsTitle.textContent = "AK/SK Credentials";
+  const credentialsToggle = document.createElement("button");
+  credentialsToggle.type = "button";
+  credentialsToggle.className = "hwc-chat-section-title";
+  credentialsToggle.setAttribute("aria-expanded", "false");
+  credentialsToggle.textContent = "AK/SK Credentials";
+
+  const credentialsBody = document.createElement("div");
+  credentialsBody.className = "hwc-chat-credentials-body";
+
+  const serverUrlLabel = document.createElement("label");
+  serverUrlLabel.className = "hwc-chat-label";
+  serverUrlLabel.textContent = "Server URL";
+
+  const serverUrlInput = document.createElement("input");
+  serverUrlInput.type = "text";
+  serverUrlInput.className = "hwc-chat-input";
+  serverUrlInput.placeholder = "http://1.178.45.234:3000";
+  serverUrlInput.autocomplete = "off";
+  serverUrlLabel.append(serverUrlInput);
 
   const accessKeyLabel = document.createElement("label");
   accessKeyLabel.className = "hwc-chat-label";
@@ -94,12 +110,14 @@ if (!existingWidget) {
   saveStatus.textContent = "Stored locally";
 
   credentialsFooter.append(saveButton, saveStatus);
-  credentials.append(
-    credentialsTitle,
+  credentialsBody.append(
+    serverUrlLabel,
     accessKeyLabel,
     secretKeyLabel,
     credentialsFooter,
   );
+
+  credentials.append(credentialsToggle, credentialsBody);
 
   const messages = document.createElement("div");
   messages.className = "hwc-chat-messages";
@@ -154,6 +172,7 @@ if (!existingWidget) {
       resolve();
     });
 
+  const DEFAULT_SERVER_URL = "http://1.178.45.234:3000";
   const chatHistory = [];
   let isSending = false;
 
@@ -182,10 +201,25 @@ if (!existingWidget) {
     return bubble;
   };
 
+  const normalizeServerUrl = (value) => {
+    const trimmed = value.trim();
+    const withProtocol =
+      trimmed && !/^https?:\/\//i.test(trimmed)
+        ? `http://${trimmed}`
+        : trimmed;
+
+    try {
+      const url = new URL(withProtocol || DEFAULT_SERVER_URL);
+      return `${url.protocol}//${url.host}`;
+    } catch (error) {
+      return DEFAULT_SERVER_URL;
+    }
+  };
+
   const connectToServer = async () => {
     const trimmedAccessKey = accessKeyInput.value.trim();
     const trimmedSecretKey = secretKeyInput.value.trim();
-    const serverUrl = window.location.origin;
+    const serverUrl = normalizeServerUrl(serverUrlInput.value);
     const payload = {
       messages: [
         ...(trimmedAccessKey || trimmedSecretKey
@@ -233,8 +267,21 @@ if (!existingWidget) {
     }
   });
 
+  credentialsToggle.addEventListener("click", () => {
+    credentials.classList.toggle("hwc-chat-credentials-collapsed");
+    const isOpen = !credentials.classList.contains(
+      "hwc-chat-credentials-collapsed",
+    );
+    credentialsToggle.setAttribute("aria-expanded", `${isOpen}`);
+  });
+
   accessKeyInput.addEventListener("input", updateSaveButton);
   secretKeyInput.addEventListener("input", updateSaveButton);
+  serverUrlInput.addEventListener("change", () => {
+    const normalized = normalizeServerUrl(serverUrlInput.value);
+    serverUrlInput.value = normalized;
+    storageSet({ serverUrl: normalized });
+  });
 
   saveButton.addEventListener("click", async () => {
     const accessKey = accessKeyInput.value.trim();
@@ -309,12 +356,17 @@ if (!existingWidget) {
     }
   });
 
-  storageGet(["accessKey", "secretKey"]).then((values) => {
+  storageGet(["accessKey", "secretKey", "serverUrl"]).then((values) => {
     if (typeof values.accessKey === "string") {
       accessKeyInput.value = values.accessKey;
     }
     if (typeof values.secretKey === "string") {
       secretKeyInput.value = values.secretKey;
+    }
+    if (typeof values.serverUrl === "string" && values.serverUrl.trim()) {
+      serverUrlInput.value = normalizeServerUrl(values.serverUrl);
+    } else {
+      serverUrlInput.value = DEFAULT_SERVER_URL;
     }
     updateSaveButton();
   });
