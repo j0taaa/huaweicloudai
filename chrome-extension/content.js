@@ -193,11 +193,13 @@ if (!existingWidget) {
     });
 
   const DEFAULT_SERVER_URL = "http://1.178.45.234:3000";
+  const PROJECT_IDS_STORAGE_KEY = "projectIds";
   const chatHistory = [];
   let isSending = false;
   let pendingChoice = null;
   let pendingChoiceForm = null;
   let activeServerUrl = DEFAULT_SERVER_URL;
+  let storedProjectIds = [];
   const toolCards = new Map();
 
   const updateSaveButton = () => {
@@ -626,6 +628,7 @@ if (!existingWidget) {
       context: {
         accessKey: trimmedAccessKey,
         secretKey: trimmedSecretKey,
+        projectIds: storedProjectIds,
       },
     };
 
@@ -640,6 +643,26 @@ if (!existingWidget) {
         activeServerUrl = fallbackUrl;
         storageSet({ serverUrl: fallbackUrl });
         return { data, usedFallback: true, serverUrl: fallbackUrl };
+      }
+      throw error;
+    }
+  };
+
+  const fetchProjectIds = async (accessKey, secretKey) => {
+    const serverUrl = normalizeServerUrl(activeServerUrl);
+    const payload = { accessKey, secretKey };
+
+    try {
+      const data = await requestServer(serverUrl, "/api/project-ids", payload);
+      return { data, serverUrl };
+    } catch (error) {
+      if (/^https:\/\//i.test(serverUrl)) {
+        const fallbackUrl = serverUrl.replace(/^https:\/\//i, "http://");
+        const data = await requestServer(fallbackUrl, "/api/project-ids", payload);
+        serverUrlInput.value = fallbackUrl;
+        activeServerUrl = fallbackUrl;
+        storageSet({ serverUrl: fallbackUrl });
+        return { data, serverUrl: fallbackUrl };
       }
       throw error;
     }
@@ -990,8 +1013,33 @@ if (!existingWidget) {
 
     await storageSet({ accessKey, secretKey });
 
-    updateSaveStatus("Saved", true);
-    saveButton.disabled = false;
+    try {
+      updateSaveStatus("Fetching project IDs...");
+      const { data } = await fetchProjectIds(accessKey, secretKey);
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+      storedProjectIds = Array.isArray(data?.entries) ? data.entries : [];
+      await storageSet({
+        [PROJECT_IDS_STORAGE_KEY]: JSON.stringify(storedProjectIds),
+      });
+
+      if (storedProjectIds.length === 0) {
+        updateSaveStatus("No project IDs found. Check your AK/SK.");
+      } else {
+        updateSaveStatus("Saved", true);
+      }
+    } catch (error) {
+      storedProjectIds = [];
+      await storageSet({ [PROJECT_IDS_STORAGE_KEY]: JSON.stringify([]) });
+      updateSaveStatus(
+        error instanceof Error
+          ? error.message
+          : "Unable to fetch project IDs.",
+      );
+    } finally {
+      saveButton.disabled = false;
+    }
   });
 
   const resizeInput = () => {
@@ -1062,7 +1110,7 @@ if (!existingWidget) {
     }
   });
 
-  storageGet(["accessKey", "secretKey", "serverUrl"]).then((values) => {
+  storageGet(["accessKey", "secretKey", "serverUrl", PROJECT_IDS_STORAGE_KEY]).then((values) => {
     if (typeof values.accessKey === "string") {
       accessKeyInput.value = values.accessKey;
     }
@@ -1073,6 +1121,16 @@ if (!existingWidget) {
       serverUrlInput.value = normalizeServerUrl(values.serverUrl);
     } else {
       serverUrlInput.value = DEFAULT_SERVER_URL;
+    }
+    if (typeof values[PROJECT_IDS_STORAGE_KEY] === "string") {
+      try {
+        const parsed = JSON.parse(values[PROJECT_IDS_STORAGE_KEY]);
+        if (Array.isArray(parsed)) {
+          storedProjectIds = parsed;
+        }
+      } catch {
+        storedProjectIds = [];
+      }
     }
     activeServerUrl = serverUrlInput.value;
     updateSaveButton();
