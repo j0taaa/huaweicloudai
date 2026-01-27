@@ -42,15 +42,35 @@ if (!existingWidget) {
   const header = document.createElement("div");
   header.className = "hwc-chat-header";
 
+  const headerTop = document.createElement("div");
+  headerTop.className = "hwc-chat-header-top";
+
   const title = document.createElement("div");
   title.className = "hwc-chat-title";
   title.textContent = "Huawei Cloud AI";
+
+  const newChatButton = document.createElement("button");
+  newChatButton.type = "button";
+  newChatButton.className = "hwc-chat-new";
+  newChatButton.setAttribute("aria-label", "Start new conversation");
+  newChatButton.innerHTML = `
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        d="M12 5v14M5 12h14"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+      />
+    </svg>
+  `;
 
   const status = document.createElement("div");
   status.className = "hwc-chat-status";
   status.textContent = "Ready to connect";
 
-  header.append(title, status);
+  headerTop.append(title, newChatButton);
+  header.append(headerTop, status);
 
   const credentials = document.createElement("div");
   credentials.className = "hwc-chat-credentials hwc-chat-credentials-collapsed";
@@ -125,10 +145,10 @@ if (!existingWidget) {
   const form = document.createElement("form");
   form.className = "hwc-chat-form";
 
-  const input = document.createElement("input");
-  input.type = "text";
+  const input = document.createElement("textarea");
   input.className = "hwc-chat-input hwc-chat-message";
   input.placeholder = "Ask about Huawei Cloud services...";
+  input.rows = 1;
 
   const sendButton = document.createElement("button");
   sendButton.type = "submit";
@@ -331,6 +351,97 @@ if (!existingWidget) {
     return bubble;
   };
 
+  const parseToolArguments = (toolCall) => {
+    const rawArgs = toolCall?.function?.arguments ?? "";
+    if (!rawArgs) {
+      return { parsed: null, raw: "" };
+    }
+
+    try {
+      return { parsed: JSON.parse(rawArgs), raw: rawArgs };
+    } catch (error) {
+      return { parsed: null, raw: rawArgs };
+    }
+  };
+
+  const summarizeToolCall = (toolCall) => {
+    const { parsed } = parseToolArguments(toolCall);
+    if (!parsed || typeof parsed !== "object") {
+      return "Tool arguments could not be parsed.";
+    }
+
+    if (toolCall.function.name === "ask_multiple_choice") {
+      return parsed.question
+        ? `Asks the user: ${parsed.question}`
+        : "Requests a multiple choice response.";
+    }
+
+    if (toolCall.function.name === "eval_code") {
+      return parsed.code ? "Runs the provided code snippet." : "Runs code.";
+    }
+
+    return "Runs a tool with the provided arguments.";
+  };
+
+  const renderToolCalls = (toolCalls) => {
+    if (!toolCalls.length) {
+      return;
+    }
+
+    const container = document.createElement("div");
+    container.className = "hwc-chat-tool-calls";
+
+    toolCalls.forEach((toolCall) => {
+      const card = document.createElement("div");
+      card.className = "hwc-chat-tool-card";
+
+      const headerRow = document.createElement("div");
+      headerRow.className = "hwc-chat-tool-header";
+
+      const headerMeta = document.createElement("div");
+      headerMeta.className = "hwc-chat-tool-meta";
+
+      const label = document.createElement("p");
+      label.className = "hwc-chat-tool-label";
+      label.textContent = "Tool run";
+
+      const name = document.createElement("p");
+      name.className = "hwc-chat-tool-name";
+      name.textContent = toolCall.function?.name || "Tool call";
+
+      headerMeta.append(label, name);
+
+      const statusBadge = document.createElement("span");
+      statusBadge.className = "hwc-chat-tool-status";
+      statusBadge.textContent = "Pending";
+
+      headerRow.append(headerMeta, statusBadge);
+
+      const summary = document.createElement("p");
+      summary.className = "hwc-chat-tool-summary";
+      summary.textContent = summarizeToolCall(toolCall);
+
+      const details = document.createElement("div");
+      details.className = "hwc-chat-tool-details";
+
+      const detailsLabel = document.createElement("p");
+      detailsLabel.className = "hwc-chat-tool-details-label";
+      detailsLabel.textContent = "Tool arguments";
+
+      const pre = document.createElement("pre");
+      pre.className = "hwc-chat-tool-arguments";
+      const { raw } = parseToolArguments(toolCall);
+      pre.textContent = raw || "No arguments provided.";
+
+      details.append(detailsLabel, pre);
+      card.append(headerRow, summary, details);
+      container.append(card);
+    });
+
+    messages.append(container);
+    messages.scrollTop = messages.scrollHeight;
+  };
+
   const updateAssistantBubble = (bubble, text) => {
     bubble.innerHTML = `<div class="hwc-chat-markdown">${renderMarkdown(
       text,
@@ -435,6 +546,22 @@ if (!existingWidget) {
     }
   });
 
+  const resetConversation = () => {
+    chatHistory.length = 0;
+    messages.innerHTML = "";
+    setStatus("Ready to connect");
+    input.value = "";
+    input.style.height = "auto";
+    input.focus();
+  };
+
+  newChatButton.addEventListener("click", () => {
+    if (isSending) {
+      return;
+    }
+    resetConversation();
+  });
+
   credentialsToggle.addEventListener("click", () => {
     credentials.classList.toggle("hwc-chat-credentials-collapsed");
     const isOpen = !credentials.classList.contains(
@@ -469,6 +596,25 @@ if (!existingWidget) {
     saveButton.disabled = false;
   });
 
+  const resizeInput = () => {
+    input.style.height = "auto";
+    const maxHeight = 120;
+    const nextHeight = Math.min(input.scrollHeight, maxHeight);
+    input.style.height = `${nextHeight}px`;
+    input.style.overflowY = input.scrollHeight > maxHeight ? "auto" : "hidden";
+  };
+
+  input.addEventListener("input", () => {
+    resizeInput();
+  });
+
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      form.requestSubmit();
+    }
+  });
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (isSending) {
@@ -484,6 +630,7 @@ if (!existingWidget) {
     chatHistory.push(userMessage);
     renderBubble("user", value);
     input.value = "";
+    resizeInput();
     input.focus();
 
     const assistantBubble = renderBubble("assistant", "Thinking...");
@@ -508,7 +655,11 @@ if (!existingWidget) {
         chatHistory.push({ role: "assistant", content: reply });
       } else {
         assistantBubble.textContent =
-          "Received tool calls. Check the server for results.";
+          "Received tool calls. Review details below.";
+      }
+
+      if (toolCalls.length > 0) {
+        renderToolCalls(toolCalls);
       }
 
       setStatus(
