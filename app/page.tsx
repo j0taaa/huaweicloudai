@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 type ChatMessage = {
   role: "user" | "assistant" | "tool" | "system";
   content: string;
+  thinking?: string;
   tool_call_id?: string;
   tool_calls?: ToolCall[];
 };
@@ -22,6 +23,7 @@ type ToolCall = {
 
 type ChatResponse = {
   reply?: string;
+  thinking?: string;
   toolCalls?: ToolCall[];
 };
 
@@ -62,6 +64,8 @@ const INFERENCE_MODE_STORAGE_KEY = "huaweicloudai-inference-mode";
 const INFERENCE_SETTINGS_STORAGE_KEY = "huaweicloudai-inference-settings";
 const TOOL_RESULT_COLLAPSE_THRESHOLD = 900;
 const TOOL_RESULT_COLLAPSE_LINES = 16;
+const THINKING_COLLAPSE_THRESHOLD = 1200;
+const THINKING_PREVIEW_CHARS = 320;
 const INPUT_MIN_HEIGHT = 48;
 const INPUT_MAX_HEIGHT = 220;
 const SCROLL_BOTTOM_THRESHOLD = 48;
@@ -109,6 +113,7 @@ export default function Home() {
   >(null);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [accessKey, setAccessKey] = useState("");
   const [secretKey, setSecretKey] = useState("");
@@ -380,10 +385,7 @@ export default function Home() {
       setIsLoading(true);
       setError(null);
 
-      void sendMessages(parsed.messages)
-        .then((response) =>
-          continueConversation([...parsed.messages], response),
-        )
+      void continueConversation([...parsed.messages])
         .catch((caughtError) => {
           const message =
             caughtError instanceof Error
@@ -404,14 +406,16 @@ export default function Home() {
 
   const sendMessages = async (
     nextMessages: ChatMessage[],
+    onStreamUpdate?: (partial: { content: string; thinking: string }) => void,
   ): Promise<ChatResponse> => {
     const controller = new AbortController();
     abortControllerRef.current = controller;
+    const requestMessages = nextMessages.map(({ thinking, ...rest }) => rest);
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        messages: nextMessages,
+        messages: requestMessages,
         context: {
           accessKey: accessKey.trim(),
           secretKey: secretKey.trim(),
@@ -435,7 +439,104 @@ export default function Home() {
       throw new Error(errorText || "Failed to fetch response.");
     }
 
-    return (await response.json()) as ChatResponse;
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.includes("text/event-stream")) {
+      return (await response.json()) as ChatResponse;
+    }
+
+    if (!response.body) {
+      throw new Error("No response stream available.");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let reply = "";
+    let thinking = "";
+    let toolCalls: ToolCall[] = [];
+    let eventName = "message";
+    let dataLines: string[] = [];
+    let buffer = "";
+
+    const flushEvent = () => {
+      if (dataLines.length === 0) return;
+      const data = dataLines.join("\n");
+      dataLines = [];
+      const event = eventName || "message";
+      eventName = "message";
+
+      if (data === "[DONE]") {
+        return;
+      }
+
+      let parsed: {
+        chunk?: string;
+        reply?: string;
+        thinking?: string;
+        toolCalls?: ToolCall[];
+        message?: string;
+      } | null = null;
+      try {
+        parsed = JSON.parse(data) as {
+          chunk?: string;
+          reply?: string;
+          thinking?: string;
+          toolCalls?: ToolCall[];
+          message?: string;
+        };
+      } catch {
+        parsed = { chunk: data };
+      }
+
+      if (event === "content") {
+        const chunk = parsed?.chunk ?? "";
+        if (chunk) {
+          reply += chunk;
+          onStreamUpdate?.({ content: reply, thinking });
+        }
+      } else if (event === "thinking") {
+        const chunk = parsed?.chunk ?? "";
+        if (chunk) {
+          thinking += chunk;
+          onStreamUpdate?.({ content: reply, thinking });
+        }
+      } else if (event === "done") {
+        reply = parsed?.reply ?? reply;
+        thinking = parsed?.thinking ?? thinking;
+        toolCalls = parsed?.toolCalls ?? toolCalls;
+      } else if (event === "error") {
+        throw new Error(parsed?.message ?? "Stream error.");
+      }
+    };
+
+    const processChunk = (chunk: string) => {
+      buffer += chunk;
+      let newlineIndex = buffer.indexOf("\n");
+      while (newlineIndex !== -1) {
+        const line = buffer.slice(0, newlineIndex).replace(/\r$/, "");
+        buffer = buffer.slice(newlineIndex + 1);
+
+        if (!line.trim()) {
+          flushEvent();
+        } else if (line.startsWith("event:")) {
+          eventName = line.slice(6).trim() || "message";
+        } else if (line.startsWith("data:")) {
+          dataLines.push(line.slice(5).trimStart());
+        }
+
+        newlineIndex = buffer.indexOf("\n");
+      }
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        flushEvent();
+        break;
+      }
+      processChunk(decoder.decode(value, { stream: true }));
+    }
+
+    return { reply, toolCalls, thinking };
   };
 
   const parseToolPayload = (toolCall: ToolCall): ToolPayload => {
@@ -498,6 +599,36 @@ export default function Home() {
     }
 
     return "Runs server-side JavaScript to compute a result.";
+  };
+
+  const renderThinkingBlock = (thinking?: string) => {
+    const trimmed = thinking?.trim();
+    if (!trimmed) return null;
+    const isLong = trimmed.length > THINKING_COLLAPSE_THRESHOLD;
+    const preview = isLong
+      ? trimmed.slice(-THINKING_PREVIEW_CHARS)
+      : trimmed;
+
+    return (
+      <div className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-700 shadow-sm dark:border-white/10 dark:bg-black dark:text-zinc-200">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+          Model thinking
+        </p>
+        <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-zinc-700 dark:text-zinc-200">
+          {preview}
+        </pre>
+        {isLong ? (
+          <details className="mt-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700 dark:border-white/10 dark:bg-black/60 dark:text-zinc-200">
+            <summary className="cursor-pointer text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+              Show full thinking
+            </summary>
+            <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-zinc-700 dark:text-zinc-200">
+              {trimmed}
+            </pre>
+          </details>
+        ) : null}
+      </div>
+    );
   };
 
   const formatToolResult = async (result: unknown): Promise<string> => {
@@ -581,22 +712,52 @@ export default function Home() {
     );
   };
 
-  const continueConversation = async (
-    workingMessages: ChatMessage[],
-    response: ChatResponse,
-  ) => {
-    let currentResponse = response;
+  const streamAssistantResponse = async (workingMessages: ChatMessage[]) => {
+    const placeholder: ChatMessage = {
+      role: "assistant",
+      content: "",
+      thinking: "",
+    };
+    updateActiveMessages([...workingMessages, placeholder]);
+    setIsStreaming(true);
+    let response: ChatResponse;
+    try {
+      response = await sendMessages(workingMessages, (partial) => {
+        updateActiveMessages([
+          ...workingMessages,
+          {
+            role: "assistant",
+            content: partial.content,
+            thinking: partial.thinking,
+          },
+        ]);
+      });
+    } finally {
+      setIsStreaming(false);
+    }
+
+    const assistantMessage: ChatMessage = {
+      role: "assistant",
+      content: response.reply ?? "",
+      thinking: response.thinking ?? "",
+      tool_calls:
+        response.toolCalls && response.toolCalls.length > 0
+          ? response.toolCalls
+          : undefined,
+    };
+
+    const updatedMessages = [...workingMessages, assistantMessage];
+    updateActiveMessages(updatedMessages);
+
+    return { response, messages: updatedMessages };
+  };
+
+  const continueConversation = async (workingMessages: ChatMessage[]) => {
+    let { response: currentResponse, messages: updatedMessages } =
+      await streamAssistantResponse(workingMessages);
+    workingMessages = updatedMessages;
 
     while (currentResponse.toolCalls && currentResponse.toolCalls.length > 0) {
-      const assistantToolMessage: ChatMessage = {
-        role: "assistant",
-        content: currentResponse.reply ?? "",
-        tool_calls: currentResponse.toolCalls,
-      };
-
-      workingMessages = [...workingMessages, assistantToolMessage];
-      updateActiveMessages(workingMessages);
-
       const multipleChoiceCall = currentResponse.toolCalls.find(
         (toolCall) => toolCall.function.name === "ask_multiple_choice",
       );
@@ -631,19 +792,14 @@ export default function Home() {
         }
       }
 
-      currentResponse = await sendMessages(workingMessages);
+      const streamResult = await streamAssistantResponse(workingMessages);
+      currentResponse = streamResult.response;
+      workingMessages = streamResult.messages;
     }
 
     if (!currentResponse.reply) {
       throw new Error("No reply returned from the model.");
     }
-
-    workingMessages = [
-      ...workingMessages,
-      { role: "assistant", content: currentResponse.reply },
-    ];
-
-    updateActiveMessages(workingMessages);
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -671,8 +827,7 @@ export default function Home() {
 
     try {
       const workingMessages = [...nextMessages];
-      const response = await sendMessages(workingMessages);
-      await continueConversation(workingMessages, response);
+      await continueConversation(workingMessages);
     } catch (caughtError) {
       if (
         caughtError instanceof DOMException &&
@@ -698,6 +853,7 @@ export default function Home() {
       abortControllerRef.current.abort();
     }
     setIsLoading(false);
+    setIsStreaming(false);
     localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
   };
 
@@ -803,8 +959,7 @@ export default function Home() {
     );
 
     try {
-      const response = await sendMessages(workingMessages);
-      await continueConversation(workingMessages, response);
+      await continueConversation(workingMessages);
     } catch (caughtError) {
       const message =
         caughtError instanceof Error
@@ -897,20 +1052,17 @@ export default function Home() {
       ...relevantMessages,
     ];
 
-    const response = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: summaryPrompt }),
-    });
+    try {
+      const data = await sendMessages(summaryPrompt);
+      if (!data.reply) return null;
 
-    if (!response.ok) return null;
-    const data = (await response.json()) as ChatResponse;
-    if (!data.reply) return null;
+      const summary = data.reply.replace(/[".]/g, "").trim();
+      if (!summary) return null;
 
-    const summary = data.reply.replace(/[".]/g, "").trim();
-    if (!summary) return null;
-
-    return summary.length > 48 ? `${summary.slice(0, 45).trim()}...` : summary;
+      return summary.length > 48 ? `${summary.slice(0, 45).trim()}...` : summary;
+    } catch {
+      return null;
+    }
   };
 
   useEffect(() => {
@@ -1341,6 +1493,9 @@ export default function Home() {
                             )}
                           </div>
                         ) : null}
+                        {message.role === "assistant"
+                          ? renderThinkingBlock(message.thinking)
+                          : null}
                         {message.role === "assistant" &&
                         message.tool_calls &&
                         message.tool_calls.length > 0 ? (
@@ -1444,7 +1599,7 @@ export default function Home() {
                   </div>
                 ))
             )}
-            {isLoading ? (
+            {isLoading && !isStreaming ? (
               <div className="flex items-center gap-2 rounded-2xl bg-zinc-100 px-4 py-3 text-sm text-zinc-600 dark:bg-white/10 dark:text-zinc-300">
                 <span
                   className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600 dark:border-white/20 dark:border-t-white"
