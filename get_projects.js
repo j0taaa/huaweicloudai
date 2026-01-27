@@ -1,5 +1,5 @@
-const https = require('https');
-const HuaweiCloudSigner = require('./huawei_signer.js');
+import https from "https";
+import HuaweiCloudSigner from "./huawei_signer.js";
 
 const ACCESS_KEY = process.env.HUAWEI_ACCESS_KEY;
 const SECRET_KEY = process.env.HUAWEI_SECRET_KEY;
@@ -13,7 +13,7 @@ function httpsRequest(options, data = '') {
       res.on('end', () => {
         try {
           resolve({ statusCode: res.statusCode, body: JSON.parse(body) });
-        } catch (e) {
+        } catch {
           resolve({ statusCode: res.statusCode, body });
         }
       });

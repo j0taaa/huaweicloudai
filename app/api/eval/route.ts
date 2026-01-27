@@ -14,7 +14,7 @@ type RequestOptions = {
 };
 
 const signRequest = (options: RequestOptions, ak: string, sk: string) => {
-  return HuaweiCloudSigner.signRequest(options as any, ak, sk);
+  return HuaweiCloudSigner.signRequest(options, ak, sk);
 };
 
 export async function POST(request: Request) {
