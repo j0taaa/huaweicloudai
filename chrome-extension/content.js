@@ -216,6 +216,53 @@ if (!existingWidget) {
     }
   };
 
+  const requestChat = async (serverUrl, payload) => {
+    if (
+      typeof chrome !== "undefined" &&
+      chrome.runtime &&
+      typeof chrome.runtime.sendMessage === "function"
+    ) {
+      return new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage(
+          { type: "hwc-chat-request", serverUrl, payload },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              reject(new Error(chrome.runtime.lastError.message));
+              return;
+            }
+
+            if (!response) {
+              reject(new Error("No response from extension background."));
+              return;
+            }
+
+            if (!response.ok) {
+              reject(new Error(response.error || "Server error."));
+              return;
+            }
+
+            resolve(response.data);
+          },
+        );
+      });
+    }
+
+    const response = await fetch(`${serverUrl}/api/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || "Server error.");
+    }
+
+    return response.json();
+  };
+
   const connectToServer = async () => {
     const trimmedAccessKey = accessKeyInput.value.trim();
     const trimmedSecretKey = secretKeyInput.value.trim();
@@ -242,20 +289,19 @@ if (!existingWidget) {
       ],
     };
 
-    const response = await fetch(`${serverUrl}/api/chat`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || "Server error.");
+    try {
+      const data = await requestChat(serverUrl, payload);
+      return { data, usedFallback: false };
+    } catch (error) {
+      if (/^https:\/\//i.test(serverUrl)) {
+        const fallbackUrl = serverUrl.replace(/^https:\/\//i, "http://");
+        const data = await requestChat(fallbackUrl, payload);
+        serverUrlInput.value = fallbackUrl;
+        storageSet({ serverUrl: fallbackUrl });
+        return { data, usedFallback: true };
+      }
+      throw error;
     }
-
-    return response.json();
   };
 
   toggleButton.addEventListener("click", () => {
@@ -325,7 +371,7 @@ if (!existingWidget) {
       sendButton.disabled = true;
       setStatus("Connecting to server...", "loading");
 
-      const data = await connectToServer();
+      const { data, usedFallback } = await connectToServer();
       const reply = data?.reply?.trim();
       const toolCalls = data?.toolCalls ?? [];
 
@@ -343,7 +389,10 @@ if (!existingWidget) {
           "Received tool calls. Check the server for results.";
       }
 
-      setStatus("Connected", "success");
+      setStatus(
+        usedFallback ? "Connected (HTTP fallback)" : "Connected",
+        "success",
+      );
     } catch (error) {
       assistantBubble.textContent =
         error instanceof Error
