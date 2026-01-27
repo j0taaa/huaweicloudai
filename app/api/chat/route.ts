@@ -23,6 +23,12 @@ type ChatRequest = {
       name?: string;
     }>;
   };
+  inference?: {
+    mode?: "default" | "custom";
+    baseUrl?: string;
+    model?: string;
+    apiKey?: string;
+  };
 };
 
 const buildSystemPrompt = (context: ChatRequest["context"] = {}) => {
@@ -156,7 +162,7 @@ const buildSystemPrompt = (context: ChatRequest["context"] = {}) => {
 };
 
 export async function POST(request: Request) {
-  const { messages, context } = (await request.json()) as ChatRequest;
+  const { messages, context, inference } = (await request.json()) as ChatRequest;
 
   if (!Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json(
@@ -165,15 +171,37 @@ export async function POST(request: Request) {
     );
   }
 
-  const apiKey = process.env.ZAI_APIKEY;
-  const baseUrl = process.env.ZAI_URL;
+  const inferenceMode = inference?.mode === "custom" ? "custom" : "default";
+  const customBaseUrl = inference?.baseUrl?.trim();
+  const customModel = inference?.model?.trim();
+  const customApiKey = inference?.apiKey?.trim();
 
-  if (!apiKey || !baseUrl) {
-    return NextResponse.json(
-      { error: "Missing ZAI_APIKEY or ZAI_URL environment variables." },
-      { status: 500 },
-    );
+  if (inferenceMode === "custom") {
+    if (!customBaseUrl || !customModel || !customApiKey) {
+      return NextResponse.json(
+        {
+          error:
+            "Custom inference requires a base URL, model, and API key. Please update your inference settings.",
+        },
+        { status: 400 },
+      );
+    }
+  } else {
+    const apiKey = process.env.ZAI_APIKEY;
+    const baseUrl = process.env.ZAI_URL;
+
+    if (!apiKey || !baseUrl) {
+      return NextResponse.json(
+        { error: "Missing ZAI_APIKEY or ZAI_URL environment variables." },
+        { status: 500 },
+      );
+    }
   }
+
+  const apiKey =
+    inferenceMode === "custom" ? customApiKey : process.env.ZAI_APIKEY;
+  const baseUrl =
+    inferenceMode === "custom" ? customBaseUrl : process.env.ZAI_URL;
 
   const normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
   const endpoint = new URL("chat/completions", normalizedBaseUrl).toString();
@@ -191,7 +219,7 @@ export async function POST(request: Request) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "glm-4.7",
+      model: inferenceMode === "custom" ? customModel : "glm-4.7",
       messages: [
         { role: "system", content: buildSystemPrompt(context) },
         ...messages.filter((message) => message.role !== "system"),
