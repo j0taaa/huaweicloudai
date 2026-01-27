@@ -58,6 +58,8 @@ const ACTIVE_STORAGE_KEY = "huaweicloudai-active-conversation";
 const CREDENTIALS_STORAGE_KEY = "huaweicloudai-credentials";
 const PROJECT_IDS_STORAGE_KEY = "huaweicloudai-project-ids";
 const PENDING_REQUEST_STORAGE_KEY = "huaweicloudai-pending-request";
+const INFERENCE_MODE_STORAGE_KEY = "huaweicloudai-inference-mode";
+const INFERENCE_SETTINGS_STORAGE_KEY = "huaweicloudai-inference-settings";
 const TOOL_RESULT_COLLAPSE_THRESHOLD = 900;
 const TOOL_RESULT_COLLAPSE_LINES = 16;
 const INPUT_MIN_HEIGHT = 48;
@@ -117,6 +119,14 @@ export default function Home() {
   const [projectIdError, setProjectIdError] = useState<string | null>(null);
   const [projectIdsOpen, setProjectIdsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [inferenceMode, setInferenceMode] = useState<"default" | "custom">(
+    "default",
+  );
+  const [customInference, setCustomInference] = useState({
+    baseUrl: "",
+    model: "",
+    apiKey: "",
+  });
   const [activeToolPreview, setActiveToolPreview] =
     useState<ToolPreview | null>(null);
   const [pendingChoice, setPendingChoice] = useState<{
@@ -133,6 +143,7 @@ export default function Home() {
   const credentialHydratedRef = useRef(false);
   const credentialResetSkipRef = useRef(true);
   const pendingResumeRef = useRef(false);
+  const inferenceHydratedRef = useRef(false);
 
   const activeConversation = useMemo(() => {
     if (!activeConversationId) return null;
@@ -187,6 +198,10 @@ export default function Home() {
     const storedActive = localStorage.getItem(ACTIVE_STORAGE_KEY);
     const storedCredentials = localStorage.getItem(CREDENTIALS_STORAGE_KEY);
     const storedProjectIds = localStorage.getItem(PROJECT_IDS_STORAGE_KEY);
+    const storedInferenceMode = localStorage.getItem(INFERENCE_MODE_STORAGE_KEY);
+    const storedInferenceSettings = localStorage.getItem(
+      INFERENCE_SETTINGS_STORAGE_KEY,
+    );
 
     if (storedCredentials) {
       try {
@@ -219,6 +234,28 @@ export default function Home() {
       }
     }
     credentialHydratedRef.current = true;
+
+    if (storedInferenceMode === "custom") {
+      setInferenceMode("custom");
+    }
+
+    if (storedInferenceSettings) {
+      try {
+        const parsed = JSON.parse(storedInferenceSettings) as {
+          baseUrl?: string;
+          model?: string;
+          apiKey?: string;
+        };
+        setCustomInference({
+          baseUrl: typeof parsed.baseUrl === "string" ? parsed.baseUrl : "",
+          model: typeof parsed.model === "string" ? parsed.model : "",
+          apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
+        });
+      } catch {
+        // Ignore invalid inference settings.
+      }
+    }
+    inferenceHydratedRef.current = true;
 
     if (stored) {
       try {
@@ -354,6 +391,15 @@ export default function Home() {
           secretKey: secretKey.trim(),
           projectIds,
         },
+        inference:
+          inferenceMode === "custom"
+            ? {
+                mode: "custom",
+                baseUrl: customInference.baseUrl.trim(),
+                model: customInference.model.trim(),
+                apiKey: customInference.apiKey.trim(),
+              }
+            : { mode: "default" },
       }),
       signal: controller.signal,
     });
@@ -640,6 +686,19 @@ export default function Home() {
     setProjectIdError(null);
     localStorage.removeItem(PROJECT_IDS_STORAGE_KEY);
   }, [accessKey, secretKey]);
+
+  useEffect(() => {
+    if (!inferenceHydratedRef.current) return;
+    localStorage.setItem(INFERENCE_MODE_STORAGE_KEY, inferenceMode);
+  }, [inferenceMode]);
+
+  useEffect(() => {
+    if (!inferenceHydratedRef.current) return;
+    localStorage.setItem(
+      INFERENCE_SETTINGS_STORAGE_KEY,
+      JSON.stringify(customInference),
+    );
+  }, [customInference]);
 
   const handleSaveCredentials = async () => {
     const trimmedAccessKey = accessKey.trim();
@@ -1052,6 +1111,99 @@ export default function Home() {
               </div>
             </div>
           ) : null}
+        </div>
+        <div className="rounded-2xl border border-zinc-200 bg-white/90 p-4 shadow-sm dark:border-white/10 dark:bg-black/80">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              Inference
+            </span>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              {inferenceMode === "custom" ? "Custom LLM" : "Built-in"}
+            </span>
+          </div>
+          <div className="mt-3 flex items-center gap-2 rounded-full bg-zinc-100 p-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:bg-white/10 dark:text-zinc-300">
+            <button
+              type="button"
+              className={`flex-1 rounded-full px-3 py-1 transition ${
+                inferenceMode === "default"
+                  ? "bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-white"
+                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+              }`}
+              onClick={() => setInferenceMode("default")}
+            >
+              Built-in
+            </button>
+            <button
+              type="button"
+              className={`flex-1 rounded-full px-3 py-1 transition ${
+                inferenceMode === "custom"
+                  ? "bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-white"
+                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+              }`}
+              onClick={() => setInferenceMode("custom")}
+            >
+              Custom
+            </button>
+          </div>
+          {inferenceMode === "custom" ? (
+            <div className="mt-4 space-y-3">
+              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+                Base URL
+                <input
+                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-normal text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                  placeholder="https://openrouter.ai/api/v1"
+                  value={customInference.baseUrl}
+                  onChange={(event) =>
+                    setCustomInference((prev) => ({
+                      ...prev,
+                      baseUrl: event.target.value,
+                    }))
+                  }
+                  autoComplete="off"
+                />
+              </label>
+              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+                Model
+                <input
+                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-normal text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                  placeholder="openrouter/auto"
+                  value={customInference.model}
+                  onChange={(event) =>
+                    setCustomInference((prev) => ({
+                      ...prev,
+                      model: event.target.value,
+                    }))
+                  }
+                  autoComplete="off"
+                />
+              </label>
+              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+                API key
+                <input
+                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-normal text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                  placeholder="Enter your provider key"
+                  value={customInference.apiKey}
+                  onChange={(event) =>
+                    setCustomInference((prev) => ({
+                      ...prev,
+                      apiKey: event.target.value,
+                    }))
+                  }
+                  autoComplete="off"
+                  type="password"
+                />
+              </label>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                These settings are stored locally and only sent when you choose
+                Custom inference.
+              </p>
+            </div>
+          ) : (
+            <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+              Uses the built-in GLM 4.7 ZAI coding plan configured on the
+              server.
+            </p>
+          )}
         </div>
       </aside>
       <main className="flex h-full w-full flex-1 flex-col">

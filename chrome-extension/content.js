@@ -117,6 +117,80 @@ if (!existingWidget) {
   secretKeyInput.autocomplete = "off";
   secretKeyLabel.append(secretKeyInput);
 
+  const inferenceSection = document.createElement("div");
+  inferenceSection.className = "hwc-chat-inference";
+
+  const inferenceTitle = document.createElement("p");
+  inferenceTitle.className = "hwc-chat-inference-title";
+  inferenceTitle.textContent = "Inference";
+
+  const inferenceToggle = document.createElement("div");
+  inferenceToggle.className = "hwc-chat-toggle-group";
+
+  const inferenceDefaultButton = document.createElement("button");
+  inferenceDefaultButton.type = "button";
+  inferenceDefaultButton.className = "hwc-chat-toggle-option";
+  inferenceDefaultButton.dataset.mode = "default";
+  inferenceDefaultButton.textContent = "Built-in";
+
+  const inferenceCustomButton = document.createElement("button");
+  inferenceCustomButton.type = "button";
+  inferenceCustomButton.className = "hwc-chat-toggle-option";
+  inferenceCustomButton.dataset.mode = "custom";
+  inferenceCustomButton.textContent = "Custom";
+
+  inferenceToggle.append(inferenceDefaultButton, inferenceCustomButton);
+
+  const inferenceFields = document.createElement("div");
+  inferenceFields.className = "hwc-chat-inference-fields";
+
+  const inferenceBaseUrlLabel = document.createElement("label");
+  inferenceBaseUrlLabel.className = "hwc-chat-label";
+  inferenceBaseUrlLabel.textContent = "LLM Base URL";
+
+  const inferenceBaseUrlInput = document.createElement("input");
+  inferenceBaseUrlInput.type = "text";
+  inferenceBaseUrlInput.className = "hwc-chat-input";
+  inferenceBaseUrlInput.placeholder = "https://openrouter.ai/api/v1";
+  inferenceBaseUrlInput.autocomplete = "off";
+  inferenceBaseUrlLabel.append(inferenceBaseUrlInput);
+
+  const inferenceModelLabel = document.createElement("label");
+  inferenceModelLabel.className = "hwc-chat-label";
+  inferenceModelLabel.textContent = "Model";
+
+  const inferenceModelInput = document.createElement("input");
+  inferenceModelInput.type = "text";
+  inferenceModelInput.className = "hwc-chat-input";
+  inferenceModelInput.placeholder = "openrouter/auto";
+  inferenceModelInput.autocomplete = "off";
+  inferenceModelLabel.append(inferenceModelInput);
+
+  const inferenceApiKeyLabel = document.createElement("label");
+  inferenceApiKeyLabel.className = "hwc-chat-label";
+  inferenceApiKeyLabel.textContent = "API key";
+
+  const inferenceApiKeyInput = document.createElement("input");
+  inferenceApiKeyInput.type = "password";
+  inferenceApiKeyInput.className = "hwc-chat-input";
+  inferenceApiKeyInput.placeholder = "Enter your provider key";
+  inferenceApiKeyInput.autocomplete = "off";
+  inferenceApiKeyLabel.append(inferenceApiKeyInput);
+
+  const inferenceHelp = document.createElement("p");
+  inferenceHelp.className = "hwc-chat-inference-help";
+  inferenceHelp.textContent =
+    "Custom settings are stored locally and used only when Custom is selected.";
+
+  inferenceFields.append(
+    inferenceBaseUrlLabel,
+    inferenceModelLabel,
+    inferenceApiKeyLabel,
+    inferenceHelp,
+  );
+
+  inferenceSection.append(inferenceTitle, inferenceToggle, inferenceFields);
+
   const credentialsFooter = document.createElement("div");
   credentialsFooter.className = "hwc-chat-credentials-footer";
 
@@ -134,6 +208,7 @@ if (!existingWidget) {
     serverUrlLabel,
     accessKeyLabel,
     secretKeyLabel,
+    inferenceSection,
     credentialsFooter,
   );
 
@@ -194,12 +269,20 @@ if (!existingWidget) {
 
   const DEFAULT_SERVER_URL = "http://1.178.45.234:3000";
   const PROJECT_IDS_STORAGE_KEY = "projectIds";
+  const INFERENCE_MODE_STORAGE_KEY = "inferenceMode";
+  const INFERENCE_SETTINGS_STORAGE_KEY = "inferenceSettings";
   const chatHistory = [];
   let isSending = false;
   let pendingChoice = null;
   let pendingChoiceForm = null;
   let activeServerUrl = DEFAULT_SERVER_URL;
   let storedProjectIds = [];
+  let inferenceMode = "default";
+  let inferenceSettings = {
+    baseUrl: "",
+    model: "",
+    apiKey: "",
+  };
   const toolCards = new Map();
 
   const updateSaveButton = () => {
@@ -700,6 +783,15 @@ if (!existingWidget) {
         secretKey: trimmedSecretKey,
         projectIds: storedProjectIds,
       },
+      inference:
+        inferenceMode === "custom"
+          ? {
+              mode: "custom",
+              baseUrl: inferenceSettings.baseUrl.trim(),
+              model: inferenceSettings.model.trim(),
+              apiKey: inferenceSettings.apiKey.trim(),
+            }
+          : { mode: "default" },
     };
 
     try {
@@ -1183,7 +1275,53 @@ if (!existingWidget) {
     }
   });
 
-  storageGet(["accessKey", "secretKey", "serverUrl", PROJECT_IDS_STORAGE_KEY]).then((values) => {
+  const setInferenceMode = (mode) => {
+    inferenceMode = mode;
+    inferenceDefaultButton.classList.toggle(
+      "hwc-chat-toggle-option-active",
+      mode === "default",
+    );
+    inferenceCustomButton.classList.toggle(
+      "hwc-chat-toggle-option-active",
+      mode === "custom",
+    );
+    inferenceFields.style.display = mode === "custom" ? "flex" : "none";
+    storageSet({ [INFERENCE_MODE_STORAGE_KEY]: mode });
+  };
+
+  const updateInferenceSettings = () => {
+    inferenceSettings = {
+      baseUrl: inferenceBaseUrlInput.value.trim(),
+      model: inferenceModelInput.value.trim(),
+      apiKey: inferenceApiKeyInput.value.trim(),
+    };
+    storageSet({
+      [INFERENCE_SETTINGS_STORAGE_KEY]: JSON.stringify(inferenceSettings),
+    });
+  };
+
+  inferenceDefaultButton.addEventListener("click", () => {
+    setInferenceMode("default");
+  });
+
+  inferenceCustomButton.addEventListener("click", () => {
+    setInferenceMode("custom");
+  });
+
+  [inferenceBaseUrlInput, inferenceModelInput, inferenceApiKeyInput].forEach(
+    (field) => {
+      field.addEventListener("input", updateInferenceSettings);
+    },
+  );
+
+  storageGet([
+    "accessKey",
+    "secretKey",
+    "serverUrl",
+    PROJECT_IDS_STORAGE_KEY,
+    INFERENCE_MODE_STORAGE_KEY,
+    INFERENCE_SETTINGS_STORAGE_KEY,
+  ]).then((values) => {
     if (typeof values.accessKey === "string") {
       accessKeyInput.value = values.accessKey;
     }
@@ -1205,6 +1343,25 @@ if (!existingWidget) {
         storedProjectIds = [];
       }
     }
+    if (typeof values[INFERENCE_MODE_STORAGE_KEY] === "string") {
+      inferenceMode = values[INFERENCE_MODE_STORAGE_KEY] === "custom" ? "custom" : "default";
+    }
+    if (typeof values[INFERENCE_SETTINGS_STORAGE_KEY] === "string") {
+      try {
+        const parsed = JSON.parse(values[INFERENCE_SETTINGS_STORAGE_KEY]);
+        inferenceSettings = {
+          baseUrl: typeof parsed.baseUrl === "string" ? parsed.baseUrl : "",
+          model: typeof parsed.model === "string" ? parsed.model : "",
+          apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
+        };
+      } catch {
+        inferenceSettings = { baseUrl: "", model: "", apiKey: "" };
+      }
+    }
+    inferenceBaseUrlInput.value = inferenceSettings.baseUrl;
+    inferenceModelInput.value = inferenceSettings.model;
+    inferenceApiKeyInput.value = inferenceSettings.apiKey;
+    setInferenceMode(inferenceMode);
     activeServerUrl = serverUrlInput.value;
     updateSaveButton();
   });
