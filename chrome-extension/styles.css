@@ -41,7 +41,7 @@
 
 .hwc-chat-panel {
   width: 320px;
-  max-height: 520px;
+  max-height: 580px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -236,7 +236,7 @@
 .hwc-chat-messages {
   flex: 1;
   min-height: 120px;
-  max-height: 200px;
+  max-height: 240px;
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
@@ -319,6 +319,28 @@
 .hwc-chat-markdown a {
   color: #2563eb;
   text-decoration: underline;
+}
+
+.hwc-chat-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.hwc-chat-markdown th,
+.hwc-chat-markdown td {
+  padding: 6px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  text-align: left;
+}
+
+.hwc-chat-markdown th {
+  background: rgba(226, 232, 240, 0.6);
+  font-weight: 700;
+}
+
+.hwc-chat-markdown tbody tr:nth-child(even) {
+  background: rgba(248, 250, 252, 0.8);
 }
 
 .hwc-chat-form {
