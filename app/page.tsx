@@ -2,7 +2,7 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type ChatMessage = {
   role: "user" | "assistant" | "tool" | "system";
@@ -95,7 +95,6 @@ const fetchProjectIds = async (ak: string, sk: string) => {
 
   const data = (await response.json()) as {
     entries?: ProjectIdEntry[];
-    errors?: string[];
     error?: string;
   };
 
@@ -103,7 +102,7 @@ const fetchProjectIds = async (ak: string, sk: string) => {
     throw new Error(data.error);
   }
 
-  return { entries: data.entries ?? [], errors: data.errors ?? [] };
+  return { entries: data.entries ?? [] };
 };
 
 export default function Home() {
@@ -160,7 +159,10 @@ export default function Home() {
       null
     );
   }, [activeConversationId, conversations]);
-  const messages = activeConversation?.messages ?? [];
+  const messages = useMemo(
+    () => activeConversation?.messages ?? [],
+    [activeConversation],
+  );
 
   const trimmedInput = useMemo(() => input.trim(), [input]);
   const toolResults = useMemo(() => {
@@ -402,144 +404,151 @@ export default function Home() {
       localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
       pendingResumeRef.current = true;
     }
-  }, [activeConversationId, conversations, pendingChoice]);
+  }, [activeConversationId, conversations, continueConversation, pendingChoice]);
 
-  const sendMessages = async (
-    nextMessages: ChatMessage[],
-    onStreamUpdate?: (partial: { content: string; thinking: string }) => void,
-  ): Promise<ChatResponse> => {
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-    const requestMessages = nextMessages.map(({ thinking, ...rest }) => rest);
-    const response = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: requestMessages,
-        context: {
-          accessKey: accessKey.trim(),
-          secretKey: secretKey.trim(),
-          projectIds,
-        },
-        inference:
-          inferenceMode === "custom"
-            ? {
-                mode: "custom",
-                baseUrl: customInference.baseUrl.trim(),
-                model: customInference.model.trim(),
-                apiKey: customInference.apiKey.trim(),
-              }
-            : { mode: "default" },
-      }),
-      signal: controller.signal,
-    });
+  const sendMessages = useCallback(
+    async (
+      nextMessages: ChatMessage[],
+      onStreamUpdate?: (partial: { content: string; thinking: string }) => void,
+    ): Promise<ChatResponse> => {
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      const requestMessages = nextMessages.map((message) => {
+        const { thinking, ...rest } = message;
+        void thinking;
+        return rest;
+      });
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: requestMessages,
+          context: {
+            accessKey: accessKey.trim(),
+            secretKey: secretKey.trim(),
+            projectIds,
+          },
+          inference:
+            inferenceMode === "custom"
+              ? {
+                  mode: "custom",
+                  baseUrl: customInference.baseUrl.trim(),
+                  model: customInference.model.trim(),
+                  apiKey: customInference.apiKey.trim(),
+                }
+              : { mode: "default" },
+        }),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || "Failed to fetch response.");
-    }
-
-    const contentType = response.headers.get("content-type") ?? "";
-    if (!contentType.includes("text/event-stream")) {
-      return (await response.json()) as ChatResponse;
-    }
-
-    if (!response.body) {
-      throw new Error("No response stream available.");
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let reply = "";
-    let thinking = "";
-    let toolCalls: ToolCall[] = [];
-    let eventName = "message";
-    let dataLines: string[] = [];
-    let buffer = "";
-
-    const flushEvent = () => {
-      if (dataLines.length === 0) return;
-      const data = dataLines.join("\n");
-      dataLines = [];
-      const event = eventName || "message";
-      eventName = "message";
-
-      if (data === "[DONE]") {
-        return;
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Failed to fetch response.");
       }
 
-      let parsed: {
-        chunk?: string;
-        reply?: string;
-        thinking?: string;
-        toolCalls?: ToolCall[];
-        message?: string;
-      } | null = null;
-      try {
-        parsed = JSON.parse(data) as {
+      const contentType = response.headers.get("content-type") ?? "";
+      if (!contentType.includes("text/event-stream")) {
+        return (await response.json()) as ChatResponse;
+      }
+
+      if (!response.body) {
+        throw new Error("No response stream available.");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let reply = "";
+      let thinking = "";
+      let toolCalls: ToolCall[] = [];
+      let eventName = "message";
+      let dataLines: string[] = [];
+      let buffer = "";
+
+      const flushEvent = () => {
+        if (dataLines.length === 0) return;
+        const data = dataLines.join("\n");
+        dataLines = [];
+        const event = eventName || "message";
+        eventName = "message";
+
+        if (data === "[DONE]") {
+          return;
+        }
+
+        let parsed: {
           chunk?: string;
           reply?: string;
           thinking?: string;
           toolCalls?: ToolCall[];
           message?: string;
-        };
-      } catch {
-        parsed = { chunk: data };
-      }
-
-      if (event === "content") {
-        const chunk = parsed?.chunk ?? "";
-        if (chunk) {
-          reply += chunk;
-          onStreamUpdate?.({ content: reply, thinking });
+        } | null = null;
+        try {
+          parsed = JSON.parse(data) as {
+            chunk?: string;
+            reply?: string;
+            thinking?: string;
+            toolCalls?: ToolCall[];
+            message?: string;
+          };
+        } catch {
+          parsed = { chunk: data };
         }
-      } else if (event === "thinking") {
-        const chunk = parsed?.chunk ?? "";
-        if (chunk) {
-          thinking += chunk;
-          onStreamUpdate?.({ content: reply, thinking });
+
+        if (event === "content") {
+          const chunk = parsed?.chunk ?? "";
+          if (chunk) {
+            reply += chunk;
+            onStreamUpdate?.({ content: reply, thinking });
+          }
+        } else if (event === "thinking") {
+          const chunk = parsed?.chunk ?? "";
+          if (chunk) {
+            thinking += chunk;
+            onStreamUpdate?.({ content: reply, thinking });
+          }
+        } else if (event === "done") {
+          reply = parsed?.reply ?? reply;
+          thinking = parsed?.thinking ?? thinking;
+          toolCalls = parsed?.toolCalls ?? toolCalls;
+        } else if (event === "error") {
+          throw new Error(parsed?.message ?? "Stream error.");
         }
-      } else if (event === "done") {
-        reply = parsed?.reply ?? reply;
-        thinking = parsed?.thinking ?? thinking;
-        toolCalls = parsed?.toolCalls ?? toolCalls;
-      } else if (event === "error") {
-        throw new Error(parsed?.message ?? "Stream error.");
-      }
-    };
+      };
 
-    const processChunk = (chunk: string) => {
-      buffer += chunk;
-      let newlineIndex = buffer.indexOf("\n");
-      while (newlineIndex !== -1) {
-        const line = buffer.slice(0, newlineIndex).replace(/\r$/, "");
-        buffer = buffer.slice(newlineIndex + 1);
+      const processChunk = (chunk: string) => {
+        buffer += chunk;
+        let newlineIndex = buffer.indexOf("\n");
+        while (newlineIndex !== -1) {
+          const line = buffer.slice(0, newlineIndex).replace(/\r$/, "");
+          buffer = buffer.slice(newlineIndex + 1);
 
-        if (!line.trim()) {
+          if (!line.trim()) {
+            flushEvent();
+          } else if (line.startsWith("event:")) {
+            eventName = line.slice(6).trim() || "message";
+          } else if (line.startsWith("data:")) {
+            dataLines.push(line.slice(5).trimStart());
+          }
+
+          newlineIndex = buffer.indexOf("\n");
+        }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
           flushEvent();
-        } else if (line.startsWith("event:")) {
-          eventName = line.slice(6).trim() || "message";
-        } else if (line.startsWith("data:")) {
-          dataLines.push(line.slice(5).trimStart());
+          break;
         }
-
-        newlineIndex = buffer.indexOf("\n");
+        processChunk(decoder.decode(value, { stream: true }));
       }
-    };
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) {
-        flushEvent();
-        break;
-      }
-      processChunk(decoder.decode(value, { stream: true }));
-    }
+      return { reply, toolCalls, thinking };
+    },
+    [accessKey, customInference, inferenceMode, projectIds, secretKey],
+  );
 
-    return { reply, toolCalls, thinking };
-  };
-
-  const parseToolPayload = (toolCall: ToolCall): ToolPayload => {
+  const parseToolPayload = useCallback((toolCall: ToolCall): ToolPayload => {
     let payload: { code?: string; question?: string; options?: string[] } = {};
 
     try {
@@ -577,7 +586,7 @@ export default function Home() {
     return {
       error: `Error: Unsupported tool payload for ${toolCall.function.name}.`,
     };
-  };
+  }, []);
 
   const summarizeCode = (code: string) => {
     const normalized = code.toLowerCase();
@@ -631,176 +640,171 @@ export default function Home() {
     );
   };
 
-  const formatToolResult = async (result: unknown): Promise<string> => {
-    if (result instanceof Response) {
-      const text = await result.text();
-      return text || "[Empty response body]";
-    }
+  const executeEvalTool = useCallback(
+    async (toolCall: ToolCall): Promise<ChatMessage> => {
+      const payload = parseToolPayload(toolCall);
 
-    if (typeof result === "string") {
-      return result;
-    }
-
-    if (result === undefined) {
-      return "undefined";
-    }
-
-    try {
-      return JSON.stringify(result);
-    } catch {
-      return String(result);
-    }
-  };
-
-  const executeEvalTool = async (toolCall: ToolCall): Promise<ChatMessage> => {
-    const payload = parseToolPayload(toolCall);
-
-    if (payload.error) {
-      return {
-        role: "tool",
-        content: payload.error,
-        tool_call_id: toolCall.id,
-      };
-    }
-
-    try {
-      const response = await fetch("/api/eval", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: payload.code }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
+      if (payload.error) {
         return {
           role: "tool",
-          content: errorText || "Error executing code on server.",
+          content: payload.error,
           tool_call_id: toolCall.id,
         };
       }
 
-      const data = (await response.json()) as { result?: string; error?: string };
-      return {
-        role: "tool",
-        content: data.error ?? data.result ?? "No result returned from server.",
-        tool_call_id: toolCall.id,
-      };
-    } catch (evalError) {
-      return {
-        role: "tool",
-        content: `Error executing eval_code: ${
-          evalError instanceof Error ? evalError.message : "Unknown error."
-        }`,
-        tool_call_id: toolCall.id,
-      };
-    }
-  };
+      try {
+        const response = await fetch("/api/eval", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: payload.code }),
+        });
 
-  const runToolCalls = async (toolCalls: ToolCall[]) => {
-    return Promise.all(
-      toolCalls.map(async (toolCall) => {
-        if (toolCall.function.name === "eval_code") {
-          return executeEvalTool(toolCall);
-        }
-
-        return {
-          role: "tool" as const,
-          content: `Unsupported tool: ${toolCall.function.name}`,
-          tool_call_id: toolCall.id,
-        };
-      }),
-    );
-  };
-
-  const streamAssistantResponse = async (workingMessages: ChatMessage[]) => {
-    const placeholder: ChatMessage = {
-      role: "assistant",
-      content: "",
-      thinking: "",
-    };
-    updateActiveMessages([...workingMessages, placeholder]);
-    setIsStreaming(true);
-    let response: ChatResponse;
-    try {
-      response = await sendMessages(workingMessages, (partial) => {
-        updateActiveMessages([
-          ...workingMessages,
-          {
-            role: "assistant",
-            content: partial.content,
-            thinking: partial.thinking,
-          },
-        ]);
-      });
-    } finally {
-      setIsStreaming(false);
-    }
-
-    const assistantMessage: ChatMessage = {
-      role: "assistant",
-      content: response.reply ?? "",
-      thinking: response.thinking ?? "",
-      tool_calls:
-        response.toolCalls && response.toolCalls.length > 0
-          ? response.toolCalls
-          : undefined,
-    };
-
-    const updatedMessages = [...workingMessages, assistantMessage];
-    updateActiveMessages(updatedMessages);
-
-    return { response, messages: updatedMessages };
-  };
-
-  const continueConversation = async (workingMessages: ChatMessage[]) => {
-    let { response: currentResponse, messages: updatedMessages } =
-      await streamAssistantResponse(workingMessages);
-    workingMessages = updatedMessages;
-
-    while (currentResponse.toolCalls && currentResponse.toolCalls.length > 0) {
-      const multipleChoiceCall = currentResponse.toolCalls.find(
-        (toolCall) => toolCall.function.name === "ask_multiple_choice",
-      );
-      const nonChoiceCalls = currentResponse.toolCalls.filter(
-        (toolCall) => toolCall.function.name !== "ask_multiple_choice",
-      );
-
-      if (nonChoiceCalls.length > 0) {
-        const toolMessages = await runToolCalls(nonChoiceCalls);
-        workingMessages = [...workingMessages, ...toolMessages];
-        updateActiveMessages(workingMessages);
-      }
-
-      if (multipleChoiceCall) {
-        const payload = parseToolPayload(multipleChoiceCall);
-        if (payload.error) {
-          const errorMessage: ChatMessage = {
+        if (!response.ok) {
+          const errorText = await response.text();
+          return {
             role: "tool",
-            content: payload.error,
-            tool_call_id: multipleChoiceCall.id,
+            content: errorText || "Error executing code on server.",
+            tool_call_id: toolCall.id,
           };
-          workingMessages = [...workingMessages, errorMessage];
-          updateActiveMessages(workingMessages);
-        } else if (payload.question && payload.options) {
-          setPendingChoice({
-            toolCall: multipleChoiceCall,
-            question: payload.question,
-            options: payload.options,
-          });
-          setIsLoading(false);
-          return;
         }
+
+        const data = (await response.json()) as {
+          result?: string;
+          error?: string;
+        };
+        return {
+          role: "tool",
+          content: data.error ?? data.result ?? "No result returned from server.",
+          tool_call_id: toolCall.id,
+        };
+      } catch (evalError) {
+        return {
+          role: "tool",
+          content: `Error executing eval_code: ${
+            evalError instanceof Error ? evalError.message : "Unknown error."
+          }`,
+          tool_call_id: toolCall.id,
+        };
+      }
+    },
+    [parseToolPayload],
+  );
+
+  const runToolCalls = useCallback(
+    async (toolCalls: ToolCall[]) => {
+      return Promise.all(
+        toolCalls.map(async (toolCall) => {
+          if (toolCall.function.name === "eval_code") {
+            return executeEvalTool(toolCall);
+          }
+
+          return {
+            role: "tool" as const,
+            content: `Unsupported tool: ${toolCall.function.name}`,
+            tool_call_id: toolCall.id,
+          };
+        }),
+      );
+    },
+    [executeEvalTool],
+  );
+
+  const streamAssistantResponse = useCallback(
+    async (workingMessages: ChatMessage[]) => {
+      const placeholder: ChatMessage = {
+        role: "assistant",
+        content: "",
+        thinking: "",
+      };
+      updateActiveMessages([...workingMessages, placeholder]);
+      setIsStreaming(true);
+      let response: ChatResponse;
+      try {
+        response = await sendMessages(workingMessages, (partial) => {
+          updateActiveMessages([
+            ...workingMessages,
+            {
+              role: "assistant",
+              content: partial.content,
+              thinking: partial.thinking,
+            },
+          ]);
+        });
+      } finally {
+        setIsStreaming(false);
       }
 
-      const streamResult = await streamAssistantResponse(workingMessages);
-      currentResponse = streamResult.response;
-      workingMessages = streamResult.messages;
-    }
+      const assistantMessage: ChatMessage = {
+        role: "assistant",
+        content: response.reply ?? "",
+        thinking: response.thinking ?? "",
+        tool_calls:
+          response.toolCalls && response.toolCalls.length > 0
+            ? response.toolCalls
+            : undefined,
+      };
 
-    if (!currentResponse.reply) {
-      throw new Error("No reply returned from the model.");
-    }
-  };
+      const updatedMessages = [...workingMessages, assistantMessage];
+      updateActiveMessages(updatedMessages);
+
+      return { response, messages: updatedMessages };
+    },
+    [sendMessages, updateActiveMessages],
+  );
+
+  const continueConversation = useCallback(
+    async (workingMessages: ChatMessage[]) => {
+      const { response: currentResponse, messages: updatedMessages } =
+        await streamAssistantResponse(workingMessages);
+      let nextResponse = currentResponse;
+      let nextMessages = updatedMessages;
+
+      while (nextResponse.toolCalls && nextResponse.toolCalls.length > 0) {
+        const multipleChoiceCall = nextResponse.toolCalls.find(
+          (toolCall) => toolCall.function.name === "ask_multiple_choice",
+        );
+        const nonChoiceCalls = nextResponse.toolCalls.filter(
+          (toolCall) => toolCall.function.name !== "ask_multiple_choice",
+        );
+
+        if (nonChoiceCalls.length > 0) {
+          const toolMessages = await runToolCalls(nonChoiceCalls);
+          nextMessages = [...nextMessages, ...toolMessages];
+          updateActiveMessages(nextMessages);
+        }
+
+        if (multipleChoiceCall) {
+          const payload = parseToolPayload(multipleChoiceCall);
+          if (payload.error) {
+            const errorMessage: ChatMessage = {
+              role: "tool",
+              content: payload.error,
+              tool_call_id: multipleChoiceCall.id,
+            };
+            nextMessages = [...nextMessages, errorMessage];
+            updateActiveMessages(nextMessages);
+          } else if (payload.question && payload.options) {
+            setPendingChoice({
+              toolCall: multipleChoiceCall,
+              question: payload.question,
+              options: payload.options,
+            });
+            setIsLoading(false);
+            return;
+          }
+        }
+
+        const streamResult = await streamAssistantResponse(nextMessages);
+        nextResponse = streamResult.response;
+        nextMessages = streamResult.messages;
+      }
+
+      if (!nextResponse.reply) {
+        throw new Error("No reply returned from the model.");
+      }
+    },
+    [parseToolPayload, runToolCalls, streamAssistantResponse, updateActiveMessages],
+  );
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -896,7 +900,7 @@ export default function Home() {
     setProjectIdError(null);
 
     try {
-      const { entries, errors } = await fetchProjectIds(
+      const { entries } = await fetchProjectIds(
         trimmedAccessKey,
         trimmedSecretKey,
       );
@@ -972,20 +976,23 @@ export default function Home() {
     }
   };
 
-  const updateActiveMessages = (nextMessages: ChatMessage[]) => {
-    if (!activeConversationId) return;
-    setConversations((prev) =>
-      prev.map((conversation) =>
-        conversation.id === activeConversationId
-          ? {
-              ...conversation,
-              messages: nextMessages,
-              updatedAt: Date.now(),
-            }
-          : conversation,
-      ),
-    );
-  };
+  const updateActiveMessages = useCallback(
+    (nextMessages: ChatMessage[]) => {
+      if (!activeConversationId) return;
+      setConversations((prev) =>
+        prev.map((conversation) =>
+          conversation.id === activeConversationId
+            ? {
+                ...conversation,
+                messages: nextMessages,
+                updatedAt: Date.now(),
+              }
+            : conversation,
+        ),
+      );
+    },
+    [activeConversationId],
+  );
 
   const handleNewConversation = () => {
     if (abortControllerRef.current) {
@@ -1034,36 +1041,39 @@ export default function Home() {
     });
   };
 
-  const requestSummary = async (
-    conversationMessages: ChatMessage[],
-  ): Promise<string | null> => {
-    const relevantMessages = conversationMessages
-      .filter((message) => message.role === "user" || message.role === "assistant")
-      .slice(-12);
+  const requestSummary = useCallback(
+    async (conversationMessages: ChatMessage[]): Promise<string | null> => {
+      const relevantMessages = conversationMessages
+        .filter((message) => message.role === "user" || message.role === "assistant")
+        .slice(-12);
 
-    if (relevantMessages.length === 0) return null;
+      if (relevantMessages.length === 0) return null;
 
-    const summaryPrompt: ChatMessage[] = [
-      {
-        role: "system",
-        content:
-          "Summarize this conversation in 3-5 words. Keep it short, clear, and avoid punctuation.",
-      },
-      ...relevantMessages,
-    ];
+      const summaryPrompt: ChatMessage[] = [
+        {
+          role: "system",
+          content:
+            "Summarize this conversation in 3-5 words. Keep it short, clear, and avoid punctuation.",
+        },
+        ...relevantMessages,
+      ];
 
-    try {
-      const data = await sendMessages(summaryPrompt);
-      if (!data.reply) return null;
+      try {
+        const data = await sendMessages(summaryPrompt);
+        if (!data.reply) return null;
 
-      const summary = data.reply.replace(/[".]/g, "").trim();
-      if (!summary) return null;
+        const summary = data.reply.replace(/[".]/g, "").trim();
+        if (!summary) return null;
 
-      return summary.length > 48 ? `${summary.slice(0, 45).trim()}...` : summary;
-    } catch {
-      return null;
-    }
-  };
+        return summary.length > 48
+          ? `${summary.slice(0, 45).trim()}...`
+          : summary;
+      } catch {
+        return null;
+      }
+    },
+    [sendMessages],
+  );
 
   useEffect(() => {
     if (!activeConversation) return;
@@ -1101,7 +1111,7 @@ export default function Home() {
       .finally(() => {
         summaryInFlightRef.current.delete(activeConversation.id);
       });
-  }, [activeConversation, isLoading, pendingChoice]);
+  }, [activeConversation, isLoading, pendingChoice, requestSummary]);
 
   return (
     <div className="flex h-dvh w-screen flex-col bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50 lg:flex-row">
