@@ -342,69 +342,23 @@ export default function Home() {
     }
   }, [projectIds]);
 
-  useEffect(() => {
-    if (
-      !credentialHydratedRef.current ||
-      pendingResumeRef.current ||
-      conversations.length === 0 ||
-      pendingChoice
-    ) {
-      return;
-    }
-
-    const storedPending = localStorage.getItem(PENDING_REQUEST_STORAGE_KEY);
-    if (!storedPending) {
-      pendingResumeRef.current = true;
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(storedPending) as {
-        conversationId?: string;
-        messages?: ChatMessage[];
-      };
-
-      if (!parsed.conversationId || !Array.isArray(parsed.messages)) {
-        localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
-        pendingResumeRef.current = true;
-        return;
-      }
-
-      const pendingConversation = conversations.find(
-        (conversation) => conversation.id === parsed.conversationId,
+  const updateActiveMessages = useCallback(
+    (nextMessages: ChatMessage[]) => {
+      if (!activeConversationId) return;
+      setConversations((prev) =>
+        prev.map((conversation) =>
+          conversation.id === activeConversationId
+            ? {
+                ...conversation,
+                messages: nextMessages,
+                updatedAt: Date.now(),
+              }
+            : conversation,
+        ),
       );
-      if (!pendingConversation) {
-        localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
-        pendingResumeRef.current = true;
-        return;
-      }
-
-      pendingResumeRef.current = true;
-      if (activeConversationId !== parsed.conversationId) {
-        setActiveConversationId(parsed.conversationId);
-      }
-
-      setIsLoading(true);
-      setError(null);
-
-      void continueConversation([...parsed.messages])
-        .catch((caughtError) => {
-          const message =
-            caughtError instanceof Error
-              ? caughtError.message
-              : "Something went wrong.";
-          setError(message);
-        })
-        .finally(() => {
-          setIsLoading(false);
-          abortControllerRef.current = null;
-          localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
-        });
-    } catch {
-      localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
-      pendingResumeRef.current = true;
-    }
-  }, [activeConversationId, conversations, continueConversation, pendingChoice]);
+    },
+    [activeConversationId],
+  );
 
   const sendMessages = useCallback(
     async (
@@ -806,6 +760,70 @@ export default function Home() {
     [parseToolPayload, runToolCalls, streamAssistantResponse, updateActiveMessages],
   );
 
+  useEffect(() => {
+    if (
+      !credentialHydratedRef.current ||
+      pendingResumeRef.current ||
+      conversations.length === 0 ||
+      pendingChoice
+    ) {
+      return;
+    }
+
+    const storedPending = localStorage.getItem(PENDING_REQUEST_STORAGE_KEY);
+    if (!storedPending) {
+      pendingResumeRef.current = true;
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(storedPending) as {
+        conversationId?: string;
+        messages?: ChatMessage[];
+      };
+
+      if (!parsed.conversationId || !Array.isArray(parsed.messages)) {
+        localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
+        pendingResumeRef.current = true;
+        return;
+      }
+
+      const pendingConversation = conversations.find(
+        (conversation) => conversation.id === parsed.conversationId,
+      );
+      if (!pendingConversation) {
+        localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
+        pendingResumeRef.current = true;
+        return;
+      }
+
+      pendingResumeRef.current = true;
+      if (activeConversationId !== parsed.conversationId) {
+        setActiveConversationId(parsed.conversationId);
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      void continueConversation([...parsed.messages])
+        .catch((caughtError) => {
+          const message =
+            caughtError instanceof Error
+              ? caughtError.message
+              : "Something went wrong.";
+          setError(message);
+        })
+        .finally(() => {
+          setIsLoading(false);
+          abortControllerRef.current = null;
+          localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
+        });
+    } catch {
+      localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
+      pendingResumeRef.current = true;
+    }
+  }, [activeConversationId, conversations, continueConversation, pendingChoice]);
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!trimmedInput || isLoading || pendingChoice || !activeConversationId) {
@@ -975,24 +993,6 @@ export default function Home() {
       localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
     }
   };
-
-  const updateActiveMessages = useCallback(
-    (nextMessages: ChatMessage[]) => {
-      if (!activeConversationId) return;
-      setConversations((prev) =>
-        prev.map((conversation) =>
-          conversation.id === activeConversationId
-            ? {
-                ...conversation,
-                messages: nextMessages,
-                updatedAt: Date.now(),
-              }
-            : conversation,
-        ),
-      );
-    },
-    [activeConversationId],
-  );
 
   const handleNewConversation = () => {
     if (abortControllerRef.current) {
