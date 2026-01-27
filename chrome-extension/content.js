@@ -217,6 +217,36 @@ if (!existingWidget) {
   };
 
   const requestChat = async (serverUrl, payload) => {
+    if (
+      typeof chrome !== "undefined" &&
+      chrome.runtime &&
+      typeof chrome.runtime.sendMessage === "function"
+    ) {
+      return new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage(
+          { type: "hwc-chat-request", serverUrl, payload },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              reject(new Error(chrome.runtime.lastError.message));
+              return;
+            }
+
+            if (!response) {
+              reject(new Error("No response from extension background."));
+              return;
+            }
+
+            if (!response.ok) {
+              reject(new Error(response.error || "Server error."));
+              return;
+            }
+
+            resolve(response.data);
+          },
+        );
+      });
+    }
+
     const response = await fetch(`${serverUrl}/api/chat`, {
       method: "POST",
       headers: {
