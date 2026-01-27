@@ -216,6 +216,21 @@ if (!existingWidget) {
 
   const messages = document.createElement("div");
   messages.className = "hwc-chat-messages";
+  const SCROLL_BOTTOM_THRESHOLD = 24;
+  let shouldAutoScroll = true;
+  const updateAutoScroll = () => {
+    const distanceFromBottom =
+      messages.scrollHeight - messages.scrollTop - messages.clientHeight;
+    shouldAutoScroll = distanceFromBottom <= SCROLL_BOTTOM_THRESHOLD;
+  };
+  const scrollToBottomIfNeeded = () => {
+    if (!shouldAutoScroll) {
+      return;
+    }
+    messages.scrollTop = messages.scrollHeight;
+  };
+  messages.addEventListener("scroll", updateAutoScroll, { passive: true });
+  updateAutoScroll();
 
   const form = document.createElement("form");
   form.className = "hwc-chat-form";
@@ -487,7 +502,7 @@ if (!existingWidget) {
       bubble.textContent = text;
     }
     messages.append(bubble);
-    messages.scrollTop = messages.scrollHeight;
+    scrollToBottomIfNeeded();
     return bubble;
   };
 
@@ -500,7 +515,7 @@ if (!existingWidget) {
       <span>Thinking...</span>
     `;
     messages.append(bubble);
-    messages.scrollTop = messages.scrollHeight;
+    scrollToBottomIfNeeded();
     return bubble;
   };
 
@@ -700,7 +715,7 @@ if (!existingWidget) {
     });
 
     messages.append(container);
-    messages.scrollTop = messages.scrollHeight;
+    scrollToBottomIfNeeded();
   };
 
   const updateAssistantBubble = (bubble, text) => {
@@ -959,7 +974,7 @@ if (!existingWidget) {
 
     form.append(label, question, options, customInput, errorText, submit);
     messages.append(form);
-    messages.scrollTop = messages.scrollHeight;
+    scrollToBottomIfNeeded();
 
     const updateCustomState = () => {
       const selected = form.querySelector(

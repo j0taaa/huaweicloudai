@@ -64,6 +64,7 @@ const TOOL_RESULT_COLLAPSE_THRESHOLD = 900;
 const TOOL_RESULT_COLLAPSE_LINES = 16;
 const INPUT_MIN_HEIGHT = 48;
 const INPUT_MAX_HEIGHT = 220;
+const SCROLL_BOTTOM_THRESHOLD = 48;
 const createConversationId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -139,11 +140,13 @@ export default function Home() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const summaryInFlightRef = useRef<Set<string>>(new Set());
   const credentialHydratedRef = useRef(false);
   const credentialResetSkipRef = useRef(true);
   const pendingResumeRef = useRef(false);
   const inferenceHydratedRef = useRef(false);
+  const shouldAutoScrollRef = useRef(true);
 
   const activeConversation = useMemo(() => {
     if (!activeConversationId) return null;
@@ -187,6 +190,29 @@ export default function Home() {
     textarea.style.overflowY =
       scrollHeight > INPUT_MAX_HEIGHT ? "auto" : "hidden";
   }, [input]);
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const updateAutoScroll = () => {
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      shouldAutoScrollRef.current = distanceFromBottom <= SCROLL_BOTTOM_THRESHOLD;
+    };
+
+    updateAutoScroll();
+    container.addEventListener("scroll", updateAutoScroll, { passive: true });
+    return () => {
+      container.removeEventListener("scroll", updateAutoScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container || !shouldAutoScrollRef.current) return;
+    container.scrollTop = container.scrollHeight;
+  }, [messages, isLoading, pendingChoice, hasRunningToolCalls]);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
@@ -1244,7 +1270,10 @@ export default function Home() {
           </button>
         </header>
         <section className="flex h-full flex-1 flex-col gap-6 bg-white px-4 py-5 shadow-sm dark:bg-zinc-950 sm:px-6 sm:py-6">
-          <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
+          <div
+            className="flex flex-1 flex-col gap-4 overflow-y-auto"
+            ref={messagesContainerRef}
+          >
             {messages.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-6 text-sm text-zinc-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500">
