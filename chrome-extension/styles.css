@@ -41,7 +41,10 @@
 
 .hwc-chat-panel {
   width: 320px;
-  max-height: 580px;
+  height: 520px;
+  max-height: 80vh;
+  min-width: 260px;
+  min-height: 360px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -50,7 +53,9 @@
   background: #ffffff;
   box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
   border: 1px solid rgba(148, 163, 184, 0.35);
-  overflow-x: hidden;
+  overflow: hidden;
+  resize: both;
+  box-sizing: border-box;
 }
 
 .hwc-chat-hidden {
