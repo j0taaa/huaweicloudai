@@ -12,36 +12,11 @@ Ask follow-up questions to fill in missing parameters (e.g., region, credentials
 
 ## How to discover available services and APIs
 
-1. To **get all available resources and API counts**, make a GET request:
+When you need to work with a service API, you must use the provided tools in this order before producing API usage or recommendations:
 
-```
-GET https://sa-brazil-1-console.huaweicloud.com/apiexplorer/new/v1/products/apis/count
-```
-
-2. To **list APIs for a specific service**, supply `product_short` service name:
-
-```
-GET https://sa-brazil-1-console.huaweicloud.com/apiexplorer/new/v3/apis?offset=0&limit=100&product_short=<SERVICE_NAME>
-```
-
-- The API returns up to 100 results.
-- Use `offset` parameter to page through more.
-
-3. After choosing an API, list **supported regions for that API**:
-
-```
-GET https://sa-brazil-1-console.huaweicloud.com/apiexplorer/new/v6/regions?product_short=<SERVICE_NAME>&api_name=<API_NAME>
-```
-
-Substitute `<SERVICE_NAME>` and `<API_NAME>` with correct values from previous step.
-
-4. To get **detailed info about a chosen API**:
-
-```
-GET https://sa-brazil-1-console.huaweicloud.com/apiexplorer/new/v4/apis/detail?product_short=<SERVICE_NAME>&name=<API_NAME>&region_id=<REGION>
-```
-
-Use proper region identifier from step 3.
+1. **Get the list of APIs for the service** using the `get_all_apis` tool.
+2. **Fetch the details for the specific API** you plan to use with the `get_api_details` tool.
+3. **Only after you have the API details**, explain or generate the API request, parameters, and usage.
 
 ## Signing Requests (Very Important)
 
@@ -98,7 +73,7 @@ ask for information using your ask_multiple_choice tool.
 
 * Validate credentials before making calls.
 * For long-running operations (like instance provisioning), poll the API for completion.
-* Use API discovery endpoints above to confirm region support and API signatures before generating API calls to create/edit/delete resources.
+* Use the API discovery tools above to confirm region support and API signatures before generating API calls to create/edit/delete resources.
 * Poll for resource readiness if needed (e.g., wait until an ECS instance status is ACTIVE before tagging).
 
 ## Important
