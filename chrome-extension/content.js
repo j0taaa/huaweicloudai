@@ -256,8 +256,21 @@ if (!existingWidget) {
 
   form.append(input, sendButton);
   panel.append(header, credentials, messages, form);
+
+  const resizeDirections = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+  const resizeHandles = resizeDirections.map((direction) => {
+    const handle = document.createElement("div");
+    handle.className = "hwc-chat-resize-handle";
+    handle.dataset.direction = direction;
+    return handle;
+  });
+  panel.append(...resizeHandles);
   widget.append(toggleButton, panel);
   document.body.append(widget);
+
+  widget.style.right = "auto";
+  widget.style.left = "16px";
+  widget.style.top = "16px";
 
   const hasChromeStorage =
     typeof chrome !== "undefined" &&
@@ -312,6 +325,197 @@ if (!existingWidget) {
   let activeAbortController = null;
   let activeRequestId = 0;
   let activeAssistantBubble = null;
+  let skipToggleClick = false;
+
+  const clampValue = (value, min, max) => Math.min(Math.max(value, min), max);
+  const getPanelConstraints = () => {
+    const style = window.getComputedStyle(panel);
+    return {
+      minWidth: Number.parseFloat(style.minWidth) || 260,
+      minHeight: Number.parseFloat(style.minHeight) || 360,
+    };
+  };
+  const setWidgetPosition = ({ left, top }) => {
+    widget.style.left = `${left}px`;
+    widget.style.top = `${top}px`;
+  };
+  const positionWidgetToRight = () => {
+    const panelRect = panel.getBoundingClientRect();
+    const padding = 16;
+    const left = Math.max(
+      padding,
+      window.innerWidth - panelRect.width - padding,
+    );
+    setWidgetPosition({ left, top: padding });
+  };
+  const ensureWidgetOnScreen = () => {
+    const panelRect = panel.getBoundingClientRect();
+    const padding = 16;
+    let left = panelRect.left;
+    let top = panelRect.top;
+    left = clampValue(
+      left,
+      padding,
+      window.innerWidth - panelRect.width - padding,
+    );
+    top = clampValue(
+      top,
+      padding,
+      window.innerHeight - panelRect.height - padding,
+    );
+    setWidgetPosition({ left, top });
+  };
+
+  requestAnimationFrame(positionWidgetToRight);
+  window.addEventListener("resize", ensureWidgetOnScreen);
+
+  let activeResize = null;
+  const handleResizeMove = (event) => {
+    if (!activeResize) {
+      return;
+    }
+    const { direction, startX, startY, startRect, minWidth, minHeight } =
+      activeResize;
+    const deltaX = event.clientX - startX;
+    const deltaY = event.clientY - startY;
+    const padding = 16;
+    const maxWidth = window.innerWidth - padding * 2;
+    const maxHeight = window.innerHeight - padding * 2;
+    const startRight = startRect.right;
+    const startBottom = startRect.bottom;
+    let newWidth = startRect.width;
+    let newHeight = startRect.height;
+    let newLeft = startRect.left;
+    let newTop = startRect.top;
+
+    if (direction.includes("e")) {
+      newWidth = startRect.width + deltaX;
+    }
+    if (direction.includes("s")) {
+      newHeight = startRect.height + deltaY;
+    }
+    if (direction.includes("w")) {
+      newWidth = startRect.width - deltaX;
+      newLeft = startRight - newWidth;
+    }
+    if (direction.includes("n")) {
+      newHeight = startRect.height - deltaY;
+      newTop = startBottom - newHeight;
+    }
+
+    newWidth = clampValue(newWidth, minWidth, maxWidth);
+    newHeight = clampValue(newHeight, minHeight, maxHeight);
+
+    if (direction.includes("w")) {
+      newLeft = startRight - newWidth;
+    }
+    if (direction.includes("n")) {
+      newTop = startBottom - newHeight;
+    }
+
+    if (newLeft < padding) {
+      newLeft = padding;
+      if (direction.includes("w")) {
+        newWidth = startRight - newLeft;
+      }
+    }
+    if (newTop < padding) {
+      newTop = padding;
+      if (direction.includes("n")) {
+        newHeight = startBottom - newTop;
+      }
+    }
+
+    if (newLeft + newWidth > window.innerWidth - padding) {
+      if (direction.includes("e")) {
+        newWidth = window.innerWidth - padding - newLeft;
+      } else {
+        newLeft = window.innerWidth - padding - newWidth;
+      }
+    }
+
+    if (newTop + newHeight > window.innerHeight - padding) {
+      if (direction.includes("s")) {
+        newHeight = window.innerHeight - padding - newTop;
+      } else {
+        newTop = window.innerHeight - padding - newHeight;
+      }
+    }
+
+    panel.style.width = `${newWidth}px`;
+    panel.style.height = `${newHeight}px`;
+    setWidgetPosition({ left: newLeft, top: newTop });
+  };
+  const stopResize = () => {
+    activeResize = null;
+    window.removeEventListener("pointermove", handleResizeMove);
+    window.removeEventListener("pointerup", stopResize);
+  };
+  const startResize = (event) => {
+    event.preventDefault();
+    const direction = event.currentTarget.dataset.direction;
+    const rect = panel.getBoundingClientRect();
+    const { minWidth, minHeight } = getPanelConstraints();
+    activeResize = {
+      direction,
+      startX: event.clientX,
+      startY: event.clientY,
+      startRect: rect,
+      minWidth,
+      minHeight,
+    };
+    window.addEventListener("pointermove", handleResizeMove);
+    window.addEventListener("pointerup", stopResize);
+  };
+  resizeHandles.forEach((handle) => {
+    handle.addEventListener("pointerdown", startResize);
+  });
+
+  let dragState = null;
+  const handleToggleMove = (event) => {
+    if (!dragState) {
+      return;
+    }
+    const deltaX = event.clientX - dragState.startX;
+    const deltaY = event.clientY - dragState.startY;
+    if (Math.abs(deltaX) + Math.abs(deltaY) > 3) {
+      skipToggleClick = true;
+    }
+    const padding = 16;
+    const toggleRect = toggleButton.getBoundingClientRect();
+    const left = clampValue(
+      dragState.startLeft + deltaX,
+      padding,
+      window.innerWidth - toggleRect.width - padding,
+    );
+    const top = clampValue(
+      dragState.startTop + deltaY,
+      padding,
+      window.innerHeight - toggleRect.height - padding,
+    );
+    setWidgetPosition({ left, top });
+  };
+  const stopToggleMove = () => {
+    dragState = null;
+    window.removeEventListener("pointermove", handleToggleMove);
+    window.removeEventListener("pointerup", stopToggleMove);
+  };
+  toggleButton.addEventListener("pointerdown", (event) => {
+    if (!panel.classList.contains("hwc-chat-hidden")) {
+      return;
+    }
+    event.preventDefault();
+    const rect = widget.getBoundingClientRect();
+    dragState = {
+      startX: event.clientX,
+      startY: event.clientY,
+      startLeft: rect.left,
+      startTop: rect.top,
+    };
+    skipToggleClick = false;
+    window.addEventListener("pointermove", handleToggleMove);
+    window.addEventListener("pointerup", stopToggleMove);
+  });
 
   const updateFormState = () => {
     const isBusy = isSending || hasRunningToolCalls;
@@ -1253,9 +1457,16 @@ if (!existingWidget) {
   };
 
   toggleButton.addEventListener("click", () => {
+    if (skipToggleClick) {
+      skipToggleClick = false;
+      return;
+    }
     panel.classList.toggle("hwc-chat-hidden");
     const isOpen = !panel.classList.contains("hwc-chat-hidden");
     toggleButton.setAttribute("aria-expanded", `${isOpen}`);
+    if (isOpen) {
+      ensureWidgetOnScreen();
+    }
     if (isOpen) {
       input.focus();
     }
