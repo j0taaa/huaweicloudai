@@ -54,8 +54,9 @@
   box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
   border: 1px solid rgba(148, 163, 184, 0.35);
   overflow: hidden;
-  resize: both;
+  resize: none;
   box-sizing: border-box;
+  position: relative;
 }
 
 .hwc-chat-hidden {
@@ -298,14 +299,15 @@
 }
 
 .hwc-chat-messages {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 120px;
-  max-height: 240px;
+  max-height: none;
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-height: 0;
 }
 
 .hwc-chat-bubble {
@@ -425,6 +427,7 @@
 .hwc-chat-form {
   display: flex;
   gap: 8px;
+  margin-top: auto;
 }
 
 .hwc-chat-message {
@@ -436,9 +439,10 @@
 
 .hwc-chat-send {
   border: none;
-  border-radius: 999px;
+  border-radius: 50%;
   height: 36px;
   width: 36px;
+  aspect-ratio: 1 / 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -723,4 +727,74 @@
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
   border: 0;
+}
+
+.hwc-chat-resize-handle {
+  position: absolute;
+  z-index: 5;
+  background: transparent;
+}
+
+.hwc-chat-resize-handle[data-direction="n"] {
+  top: -6px;
+  left: 18px;
+  right: 18px;
+  height: 12px;
+  cursor: n-resize;
+}
+
+.hwc-chat-resize-handle[data-direction="s"] {
+  bottom: -6px;
+  left: 18px;
+  right: 18px;
+  height: 12px;
+  cursor: s-resize;
+}
+
+.hwc-chat-resize-handle[data-direction="e"] {
+  top: 18px;
+  bottom: 18px;
+  right: -6px;
+  width: 12px;
+  cursor: e-resize;
+}
+
+.hwc-chat-resize-handle[data-direction="w"] {
+  top: 18px;
+  bottom: 18px;
+  left: -6px;
+  width: 12px;
+  cursor: w-resize;
+}
+
+.hwc-chat-resize-handle[data-direction="ne"] {
+  top: -6px;
+  right: -6px;
+  width: 14px;
+  height: 14px;
+  cursor: ne-resize;
+}
+
+.hwc-chat-resize-handle[data-direction="nw"] {
+  top: -6px;
+  left: -6px;
+  width: 14px;
+  height: 14px;
+  cursor: nw-resize;
+}
+
+.hwc-chat-resize-handle[data-direction="se"] {
+  bottom: -6px;
+  right: -6px;
+  width: 14px;
+  height: 14px;
+  cursor: se-resize;
+}
+
+.hwc-chat-resize-handle[data-direction="sw"] {
+  bottom: -6px;
+  left: -6px;
+  width: 14px;
+  height: 14px;
+  cursor: sw-resize;
 }
