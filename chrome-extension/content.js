@@ -300,6 +300,7 @@ if (!existingWidget) {
   const PROJECT_IDS_STORAGE_KEY = "projectIds";
   const INFERENCE_MODE_STORAGE_KEY = "inferenceMode";
   const INFERENCE_SETTINGS_STORAGE_KEY = "inferenceSettings";
+  const WIDGET_POSITION_STORAGE_KEY = "widgetPosition";
   const chatHistory = [];
   let isSending = false;
   let hasRunningToolCalls = false;
@@ -332,6 +333,14 @@ if (!existingWidget) {
     widget.style.left = `${left}px`;
     widget.style.top = `${top}px`;
   };
+  const getWidgetPosition = () => {
+    const rect = widget.getBoundingClientRect();
+    return { left: rect.left, top: rect.top };
+  };
+  const saveWidgetPosition = () =>
+    storageSet({
+      [WIDGET_POSITION_STORAGE_KEY]: JSON.stringify(getWidgetPosition()),
+    });
   const setPanelOffset = (offset) => {
     panel.style.setProperty("--hwc-panel-offset", `${offset}px`);
   };
@@ -376,7 +385,6 @@ if (!existingWidget) {
     setWidgetPosition({ left, top });
   };
 
-  requestAnimationFrame(positionWidgetToRight);
   window.addEventListener("resize", () => {
     ensureWidgetOnScreen();
     updatePanelOffset();
@@ -461,6 +469,9 @@ if (!existingWidget) {
     updatePanelOffset();
   };
   const stopResize = () => {
+    if (activeResize) {
+      saveWidgetPosition();
+    }
     activeResize = null;
     window.removeEventListener("pointermove", handleResizeMove);
     window.removeEventListener("pointerup", stopResize);
@@ -509,6 +520,9 @@ if (!existingWidget) {
     setWidgetPosition({ left, top });
   };
   const stopToggleMove = () => {
+    if (dragState) {
+      saveWidgetPosition();
+    }
     dragState = null;
     window.removeEventListener("pointermove", handleToggleMove);
     window.removeEventListener("pointerup", stopToggleMove);
@@ -1471,12 +1485,19 @@ if (!existingWidget) {
       skipToggleClick = false;
       return;
     }
+    const buttonRect = toggleButton.getBoundingClientRect();
     panel.classList.toggle("hwc-chat-hidden");
     const isOpen = !panel.classList.contains("hwc-chat-hidden");
     toggleButton.setAttribute("aria-expanded", `${isOpen}`);
     requestAnimationFrame(() => {
+      const newButtonRect = toggleButton.getBoundingClientRect();
+      const widgetRect = widget.getBoundingClientRect();
+      const left = widgetRect.left + (buttonRect.left - newButtonRect.left);
+      const top = widgetRect.top + (buttonRect.top - newButtonRect.top);
+      setWidgetPosition({ left, top });
       updatePanelOffset();
       ensureWidgetOnScreen({ preserveHorizontal: true });
+      saveWidgetPosition();
       if (isOpen) {
         input.focus();
       }
@@ -1701,6 +1722,7 @@ if (!existingWidget) {
     PROJECT_IDS_STORAGE_KEY,
     INFERENCE_MODE_STORAGE_KEY,
     INFERENCE_SETTINGS_STORAGE_KEY,
+    WIDGET_POSITION_STORAGE_KEY,
   ]).then((values) => {
     if (typeof values.accessKey === "string") {
       accessKeyInput.value = values.accessKey;
@@ -1738,11 +1760,32 @@ if (!existingWidget) {
         inferenceSettings = { baseUrl: "", model: "", apiKey: "" };
       }
     }
+    let restoredWidgetPosition = false;
+    if (typeof values[WIDGET_POSITION_STORAGE_KEY] === "string") {
+      try {
+        const parsed = JSON.parse(values[WIDGET_POSITION_STORAGE_KEY]);
+        if (
+          typeof parsed?.left === "number" &&
+          typeof parsed?.top === "number"
+        ) {
+          setWidgetPosition({ left: parsed.left, top: parsed.top });
+          restoredWidgetPosition = true;
+        }
+      } catch {
+        restoredWidgetPosition = false;
+      }
+    }
+    if (!restoredWidgetPosition) {
+      positionWidgetToRight();
+    }
     inferenceBaseUrlInput.value = inferenceSettings.baseUrl;
     inferenceModelInput.value = inferenceSettings.model;
     inferenceApiKeyInput.value = inferenceSettings.apiKey;
     setInferenceMode(inferenceMode);
     activeServerUrl = serverUrlInput.value;
     updateSaveButton();
+    ensureWidgetOnScreen();
+    updatePanelOffset();
+    saveWidgetPosition();
   });
 }
