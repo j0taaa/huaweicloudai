@@ -13,21 +13,13 @@ if (!existingWidget) {
   toggleButton.innerHTML = `
     <span class="hwc-chat-toggle-icon" aria-hidden="true">
       <svg viewBox="0 0 24 24" focusable="false">
-        <defs>
-          <linearGradient id="hwc-ai-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#7c3aed" />
-            <stop offset="50%" stop-color="#2563eb" />
-            <stop offset="100%" stop-color="#06b6d4" />
-          </linearGradient>
-        </defs>
         <path
-          d="M12 2l1.8 4.7L19 8.2l-4 3.6 1.2 5.1L12 14.6 7.8 16.9 9 11.8 5 8.2l5.2-1.5L12 2z"
-          fill="url(#hwc-ai-gradient)"
+          d="M7.5 18.5c-2 0-3.5-1.5-3.5-3.5V8.5C4 6.5 5.5 5 7.5 5h9c2 0 3.5 1.5 3.5 3.5V15c0 2-1.5 3.5-3.5 3.5h-4.2l-2.8 2c-.8.6-1.8 0-1.8-1v-1.5H7.5z"
+          fill="currentColor"
         />
         <path
-          d="M12 6.5l.9 2.2 2.4.7-1.8 1.6.6 2.3L12 12.2 9.9 13.3l.6-2.3-1.8-1.6 2.4-.7L12 6.5z"
-          fill="#fff"
-          opacity="0.7"
+          d="M9.2 9.8l.5 1.2 1.3.4-1 .9.3 1.3-1.1-.7-1.1.7.3-1.3-1-.9 1.3-.4.5-1.2zm5.6-1.8l.6 1.5 1.6.5-1.2 1.1.4 1.6-1.4-.9-1.4.9.4-1.6-1.2-1.1 1.6-.5.6-1.5z"
+          fill="#e0f2fe"
         />
       </svg>
     </span>
@@ -340,6 +332,23 @@ if (!existingWidget) {
     widget.style.left = `${left}px`;
     widget.style.top = `${top}px`;
   };
+  const setPanelOffset = (offset) => {
+    panel.style.setProperty("--hwc-panel-offset", `${offset}px`);
+  };
+  const updatePanelOffset = () => {
+    if (panel.classList.contains("hwc-chat-hidden")) {
+      setPanelOffset(0);
+      return;
+    }
+    setPanelOffset(0);
+    const panelRect = panel.getBoundingClientRect();
+    const minOffset = widgetPadding - panelRect.left;
+    const maxOffset = window.innerWidth - widgetPadding - panelRect.right;
+    const lowerBound = Math.min(minOffset, maxOffset);
+    const upperBound = Math.max(minOffset, maxOffset);
+    const offset = clampValue(0, lowerBound, upperBound);
+    setPanelOffset(offset);
+  };
   const positionWidgetToRight = () => {
     const widgetRect = widget.getBoundingClientRect();
     const left = Math.max(
@@ -348,15 +357,17 @@ if (!existingWidget) {
     );
     setWidgetPosition({ left, top: widgetPadding });
   };
-  const ensureWidgetOnScreen = () => {
+  const ensureWidgetOnScreen = ({ preserveHorizontal = false } = {}) => {
     const widgetRect = widget.getBoundingClientRect();
     let left = widgetRect.left;
     let top = widgetRect.top;
-    left = clampValue(
-      left,
-      widgetPadding,
-      window.innerWidth - widgetRect.width - widgetPadding,
-    );
+    if (!preserveHorizontal) {
+      left = clampValue(
+        left,
+        widgetPadding,
+        window.innerWidth - widgetRect.width - widgetPadding,
+      );
+    }
     top = clampValue(
       top,
       widgetPadding,
@@ -364,23 +375,12 @@ if (!existingWidget) {
     );
     setWidgetPosition({ left, top });
   };
-  const repositionWidgetFromToggle = (toggleRect) => {
-    const widgetRect = widget.getBoundingClientRect();
-    const left = clampValue(
-      toggleRect.right - widgetRect.width,
-      widgetPadding,
-      window.innerWidth - widgetRect.width - widgetPadding,
-    );
-    const top = clampValue(
-      toggleRect.top,
-      widgetPadding,
-      window.innerHeight - widgetRect.height - widgetPadding,
-    );
-    setWidgetPosition({ left, top });
-  };
 
   requestAnimationFrame(positionWidgetToRight);
-  window.addEventListener("resize", ensureWidgetOnScreen);
+  window.addEventListener("resize", () => {
+    ensureWidgetOnScreen();
+    updatePanelOffset();
+  });
 
   let activeResize = null;
   const handleResizeMove = (event) => {
@@ -458,6 +458,7 @@ if (!existingWidget) {
     panel.style.width = `${newWidth}px`;
     panel.style.height = `${newHeight}px`;
     setWidgetPosition({ left: newLeft, top: newTop });
+    updatePanelOffset();
   };
   const stopResize = () => {
     activeResize = null;
@@ -1470,13 +1471,12 @@ if (!existingWidget) {
       skipToggleClick = false;
       return;
     }
-    const toggleRect = toggleButton.getBoundingClientRect();
     panel.classList.toggle("hwc-chat-hidden");
     const isOpen = !panel.classList.contains("hwc-chat-hidden");
     toggleButton.setAttribute("aria-expanded", `${isOpen}`);
     requestAnimationFrame(() => {
-      repositionWidgetFromToggle(toggleRect);
-      ensureWidgetOnScreen();
+      updatePanelOffset();
+      ensureWidgetOnScreen({ preserveHorizontal: true });
       if (isOpen) {
         input.focus();
       }
