@@ -241,9 +241,18 @@ if (!existingWidget) {
   input.rows = 1;
 
   const sendButton = document.createElement("button");
-  sendButton.type = "submit";
   sendButton.className = "hwc-chat-send";
-  sendButton.textContent = "Send";
+  const sendIconMarkup = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M12 19V5" />
+      <path d="m5 12 7-7 7 7" />
+    </svg>
+  `;
+  const stopIconMarkup = `
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+    </svg>
+  `;
 
   form.append(input, sendButton);
   panel.append(header, credentials, messages, form);
@@ -288,6 +297,7 @@ if (!existingWidget) {
   const INFERENCE_SETTINGS_STORAGE_KEY = "inferenceSettings";
   const chatHistory = [];
   let isSending = false;
+  let hasRunningToolCalls = false;
   let pendingChoice = null;
   let pendingChoiceForm = null;
   let activeServerUrl = DEFAULT_SERVER_URL;
@@ -299,6 +309,51 @@ if (!existingWidget) {
     apiKey: "",
   };
   const toolCards = new Map();
+  let activeAbortController = null;
+  let activeRequestId = 0;
+  let activeAssistantBubble = null;
+
+  const updateFormState = () => {
+    const isBusy = isSending || hasRunningToolCalls;
+    const hasText = Boolean(input.value.trim());
+    input.disabled = isBusy || Boolean(pendingChoice);
+    sendButton.disabled = (!isBusy && !hasText) || Boolean(pendingChoice);
+    sendButton.type = isBusy ? "button" : "submit";
+    sendButton.setAttribute(
+      "aria-label",
+      isBusy ? "Cancel response" : "Send message",
+    );
+    sendButton.innerHTML = isBusy ? stopIconMarkup : sendIconMarkup;
+  };
+
+  const startRequest = () => {
+    activeRequestId += 1;
+    if (activeAbortController) {
+      activeAbortController.abort();
+    }
+    activeAbortController = new AbortController();
+    return { requestId: activeRequestId, signal: activeAbortController.signal };
+  };
+
+  const cancelActiveRequest = () => {
+    if (!isSending && !hasRunningToolCalls) {
+      return;
+    }
+    if (activeAbortController) {
+      activeAbortController.abort();
+    }
+    activeRequestId += 1;
+    isSending = false;
+    hasRunningToolCalls = false;
+    if (activeAssistantBubble) {
+      finalizeAssistantBubble(activeAssistantBubble, "Response stopped.");
+      activeAssistantBubble = null;
+    }
+    setStatus("Stopped", "neutral");
+    updateFormState();
+  };
+
+  updateFormState();
 
   const updateSaveButton = () => {
     const hasValues =
@@ -740,16 +795,38 @@ if (!existingWidget) {
     }
   };
 
-  const requestServer = async (serverUrl, endpoint, payload) => {
+  const requestServer = async (serverUrl, endpoint, payload, { signal } = {}) => {
     if (
       typeof chrome !== "undefined" &&
       chrome.runtime &&
       typeof chrome.runtime.sendMessage === "function"
     ) {
       return new Promise((resolve, reject) => {
+        if (signal?.aborted) {
+          reject(new Error("Request cancelled."));
+          return;
+        }
+        let settled = false;
+        const handleAbort = () => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          reject(new Error("Request cancelled."));
+        };
+        if (signal) {
+          signal.addEventListener("abort", handleAbort, { once: true });
+        }
         chrome.runtime.sendMessage(
           { type: "hwc-chat-request", serverUrl, endpoint, payload },
           (response) => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            if (signal) {
+              signal.removeEventListener("abort", handleAbort);
+            }
             if (chrome.runtime.lastError) {
               reject(new Error(chrome.runtime.lastError.message));
               return;
@@ -777,6 +854,7 @@ if (!existingWidget) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
+      signal,
     });
 
     if (!response.ok) {
@@ -787,7 +865,10 @@ if (!existingWidget) {
     return response.json();
   };
 
-  const sendMessages = async (messagesToSend, { allowFallback = true } = {}) => {
+  const sendMessages = async (
+    messagesToSend,
+    { allowFallback = true, signal } = {},
+  ) => {
     const trimmedAccessKey = accessKeyInput.value.trim();
     const trimmedSecretKey = secretKeyInput.value.trim();
     const serverUrl = normalizeServerUrl(activeServerUrl);
@@ -810,12 +891,19 @@ if (!existingWidget) {
     };
 
     try {
-      const data = await requestServer(serverUrl, "/api/chat", payload);
+      const data = await requestServer(serverUrl, "/api/chat", payload, {
+        signal,
+      });
       return { data, usedFallback: false, serverUrl };
     } catch (error) {
+      if (error instanceof Error && error.message === "Request cancelled.") {
+        throw error;
+      }
       if (allowFallback && /^https:\/\//i.test(serverUrl)) {
         const fallbackUrl = serverUrl.replace(/^https:\/\//i, "http://");
-        const data = await requestServer(fallbackUrl, "/api/chat", payload);
+        const data = await requestServer(fallbackUrl, "/api/chat", payload, {
+          signal,
+        });
         serverUrlInput.value = fallbackUrl;
         activeServerUrl = fallbackUrl;
         storageSet({ serverUrl: fallbackUrl });
@@ -845,7 +933,7 @@ if (!existingWidget) {
     }
   };
 
-  const executeEvalTool = async (toolCall) => {
+  const executeEvalTool = async (toolCall, { signal } = {}) => {
     const payload = parseToolPayload(toolCall);
     if (payload.error) {
       return {
@@ -856,9 +944,12 @@ if (!existingWidget) {
     }
 
     try {
-      const data = await requestServer(activeServerUrl, "/api/eval", {
-        code: payload.code,
-      });
+      const data = await requestServer(
+        activeServerUrl,
+        "/api/eval",
+        { code: payload.code },
+        { signal },
+      );
       return {
         role: "tool",
         content:
@@ -876,11 +967,11 @@ if (!existingWidget) {
     }
   };
 
-  const runToolCalls = async (toolCalls) => {
+  const runToolCalls = async (toolCalls, { signal } = {}) => {
     return Promise.all(
       toolCalls.map(async (toolCall) => {
         if (toolCall.function?.name === "eval_code") {
-          return executeEvalTool(toolCall);
+          return executeEvalTool(toolCall, { signal });
         }
 
         return {
@@ -898,8 +989,7 @@ if (!existingWidget) {
       pendingChoiceForm = null;
     }
     pendingChoice = null;
-    input.disabled = false;
-    sendButton.disabled = false;
+    updateFormState();
   };
 
   const renderMultipleChoice = (toolCall, payload) => {
@@ -1014,9 +1104,9 @@ if (!existingWidget) {
         }
       }
 
+      const { requestId, signal } = startRequest();
       isSending = true;
-      sendButton.disabled = true;
-      input.disabled = true;
+      updateFormState();
       setStatus("Sending tool response...", "loading");
 
       const toolMessage = {
@@ -1030,37 +1120,52 @@ if (!existingWidget) {
       clearPendingChoice();
 
       const assistantBubble = renderThinkingBubble();
+      activeAssistantBubble = assistantBubble;
 
       try {
         const { data } = await sendMessages(chatHistory, {
           allowFallback: false,
+          signal,
         });
-        await handleResponse(data, assistantBubble);
+        if (requestId !== activeRequestId) {
+          return;
+        }
+        await handleResponse(data, assistantBubble, requestId);
         setStatus("Connected", "success");
       } catch (error) {
+        if (requestId !== activeRequestId) {
+          return;
+        }
+        if (error instanceof Error && error.message === "Request cancelled.") {
+          return;
+        }
         finalizeAssistantBubble(
           assistantBubble,
           error instanceof Error ? error.message : "Unable to reach server.",
         );
         setStatus("Connection failed", "error");
       } finally {
-        isSending = false;
-        sendButton.disabled = false;
-        input.disabled = false;
+        if (requestId === activeRequestId) {
+          isSending = false;
+          activeAssistantBubble = null;
+          updateFormState();
+        }
       }
     });
 
     pendingChoiceForm = form;
     pendingChoice = { toolCall, payload };
-    input.disabled = true;
-    sendButton.disabled = true;
+    updateFormState();
   };
 
-  const handleResponse = async (response, assistantBubble) => {
+  const handleResponse = async (response, assistantBubble, requestId) => {
     let currentResponse = response;
     let activeBubble = assistantBubble;
 
     while (true) {
+      if (requestId !== activeRequestId) {
+        return;
+      }
       const reply = currentResponse?.reply?.trim() ?? "";
       const toolCalls = currentResponse?.toolCalls ?? [];
 
@@ -1098,7 +1203,14 @@ if (!existingWidget) {
       );
 
       if (nonChoiceCalls.length > 0) {
-        const toolMessages = await runToolCalls(nonChoiceCalls);
+        hasRunningToolCalls = true;
+        updateFormState();
+        const toolMessages = await runToolCalls(nonChoiceCalls, {
+          signal: activeAbortController?.signal,
+        });
+        if (requestId !== activeRequestId) {
+          return;
+        }
         toolMessages.forEach((toolMessage) => {
           chatHistory.push(toolMessage);
           const isError =
@@ -1110,6 +1222,8 @@ if (!existingWidget) {
             isError ? "error" : "complete",
           );
         });
+        hasRunningToolCalls = false;
+        updateFormState();
       }
 
       if (multipleChoiceCall) {
@@ -1130,7 +1244,10 @@ if (!existingWidget) {
       }
 
       activeBubble = renderThinkingBubble();
-      const { data } = await sendMessages(chatHistory, { allowFallback: false });
+      const { data } = await sendMessages(chatHistory, {
+        allowFallback: false,
+        signal: activeAbortController?.signal,
+      });
       currentResponse = data;
     }
   };
@@ -1149,14 +1266,17 @@ if (!existingWidget) {
     messages.innerHTML = "";
     toolCards.clear();
     clearPendingChoice();
+    hasRunningToolCalls = false;
+    isSending = false;
     setStatus("Ready to connect");
     input.value = "";
     input.style.height = "auto";
     input.focus();
+    updateFormState();
   };
 
   newChatButton.addEventListener("click", () => {
-    if (isSending) {
+    if (isSending || hasRunningToolCalls) {
       return;
     }
     resetConversation();
@@ -1232,6 +1352,7 @@ if (!existingWidget) {
 
   input.addEventListener("input", () => {
     resizeInput();
+    updateFormState();
   });
 
   input.addEventListener("keydown", (event) => {
@@ -1241,9 +1362,16 @@ if (!existingWidget) {
     }
   });
 
+  sendButton.addEventListener("click", (event) => {
+    if (isSending || hasRunningToolCalls) {
+      event.preventDefault();
+      cancelActiveRequest();
+    }
+  });
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (isSending || pendingChoice) {
+    if (isSending || hasRunningToolCalls || pendingChoice) {
       return;
     }
 
@@ -1260,33 +1388,48 @@ if (!existingWidget) {
     input.focus();
 
     const assistantBubble = renderThinkingBubble();
+    activeAssistantBubble = assistantBubble;
+    const { requestId, signal } = startRequest();
 
     try {
       isSending = true;
-      sendButton.disabled = true;
+      updateFormState();
       setStatus("Connecting to server...", "loading");
 
       const { data, usedFallback, serverUrl } = await sendMessages(
         chatHistory,
         {
           allowFallback: true,
+          signal,
         },
       );
+      if (requestId !== activeRequestId) {
+        return;
+      }
       activeServerUrl = serverUrl;
-      await handleResponse(data, assistantBubble);
+      await handleResponse(data, assistantBubble, requestId);
       setStatus(
         usedFallback ? "Connected (HTTP fallback)" : "Connected",
         "success",
       );
     } catch (error) {
+      if (requestId !== activeRequestId) {
+        return;
+      }
+      if (error instanceof Error && error.message === "Request cancelled.") {
+        return;
+      }
       finalizeAssistantBubble(
         assistantBubble,
         error instanceof Error ? error.message : "Unable to reach server.",
       );
       setStatus("Connection failed", "error");
     } finally {
-      isSending = false;
-      sendButton.disabled = false;
+      if (requestId === activeRequestId) {
+        isSending = false;
+        activeAssistantBubble = null;
+        updateFormState();
+      }
     }
   });
 
