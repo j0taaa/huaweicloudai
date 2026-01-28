@@ -847,6 +847,20 @@ if (!existingWidget) {
       return { question: payload.question, options: payload.options };
     }
 
+    if (toolCall.function?.name === "get_all_apis") {
+      if (!payload.productShort) {
+        return { error: "Error: productShort is required for get_all_apis." };
+      }
+      return { productShort: payload.productShort, regionId: payload.regionId };
+    }
+
+    if (toolCall.function?.name === "get_api_details") {
+      if (!payload.productShort || !payload.action) {
+        return { error: "Error: productShort and action are required for get_api_details." };
+      }
+      return { productShort: payload.productShort, action: payload.action, regionId: payload.regionId };
+    }
+
     return {
       error: `Error: Unsupported tool payload for ${toolCall.function?.name}.`,
     };
@@ -866,6 +880,14 @@ if (!existingWidget) {
 
     if (toolCall.function.name === "eval_code") {
       return payload.code ? "Runs the provided code snippet." : "Runs code.";
+    }
+
+    if (toolCall.function.name === "get_all_apis") {
+      return payload.productShort ? `Lists all APIs for ${payload.productShort} service.` : "Lists all APIs for a service.";
+    }
+
+    if (toolCall.function.name === "get_api_details") {
+      return payload.productShort && payload.action ? `Gets details for ${payload.productShort} API: ${payload.action}.` : "Gets API details.";
     }
 
     return "Runs a tool with the provided arguments.";
@@ -1161,6 +1183,76 @@ if (!existingWidget) {
     }
   };
 
+  const executeGetAllApisTool = async (toolCall, { signal } = {}) => {
+    const payload = parseToolPayload(toolCall);
+    if (payload.error) {
+      return {
+        role: "tool",
+        content: payload.error,
+        tool_call_id: toolCall.id,
+      };
+    }
+
+    try {
+      const data = await requestServer(
+        activeServerUrl,
+        "/api/get-all-apis",
+        { productShort: payload.productShort, regionId: payload.regionId },
+        { signal },
+      );
+      const contentValue = data?.error ?? data?.result ?? "No result returned from server.";
+      const content = typeof contentValue === "string" ? contentValue : JSON.stringify(contentValue, null, 2);
+      return {
+        role: "tool",
+        content,
+        tool_call_id: toolCall.id,
+      };
+    } catch (error) {
+      return {
+        role: "tool",
+        content: `Error executing get_all_apis: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+        tool_call_id: toolCall.id,
+      };
+    }
+  };
+
+  const executeGetApiDetailsTool = async (toolCall, { signal } = {}) => {
+    const payload = parseToolPayload(toolCall);
+    if (payload.error) {
+      return {
+        role: "tool",
+        content: payload.error,
+        tool_call_id: toolCall.id,
+      };
+    }
+
+    try {
+      const data = await requestServer(
+        activeServerUrl,
+        "/api/get-api-details",
+        { productShort: payload.productShort, action: payload.action, regionId: payload.regionId },
+        { signal },
+      );
+      const contentValue = data?.error ?? data?.result ?? "No result returned from server.";
+      const content = typeof contentValue === "string" ? contentValue : JSON.stringify(contentValue, null, 2);
+      return {
+        role: "tool",
+        content,
+        tool_call_id: toolCall.id,
+      };
+    } catch (error) {
+      return {
+        role: "tool",
+        content: `Error executing get_api_details: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+        tool_call_id: toolCall.id,
+      };
+    }
+  };
+
   const executeEvalTool = async (toolCall, { signal } = {}) => {
     const payload = parseToolPayload(toolCall);
     if (payload.error) {
@@ -1200,6 +1292,14 @@ if (!existingWidget) {
       toolCalls.map(async (toolCall) => {
         if (toolCall.function?.name === "eval_code") {
           return executeEvalTool(toolCall, { signal });
+        }
+
+        if (toolCall.function?.name === "get_all_apis") {
+          return executeGetAllApisTool(toolCall, { signal });
+        }
+
+        if (toolCall.function?.name === "get_api_details") {
+          return executeGetApiDetailsTool(toolCall, { signal });
         }
 
         return {

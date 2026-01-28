@@ -267,6 +267,54 @@ export async function POST(request: Request) {
             },
           },
         },
+        {
+          type: "function",
+          function: {
+            name: "get_all_apis",
+            description:
+              "Get all available APIs for a Huawei Cloud service. Returns a list of API names and descriptions.",
+            parameters: {
+              type: "object",
+              properties: {
+                productShort: {
+                  type: "string",
+                  description: "The short name of the Huawei Cloud service (e.g., 'ECS', 'OBS', 'VPC').",
+                },
+                regionId: {
+                  type: "string",
+                  description: "The region ID (e.g., 'sa-brazil-1', 'cn-north-4'). Defaults to 'sa-brazil-1'.",
+                },
+              },
+              required: ["productShort"],
+            },
+          },
+        },
+        {
+          type: "function",
+          function: {
+            name: "get_api_details",
+            description:
+              "Get detailed information about a specific API including URL, HTTP method, parameters, and response format.",
+            parameters: {
+              type: "object",
+              properties: {
+                productShort: {
+                  type: "string",
+                  description: "The short name of the Huawei Cloud service (e.g., 'ECS', 'OBS', 'VPC').",
+                },
+                action: {
+                  type: "string",
+                  description: "The name of the API action (e.g., 'CreateServers', 'ListInstances').",
+                },
+                regionId: {
+                  type: "string",
+                  description: "The region ID (e.g., 'sa-brazil-1', 'cn-north-4'). Defaults to 'sa-brazil-1'.",
+                },
+              },
+              required: ["productShort", "action"],
+            },
+          },
+        },
       ],
       tool_choice: "auto",
     }),

@@ -29,6 +29,9 @@ type ToolPayload = {
   code?: string;
   question?: string;
   options?: string[];
+  productShort?: string;
+  action?: string;
+  regionId?: string;
   error?: string;
 };
 
@@ -439,7 +442,7 @@ export default function Home() {
   };
 
   const parseToolPayload = (toolCall: ToolCall): ToolPayload => {
-    let payload: { code?: string; question?: string; options?: string[] } = {};
+    let payload: { code?: string; question?: string; options?: string[]; productShort?: string; action?: string; regionId?: string } = {};
 
     try {
       payload = JSON.parse(toolCall.function.arguments || "{}") as {
@@ -471,6 +474,26 @@ export default function Home() {
       }
 
       return { question: payload.question, options: payload.options };
+    }
+
+    if (toolCall.function.name === "get_all_apis") {
+      if (!payload.productShort) {
+        return {
+          error: "Error: productShort is required for get_all_apis.",
+        };
+      }
+
+      return { productShort: payload.productShort, regionId: payload.regionId };
+    }
+
+    if (toolCall.function.name === "get_api_details") {
+      if (!payload.productShort || !payload.action) {
+        return {
+          error: "Error: productShort and action are required for get_api_details.",
+        };
+      }
+
+      return { productShort: payload.productShort, action: payload.action, regionId: payload.regionId };
     }
 
     return {
@@ -565,11 +588,111 @@ export default function Home() {
     }
   };
 
+  const executeGetAllApisTool = async (toolCall: ToolCall): Promise<ChatMessage> => {
+    const payload = parseToolPayload(toolCall);
+
+    if (payload.error) {
+      return {
+        role: "tool",
+        content: payload.error,
+        tool_call_id: toolCall.id,
+      };
+    }
+
+    try {
+      const response = await fetch("/api/get-all-apis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productShort: payload.productShort, regionId: payload.regionId }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          role: "tool",
+          content: errorText || "Error fetching APIs.",
+          tool_call_id: toolCall.id,
+        };
+      }
+
+      const data = (await response.json()) as { result?: unknown; error?: string };
+      const contentValue = data.error ?? data.result ?? "No result returned from server.";
+      const content = typeof contentValue === "string" ? contentValue : JSON.stringify(contentValue, null, 2);
+      return {
+        role: "tool",
+        content,
+        tool_call_id: toolCall.id,
+      };
+    } catch (error) {
+      return {
+        role: "tool",
+        content: `Error executing get_all_apis: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+        tool_call_id: toolCall.id,
+      };
+    }
+  };
+
+  const executeGetApiDetailsTool = async (toolCall: ToolCall): Promise<ChatMessage> => {
+    const payload = parseToolPayload(toolCall);
+
+    if (payload.error) {
+      return {
+        role: "tool",
+        content: payload.error,
+        tool_call_id: toolCall.id,
+      };
+    }
+
+    try {
+      const response = await fetch("/api/get-api-details", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productShort: payload.productShort, action: payload.action, regionId: payload.regionId }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          role: "tool",
+          content: errorText || "Error fetching API details.",
+          tool_call_id: toolCall.id,
+        };
+      }
+
+      const data = (await response.json()) as { result?: unknown; error?: string };
+      const contentValue = data.error ?? data.result ?? "No result returned from server.";
+      const content = typeof contentValue === "string" ? contentValue : JSON.stringify(contentValue, null, 2);
+      return {
+        role: "tool",
+        content,
+        tool_call_id: toolCall.id,
+      };
+    } catch (error) {
+      return {
+        role: "tool",
+        content: `Error executing get_api_details: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+        tool_call_id: toolCall.id,
+      };
+    }
+  };
+
   const runToolCalls = async (toolCalls: ToolCall[]) => {
     return Promise.all(
       toolCalls.map(async (toolCall) => {
         if (toolCall.function.name === "eval_code") {
           return executeEvalTool(toolCall);
+        }
+
+        if (toolCall.function.name === "get_all_apis") {
+          return executeGetAllApisTool(toolCall);
+        }
+
+        if (toolCall.function.name === "get_api_details") {
+          return executeGetApiDetailsTool(toolCall);
         }
 
         return {
@@ -1350,13 +1473,22 @@ export default function Home() {
                               const code = payload.code ?? "";
                               const isChoiceTool =
                                 toolCall.function.name === "ask_multiple_choice";
-                              const summary = payload.error
+                              let summary = payload.error
                                 ? "Unable to summarize tool details."
                                 : isChoiceTool
                                   ? `Asks the user: ${payload.question}`
                                   : summarizeCode(code);
+
+                              if (toolCall.function.name === "get_all_apis") {
+                                summary = payload.productShort ? `Lists all APIs for ${payload.productShort} service.` : "Lists all APIs for a service.";
+                              }
+
+                              if (toolCall.function.name === "get_api_details") {
+                                summary = payload.productShort && payload.action ? `Gets details for ${payload.productShort} API: ${payload.action}.` : "Gets API details.";
+                              }
+
                               const hasResult = toolResults.has(toolCall.id);
-                              const result = toolResults.get(toolCall.id) ?? "";
+                              const result = String(toolResults.get(toolCall.id) ?? "");
                               const resultLineCount = result.split("\n").length;
                               const shouldCollapseResult =
                                 result.length > TOOL_RESULT_COLLAPSE_THRESHOLD ||
