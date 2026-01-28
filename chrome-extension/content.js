@@ -328,6 +328,7 @@ if (!existingWidget) {
   let skipToggleClick = false;
 
   const clampValue = (value, min, max) => Math.min(Math.max(value, min), max);
+  const widgetPadding = 24;
   const getPanelConstraints = () => {
     const style = window.getComputedStyle(panel);
     return {
@@ -340,28 +341,40 @@ if (!existingWidget) {
     widget.style.top = `${top}px`;
   };
   const positionWidgetToRight = () => {
-    const panelRect = panel.getBoundingClientRect();
-    const padding = 16;
+    const widgetRect = widget.getBoundingClientRect();
     const left = Math.max(
-      padding,
-      window.innerWidth - panelRect.width - padding,
+      widgetPadding,
+      window.innerWidth - widgetRect.width - widgetPadding,
     );
-    setWidgetPosition({ left, top: padding });
+    setWidgetPosition({ left, top: widgetPadding });
   };
   const ensureWidgetOnScreen = () => {
-    const panelRect = panel.getBoundingClientRect();
-    const padding = 16;
-    let left = panelRect.left;
-    let top = panelRect.top;
+    const widgetRect = widget.getBoundingClientRect();
+    let left = widgetRect.left;
+    let top = widgetRect.top;
     left = clampValue(
       left,
-      padding,
-      window.innerWidth - panelRect.width - padding,
+      widgetPadding,
+      window.innerWidth - widgetRect.width - widgetPadding,
     );
     top = clampValue(
       top,
-      padding,
-      window.innerHeight - panelRect.height - padding,
+      widgetPadding,
+      window.innerHeight - widgetRect.height - widgetPadding,
+    );
+    setWidgetPosition({ left, top });
+  };
+  const repositionWidgetFromToggle = (toggleRect) => {
+    const widgetRect = widget.getBoundingClientRect();
+    const left = clampValue(
+      toggleRect.right - widgetRect.width,
+      widgetPadding,
+      window.innerWidth - widgetRect.width - widgetPadding,
+    );
+    const top = clampValue(
+      toggleRect.top,
+      widgetPadding,
+      window.innerHeight - widgetRect.height - widgetPadding,
     );
     setWidgetPosition({ left, top });
   };
@@ -481,17 +494,16 @@ if (!existingWidget) {
     if (Math.abs(deltaX) + Math.abs(deltaY) > 3) {
       skipToggleClick = true;
     }
-    const padding = 16;
-    const toggleRect = toggleButton.getBoundingClientRect();
+    const widgetRect = widget.getBoundingClientRect();
     const left = clampValue(
       dragState.startLeft + deltaX,
-      padding,
-      window.innerWidth - toggleRect.width - padding,
+      widgetPadding,
+      window.innerWidth - widgetRect.width - widgetPadding,
     );
     const top = clampValue(
       dragState.startTop + deltaY,
-      padding,
-      window.innerHeight - toggleRect.height - padding,
+      widgetPadding,
+      window.innerHeight - widgetRect.height - widgetPadding,
     );
     setWidgetPosition({ left, top });
   };
@@ -501,9 +513,6 @@ if (!existingWidget) {
     window.removeEventListener("pointerup", stopToggleMove);
   };
   toggleButton.addEventListener("pointerdown", (event) => {
-    if (!panel.classList.contains("hwc-chat-hidden")) {
-      return;
-    }
     event.preventDefault();
     const rect = widget.getBoundingClientRect();
     dragState = {
@@ -1461,15 +1470,17 @@ if (!existingWidget) {
       skipToggleClick = false;
       return;
     }
+    const toggleRect = toggleButton.getBoundingClientRect();
     panel.classList.toggle("hwc-chat-hidden");
     const isOpen = !panel.classList.contains("hwc-chat-hidden");
     toggleButton.setAttribute("aria-expanded", `${isOpen}`);
-    if (isOpen) {
+    requestAnimationFrame(() => {
+      repositionWidgetFromToggle(toggleRect);
       ensureWidgetOnScreen();
-    }
-    if (isOpen) {
-      input.focus();
-    }
+      if (isOpen) {
+        input.focus();
+      }
+    });
   });
 
   const resetConversation = () => {
