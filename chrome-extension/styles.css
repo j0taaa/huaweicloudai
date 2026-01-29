@@ -10,6 +10,32 @@
   gap: 10px;
 }
 
+.hwc-chat-widget :where(
+    a,
+    button,
+    summary,
+    label,
+    select,
+    [role="button"],
+    [role="link"],
+    input[type="button"],
+    input[type="submit"],
+    input[type="reset"],
+    input[type="checkbox"],
+    input[type="radio"]
+  ) {
+  cursor: pointer;
+}
+
+.hwc-chat-widget :where(
+    button:disabled,
+    input:disabled,
+    select:disabled,
+    [aria-disabled="true"]
+  ) {
+  cursor: not-allowed;
+}
+
 .hwc-chat-toggle {
   appearance: none;
   border: none;
