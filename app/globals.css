@@ -32,6 +32,27 @@ body {
   overscroll-behavior-y: none;
 }
 
+:where(
+    a,
+    button,
+    summary,
+    label,
+    select,
+    [role="button"],
+    [role="link"],
+    input[type="button"],
+    input[type="submit"],
+    input[type="reset"],
+    input[type="checkbox"],
+    input[type="radio"]
+  ) {
+  cursor: pointer;
+}
+
+:where(button:disabled, input:disabled, select:disabled, [aria-disabled="true"]) {
+  cursor: not-allowed;
+}
+
 .markdown-content {
   line-height: 1.6;
 }
