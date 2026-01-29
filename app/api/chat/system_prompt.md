@@ -22,32 +22,84 @@ When you need to work with a service API, you must use the provided tools in thi
 
 When you run eval_code, you have access to the `signRequest(options, ak, sk)` function, which receives options from the request, account AK, and account's SK, and can be used to make requests directly to Huawei Cloud.
 
-Here's an example of code using it:
+Here are some examples of code using it:
 
 ```
+Pattern 1: Simple GET (no query params)
 async function main() {
+  const AK = 'YOUR_AK';
+  const SK = 'YOUR_SK';
+  const projectId = 'YOUR_PROJECT_ID';
+  const region = 'sa-brazil-1';
+
   const options = {
     method: 'GET',
-    url: 'https://iam.myhuaweicloud.com/v3/projects', // example endpoint
-    params: {}, // put query params here
-    data: '',   // body; '' for GET
-    headers: {
-      'content-type': 'application/json',
-      // 'x-project-id': '...', // only include if this API requires it
-    },
+    url: `https://ecs.${region}.myhuaweicloud.com/v1/${projectId}/cloudservers/detail`,
+    params: {},
+    data: '',
+    headers: { 'content-type': 'application/json' },
   };
 
   const signedHeaders = signRequest(options, AK, SK);
-
   const res = await fetch(options.url, {
     method: options.method,
-    headers: {
-      // IMPORTANT: send the returned signing headers
-      ...signedHeaders,
-    },
+    headers: signedHeaders,
   });
 
-  return await res.text();
+  return await res.json();
+}
+
+
+Pattern 2: GET with query params ⭐
+async function main() {
+  const AK = 'YOUR_AK';
+  const SK = 'YOUR_SK';
+  const projectId = 'YOUR_PROJECT_ID';
+  const region = 'sa-brazil-1';
+
+  const baseUrl = `https://ecs.${region}.myhuaweicloud.com/v1/${projectId}/cloudservers/detail`;
+
+  const options = {
+    method: 'GET',
+    url: `${baseUrl}?limit=10&status=ACTIVE`,  // Query params in URL
+    params: { limit: 10, status: 'ACTIVE' },   // ⚠️ Also put in params!
+    data: '',
+    headers: { 'content-type': 'application/json' },
+  };
+
+  const signedHeaders = signRequest(options, AK, SK);
+  const res = await fetch(options.url, {
+    method: options.method,
+    headers: signedHeaders,
+  });
+
+  return await res.json();
+}
+
+
+Pattern 3: POST with JSON body
+async function main() {
+  const AK = 'YOUR_AK';
+  const SK = 'YOUR_SK';
+  const projectId = 'YOUR_PROJECT_ID';
+  const region = 'sa-brazil-1';
+
+  const options = {
+    method: 'POST',
+    url: `https://ecs.${region}.myhuaweicloud.com/v1/${projectId}/cloudservers`,
+    params: {},
+    data: JSON.stringify({ key: 'value' }),
+    headers: { 'content-type': 'application/json' },
+  };
+
+  const signedHeaders = signRequest(options, AK, SK);
+  const res = await fetch(options.url, {
+    method: options.method,
+    headers: signedHeaders,
+    body: options.data,  // ⚠️ Use 'body' for fetch, not 'data'
+  });
+
+  return await res.json();
 }
 ```
 
