@@ -13,7 +13,32 @@ interface ApiListResponse {
   count: number;
 }
 
+const API_CACHE_TTL_MS = 10 * 60 * 1000;
+const apiListCache = new Map<string, { value: ApiListItem[]; expiresAt: number }>();
+
+function getCachedApiList(cacheKey: string): ApiListItem[] | null {
+  const cached = apiListCache.get(cacheKey);
+  if (!cached) {
+    return null;
+  }
+  if (cached.expiresAt < Date.now()) {
+    apiListCache.delete(cacheKey);
+    return null;
+  }
+  return cached.value;
+}
+
+function setCachedApiList(cacheKey: string, value: ApiListItem[]) {
+  apiListCache.set(cacheKey, { value, expiresAt: Date.now() + API_CACHE_TTL_MS });
+}
+
 async function getAllApis(productShort: string, regionId: string = 'sa-brazil-1'): Promise<ApiListItem[]> {
+  const cacheKey = `${productShort}:${regionId}`;
+  const cached = getCachedApiList(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const allApis: ApiListItem[] = [];
   const limit = 100;
   let offset = 0;
@@ -43,6 +68,7 @@ async function getAllApis(productShort: string, regionId: string = 'sa-brazil-1'
     }
   }
 
+  setCachedApiList(cacheKey, allApis);
   return allApis;
 }
 

@@ -62,6 +62,25 @@ interface RegionsResponse {
   }>;
 }
 
+const API_CACHE_TTL_MS = 10 * 60 * 1000;
+const apiDetailsCache = new Map<string, { value: ApiResponse; expiresAt: number }>();
+
+function getCachedApiDetails(cacheKey: string): ApiResponse | null {
+  const cached = apiDetailsCache.get(cacheKey);
+  if (!cached) {
+    return null;
+  }
+  if (cached.expiresAt < Date.now()) {
+    apiDetailsCache.delete(cacheKey);
+    return null;
+  }
+  return cached.value;
+}
+
+function setCachedApiDetails(cacheKey: string, value: ApiResponse) {
+  apiDetailsCache.set(cacheKey, { value, expiresAt: Date.now() + API_CACHE_TTL_MS });
+}
+
 async function fetchRegions(productShort: string, apiName: string, regionId: string = 'sa-brazil-1'): Promise<Region[]> {
   const response = await fetch(`https://${regionId}-console.huaweicloud.com/apiexplorer/new/v6/regions?product_short=${productShort}&api_name=${apiName}`, {
     headers: {
@@ -86,6 +105,12 @@ async function fetchRegions(productShort: string, apiName: string, regionId: str
 }
 
 async function getApiDetails(productShort: string, action: string, regionId: string = 'sa-brazil-1'): Promise<ApiResponse> {
+  const cacheKey = `${productShort}:${action}:${regionId}`;
+  const cached = getCachedApiDetails(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const response = await fetch(`https://${regionId}-console.huaweicloud.com/apiexplorer/new/v4/apis/detail?product_short=${productShort}&name=${action}&region_id=${regionId}`, {
     headers: {
       'X-Language': 'en-us'
@@ -227,7 +252,7 @@ async function getApiDetails(productShort: string, action: string, regionId: str
 
   const regions = await fetchRegions(productShort, action, regionId);
 
-  return {
+  const apiDetails = {
     name: data.name,
     summary: data.summary || '',
     description: data.description || '',
@@ -237,6 +262,9 @@ async function getApiDetails(productShort: string, action: string, regionId: str
     definitions: data.definitions,
     availableRegions: regions
   };
+
+  setCachedApiDetails(cacheKey, apiDetails);
+  return apiDetails;
 }
 
 type GetApiDetailsRequest = {
