@@ -26,6 +26,11 @@ interface ResponseInfo {
   schema?: unknown;
 }
 
+interface Region {
+  region_id: string;
+  region_name: string;
+}
+
 interface ApiResponse {
   name: string;
   summary: string;
@@ -34,6 +39,7 @@ interface ApiResponse {
   request: RequestInfo;
   response: ResponseInfo[];
   definitions?: Record<string, unknown>;
+  regions?: Region[];
 }
 
 interface ApiDetailResponse {
@@ -47,6 +53,36 @@ interface ApiDetailResponse {
   parameters?: Record<string, unknown>;
   paths?: Record<string, Record<string, unknown>>;
   definitions?: Record<string, unknown>;
+}
+
+interface RegionsResponse {
+  regions: Array<{
+    region_id: string;
+    region_name: string;
+  }>;
+}
+
+async function fetchRegions(productShort: string, apiName: string, regionId: string = 'sa-brazil-1'): Promise<Region[]> {
+  const response = await fetch(`https://${regionId}-console.huaweicloud.com/apiexplorer/new/v6/regions?product_short=${productShort}&api_name=${apiName}`, {
+    headers: {
+      'X-Language': 'en-us'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Regions request failed: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json() as RegionsResponse;
+  
+  if (data.regions && Array.isArray(data.regions)) {
+    return data.regions.map(region => ({
+      region_id: region.region_id,
+      region_name: region.region_name
+    }));
+  }
+
+  return [];
 }
 
 async function getApiDetails(productShort: string, action: string, regionId: string = 'sa-brazil-1'): Promise<ApiResponse> {
@@ -189,6 +225,8 @@ async function getApiDetails(productShort: string, action: string, regionId: str
   requestInfo.queryParams = queryParams;
   requestInfo.bodyParams = bodyParams.length > 0 ? bodyParams : undefined;
 
+  const regions = await fetchRegions(productShort, action, regionId);
+
   return {
     name: data.name,
     summary: data.summary || '',
@@ -196,7 +234,8 @@ async function getApiDetails(productShort: string, action: string, regionId: str
     tags: Array.isArray(data.tags) ? data.tags : [],
     request: requestInfo,
     response: responseInfo,
-    definitions: data.definitions
+    definitions: data.definitions,
+    regions
   };
 }
 
