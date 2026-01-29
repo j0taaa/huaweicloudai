@@ -24,8 +24,8 @@ When you run eval_code, you have access to the `signRequest(options, ak, sk)` fu
 
 Here are some examples of code using it:
 
-```
 Pattern 1: Simple GET (no query params)
+```
 async function main() {
   const AK = 'YOUR_AK';
   const SK = 'YOUR_SK';
@@ -49,8 +49,10 @@ async function main() {
   return await res.json();
 }
 
+```
 
 Pattern 2: GET with query params ⭐
+```
 async function main() {
   const AK = 'YOUR_AK';
   const SK = 'YOUR_SK';
@@ -76,8 +78,9 @@ async function main() {
   return await res.json();
 }
 
-
+```
 Pattern 3: POST with JSON body
+```
 async function main() {
   const AK = 'YOUR_AK';
   const SK = 'YOUR_SK';
