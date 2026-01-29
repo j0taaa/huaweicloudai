@@ -39,7 +39,7 @@ interface ApiResponse {
   request: RequestInfo;
   response: ResponseInfo[];
   definitions?: Record<string, unknown>;
-  regions?: Region[];
+  availableRegions?: Region[];
 }
 
 interface ApiDetailResponse {
@@ -58,7 +58,7 @@ interface ApiDetailResponse {
 interface RegionsResponse {
   regions: Array<{
     region_id: string;
-    region_name: string;
+    name: string;
   }>;
 }
 
@@ -78,7 +78,7 @@ async function fetchRegions(productShort: string, apiName: string, regionId: str
   if (data.regions && Array.isArray(data.regions)) {
     return data.regions.map(region => ({
       region_id: region.region_id,
-      region_name: region.region_name
+      region_name: region.name
     }));
   }
 
@@ -235,7 +235,7 @@ async function getApiDetails(productShort: string, action: string, regionId: str
     request: requestInfo,
     response: responseInfo,
     definitions: data.definitions,
-    regions
+    availableRegions: regions
   };
 }
 
