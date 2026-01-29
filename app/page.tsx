@@ -1473,6 +1473,8 @@ export default function Home() {
                               const code = payload.code ?? "";
                               const isChoiceTool =
                                 toolCall.function.name === "ask_multiple_choice";
+                              const isEvalTool =
+                                toolCall.function.name === "eval_code";
                               let summary = payload.error
                                 ? "Unable to summarize tool details."
                                 : isChoiceTool
@@ -1519,23 +1521,23 @@ export default function Home() {
                                           Complete
                                         </span>
                                       )}
-                                      <button
-                                        className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
-                                        type="button"
-                                        onClick={() =>
-                                          setActiveToolPreview({
-                                            id: toolCall.id,
-                                            name: toolCall.function.name,
-                                            code,
-                                            summary,
-                                          })
-                                        }
-                                        disabled={
-                                          Boolean(payload.error) || isChoiceTool
-                                        }
-                                      >
-                                        View code
-                                      </button>
+                                      {isEvalTool ? (
+                                        <button
+                                          className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+                                          type="button"
+                                          onClick={() =>
+                                            setActiveToolPreview({
+                                              id: toolCall.id,
+                                              name: toolCall.function.name,
+                                              code,
+                                              summary,
+                                            })
+                                          }
+                                          disabled={Boolean(payload.error)}
+                                        >
+                                          View code
+                                        </button>
+                                      ) : null}
                                     </div>
                                   </div>
                                   <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
