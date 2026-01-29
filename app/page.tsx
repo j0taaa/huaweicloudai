@@ -114,7 +114,9 @@ export default function Home() {
   const [loadingConversationIds, setLoadingConversationIds] = useState<Set<string>>(
     new Set(),
   );
-  const [error, setError] = useState<string | null>(null);
+  const [conversationErrors, setConversationErrors] = useState<
+    Record<string, string | null>
+  >({});
   const [accessKey, setAccessKey] = useState("");
   const [secretKey, setSecretKey] = useState("");
   const [credentialsOpen, setCredentialsOpen] = useState(false);
@@ -161,9 +163,24 @@ export default function Home() {
     );
   }, [activeConversationId, conversations]);
   const messages = activeConversation?.messages ?? [];
+  const error =
+    activeConversationId ? conversationErrors[activeConversationId] ?? null : null;
   const isLoading = activeConversationId
     ? loadingConversationIds.has(activeConversationId)
     : false;
+
+  const setConversationError = (conversationId: string, message: string | null) => {
+    setConversationErrors((prev) => ({ ...prev, [conversationId]: message }));
+  };
+
+  const clearConversationError = (conversationId: string) => {
+    setConversationErrors((prev) => {
+      if (!(conversationId in prev)) return prev;
+      const next = { ...prev };
+      delete next[conversationId];
+      return next;
+    });
+  };
 
   const markConversationLoading = (conversationId: string) => {
     setLoadingConversationIds((prev) => {
@@ -415,7 +432,7 @@ export default function Home() {
       }
 
       markConversationLoading(parsed.conversationId);
-      setError(null);
+      setConversationError(parsed.conversationId, null);
 
       void sendMessages(parsed.conversationId, parsed.messages)
         .then((response) =>
@@ -426,7 +443,7 @@ export default function Home() {
             caughtError instanceof Error
               ? caughtError.message
               : "Something went wrong.";
-          setError(message);
+          setConversationError(parsed.conversationId, message);
         })
         .finally(() => {
           clearConversationLoading(parsed.conversationId);
@@ -829,7 +846,7 @@ export default function Home() {
     updateConversationMessages(conversationId, nextMessages);
     setInput("");
     markConversationLoading(conversationId);
-    setError(null);
+    setConversationError(conversationId, null);
     localStorage.setItem(
       PENDING_REQUEST_STORAGE_KEY,
       JSON.stringify({
@@ -847,14 +864,14 @@ export default function Home() {
         caughtError instanceof DOMException &&
         caughtError.name === "AbortError"
       ) {
-        setError("Message canceled.");
+        setConversationError(conversationId, "Message canceled.");
         return;
       }
       const message =
         caughtError instanceof Error
           ? caughtError.message
           : "Something went wrong.";
-      setError(message);
+      setConversationError(conversationId, message);
     } finally {
       clearConversationLoading(conversationId);
       clearPendingRequestForConversation(conversationId);
@@ -953,7 +970,7 @@ export default function Home() {
     }
 
     markConversationLoading(conversationId);
-    setError(null);
+    setConversationError(conversationId, null);
     setPendingChoice(null);
     setSelectedChoice("");
     setCustomChoice("");
@@ -982,7 +999,7 @@ export default function Home() {
         caughtError instanceof Error
           ? caughtError.message
           : "Something went wrong.";
-      setError(message);
+      setConversationError(conversationId, message);
     } finally {
       clearConversationLoading(conversationId);
       clearPendingRequestForConversation(conversationId);
@@ -1011,7 +1028,7 @@ export default function Home() {
     setConversations((prev) => [newConversation, ...prev]);
     setActiveConversationId(newConversation.id);
     setInput("");
-    setError(null);
+    setConversationError(newConversation.id, null);
     setPendingChoice(null);
     setSelectedChoice("");
     setCustomChoice("");
@@ -1024,6 +1041,7 @@ export default function Home() {
       abortControllersRef.current.delete(conversationId);
     }
     clearConversationLoading(conversationId);
+    clearConversationError(conversationId);
     setConversations((prev) => {
       const next = prev.filter((conversation) => conversation.id !== conversationId);
       if (conversationId === activeConversationId) {
@@ -1033,7 +1051,7 @@ export default function Home() {
         const seed = createEmptyConversation();
         setActiveConversationId(seed.id);
         setInput("");
-        setError(null);
+        setConversationError(seed.id, null);
         setPendingChoice(null);
         setSelectedChoice("");
         setCustomChoice("");
@@ -1042,7 +1060,7 @@ export default function Home() {
       if (conversationId === activeConversationId) {
         setActiveConversationId(next[0].id);
         setInput("");
-        setError(null);
+        setConversationError(next[0].id, null);
         setPendingChoice(null);
         setSelectedChoice("");
         setCustomChoice("");
