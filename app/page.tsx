@@ -111,7 +111,9 @@ export default function Home() {
     string | null
   >(null);
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [loadingConversationIds, setLoadingConversationIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [error, setError] = useState<string | null>(null);
   const [accessKey, setAccessKey] = useState("");
   const [secretKey, setSecretKey] = useState("");
@@ -140,7 +142,7 @@ export default function Home() {
   } | null>(null);
   const [selectedChoice, setSelectedChoice] = useState("");
   const [customChoice, setCustomChoice] = useState("");
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const formRef = useRef<HTMLFormElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -159,6 +161,38 @@ export default function Home() {
     );
   }, [activeConversationId, conversations]);
   const messages = activeConversation?.messages ?? [];
+  const isLoading = activeConversationId
+    ? loadingConversationIds.has(activeConversationId)
+    : false;
+
+  const markConversationLoading = (conversationId: string) => {
+    setLoadingConversationIds((prev) => {
+      const next = new Set(prev);
+      next.add(conversationId);
+      return next;
+    });
+  };
+
+  const clearConversationLoading = (conversationId: string) => {
+    setLoadingConversationIds((prev) => {
+      const next = new Set(prev);
+      next.delete(conversationId);
+      return next;
+    });
+  };
+
+  const clearPendingRequestForConversation = (conversationId: string) => {
+    const pending = localStorage.getItem(PENDING_REQUEST_STORAGE_KEY);
+    if (!pending) return;
+    try {
+      const parsed = JSON.parse(pending) as { conversationId?: string };
+      if (parsed.conversationId === conversationId) {
+        localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
+      }
+    } catch {
+      localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
+    }
+  };
 
   const trimmedInput = useMemo(() => input.trim(), [input]);
   const toolResults = useMemo(() => {
@@ -380,12 +414,12 @@ export default function Home() {
         setActiveConversationId(parsed.conversationId);
       }
 
-      setIsLoading(true);
+      markConversationLoading(parsed.conversationId);
       setError(null);
 
-      void sendMessages(parsed.messages)
+      void sendMessages(parsed.conversationId, parsed.messages)
         .then((response) =>
-          continueConversation([...parsed.messages], response),
+          continueConversation(parsed.conversationId, [...parsed.messages], response),
         )
         .catch((caughtError) => {
           const message =
@@ -395,9 +429,8 @@ export default function Home() {
           setError(message);
         })
         .finally(() => {
-          setIsLoading(false);
-          abortControllerRef.current = null;
-          localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
+          clearConversationLoading(parsed.conversationId);
+          clearPendingRequestForConversation(parsed.conversationId);
         });
     } catch {
       localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
@@ -406,39 +439,50 @@ export default function Home() {
   }, [activeConversationId, conversations, pendingChoice]);
 
   const sendMessages = async (
+    conversationId: string,
     nextMessages: ChatMessage[],
   ): Promise<ChatResponse> => {
     const controller = new AbortController();
-    abortControllerRef.current = controller;
-    const response = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: nextMessages,
-        context: {
-          accessKey: accessKey.trim(),
-          secretKey: secretKey.trim(),
-          projectIds,
-        },
-        inference:
-          inferenceMode === "custom"
-            ? {
-                mode: "custom",
-                baseUrl: customInference.baseUrl.trim(),
-                model: customInference.model.trim(),
-                apiKey: customInference.apiKey.trim(),
-              }
-            : { mode: "default" },
-      }),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || "Failed to fetch response.");
+    const existingController = abortControllersRef.current.get(conversationId);
+    if (existingController) {
+      existingController.abort();
     }
+    abortControllersRef.current.set(conversationId, controller);
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: nextMessages,
+          context: {
+            accessKey: accessKey.trim(),
+            secretKey: secretKey.trim(),
+            projectIds,
+          },
+          inference:
+            inferenceMode === "custom"
+              ? {
+                  mode: "custom",
+                  baseUrl: customInference.baseUrl.trim(),
+                  model: customInference.model.trim(),
+                  apiKey: customInference.apiKey.trim(),
+                }
+              : { mode: "default" },
+        }),
+        signal: controller.signal,
+      });
 
-    return (await response.json()) as ChatResponse;
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Failed to fetch response.");
+      }
+
+      return (await response.json()) as ChatResponse;
+    } finally {
+      if (abortControllersRef.current.get(conversationId) === controller) {
+        abortControllersRef.current.delete(conversationId);
+      }
+    }
   };
 
   const parseToolPayload = (toolCall: ToolCall): ToolPayload => {
@@ -705,6 +749,7 @@ export default function Home() {
   };
 
   const continueConversation = async (
+    conversationId: string,
     workingMessages: ChatMessage[],
     response: ChatResponse,
   ) => {
@@ -718,7 +763,7 @@ export default function Home() {
       };
 
       workingMessages = [...workingMessages, assistantToolMessage];
-      updateActiveMessages(workingMessages);
+      updateConversationMessages(conversationId, workingMessages);
 
       const multipleChoiceCall = currentResponse.toolCalls.find(
         (toolCall) => toolCall.function.name === "ask_multiple_choice",
@@ -730,7 +775,7 @@ export default function Home() {
       if (nonChoiceCalls.length > 0) {
         const toolMessages = await runToolCalls(nonChoiceCalls);
         workingMessages = [...workingMessages, ...toolMessages];
-        updateActiveMessages(workingMessages);
+        updateConversationMessages(conversationId, workingMessages);
       }
 
       if (multipleChoiceCall) {
@@ -742,19 +787,19 @@ export default function Home() {
             tool_call_id: multipleChoiceCall.id,
           };
           workingMessages = [...workingMessages, errorMessage];
-          updateActiveMessages(workingMessages);
+          updateConversationMessages(conversationId, workingMessages);
         } else if (payload.question && payload.options) {
           setPendingChoice({
             toolCall: multipleChoiceCall,
             question: payload.question,
             options: payload.options,
           });
-          setIsLoading(false);
+          clearConversationLoading(conversationId);
           return;
         }
       }
 
-      currentResponse = await sendMessages(workingMessages);
+      currentResponse = await sendMessages(conversationId, workingMessages);
     }
 
     if (!currentResponse.reply) {
@@ -766,7 +811,7 @@ export default function Home() {
       { role: "assistant", content: currentResponse.reply },
     ];
 
-    updateActiveMessages(workingMessages);
+    updateConversationMessages(conversationId, workingMessages);
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -774,28 +819,29 @@ export default function Home() {
     if (!trimmedInput || isLoading || pendingChoice || !activeConversationId) {
       return;
     }
+    const conversationId = activeConversationId;
 
     const nextMessages: ChatMessage[] = [
       ...messages,
       { role: "user", content: input },
     ];
 
-    updateActiveMessages(nextMessages);
+    updateConversationMessages(conversationId, nextMessages);
     setInput("");
-    setIsLoading(true);
+    markConversationLoading(conversationId);
     setError(null);
     localStorage.setItem(
       PENDING_REQUEST_STORAGE_KEY,
       JSON.stringify({
-        conversationId: activeConversationId,
+        conversationId,
         messages: nextMessages,
       }),
     );
 
     try {
       const workingMessages = [...nextMessages];
-      const response = await sendMessages(workingMessages);
-      await continueConversation(workingMessages, response);
+      const response = await sendMessages(conversationId, workingMessages);
+      await continueConversation(conversationId, workingMessages, response);
     } catch (caughtError) {
       if (
         caughtError instanceof DOMException &&
@@ -810,18 +856,20 @@ export default function Home() {
           : "Something went wrong.";
       setError(message);
     } finally {
-      setIsLoading(false);
-      abortControllerRef.current = null;
-      localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
+      clearConversationLoading(conversationId);
+      clearPendingRequestForConversation(conversationId);
     }
   };
 
   const handleCancel = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
+    if (!activeConversationId) return;
+    const controller = abortControllersRef.current.get(activeConversationId);
+    if (controller) {
+      controller.abort();
+      abortControllersRef.current.delete(activeConversationId);
     }
-    setIsLoading(false);
-    localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
+    clearConversationLoading(activeConversationId);
+    clearPendingRequestForConversation(activeConversationId);
   };
 
   useEffect(() => {
@@ -894,6 +942,7 @@ export default function Home() {
   ) => {
     event.preventDefault();
     if (!pendingChoice || isLoading || !activeConversationId) return;
+    const conversationId = activeConversationId;
 
     const isCustom = selectedChoice === "custom";
     const trimmedCustom = customChoice.trim();
@@ -903,7 +952,7 @@ export default function Home() {
       return;
     }
 
-    setIsLoading(true);
+    markConversationLoading(conversationId);
     setError(null);
     setPendingChoice(null);
     setSelectedChoice("");
@@ -916,18 +965,18 @@ export default function Home() {
     };
 
     const workingMessages = [...messages, toolMessage];
-    updateActiveMessages(workingMessages);
+    updateConversationMessages(conversationId, workingMessages);
     localStorage.setItem(
       PENDING_REQUEST_STORAGE_KEY,
       JSON.stringify({
-        conversationId: activeConversationId,
+        conversationId,
         messages: workingMessages,
       }),
     );
 
     try {
-      const response = await sendMessages(workingMessages);
-      await continueConversation(workingMessages, response);
+      const response = await sendMessages(conversationId, workingMessages);
+      await continueConversation(conversationId, workingMessages, response);
     } catch (caughtError) {
       const message =
         caughtError instanceof Error
@@ -935,16 +984,18 @@ export default function Home() {
           : "Something went wrong.";
       setError(message);
     } finally {
-      setIsLoading(false);
-      localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
+      clearConversationLoading(conversationId);
+      clearPendingRequestForConversation(conversationId);
     }
   };
 
-  const updateActiveMessages = (nextMessages: ChatMessage[]) => {
-    if (!activeConversationId) return;
+  const updateConversationMessages = (
+    conversationId: string,
+    nextMessages: ChatMessage[],
+  ) => {
     setConversations((prev) =>
       prev.map((conversation) =>
-        conversation.id === activeConversationId
+        conversation.id === conversationId
           ? {
               ...conversation,
               messages: nextMessages,
@@ -956,16 +1007,10 @@ export default function Home() {
   };
 
   const handleNewConversation = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
     const newConversation = createEmptyConversation();
     setConversations((prev) => [newConversation, ...prev]);
     setActiveConversationId(newConversation.id);
     setInput("");
-    setIsLoading(false);
     setError(null);
     setPendingChoice(null);
     setSelectedChoice("");
@@ -973,16 +1018,21 @@ export default function Home() {
   };
 
   const handleDeleteConversation = (conversationId: string) => {
+    const controller = abortControllersRef.current.get(conversationId);
+    if (controller) {
+      controller.abort();
+      abortControllersRef.current.delete(conversationId);
+    }
+    clearConversationLoading(conversationId);
     setConversations((prev) => {
       const next = prev.filter((conversation) => conversation.id !== conversationId);
       if (conversationId === activeConversationId) {
-        localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
+        clearPendingRequestForConversation(conversationId);
       }
       if (next.length === 0) {
         const seed = createEmptyConversation();
         setActiveConversationId(seed.id);
         setInput("");
-        setIsLoading(false);
         setError(null);
         setPendingChoice(null);
         setSelectedChoice("");
@@ -992,7 +1042,6 @@ export default function Home() {
       if (conversationId === activeConversationId) {
         setActiveConversationId(next[0].id);
         setInput("");
-        setIsLoading(false);
         setError(null);
         setPendingChoice(null);
         setSelectedChoice("");
