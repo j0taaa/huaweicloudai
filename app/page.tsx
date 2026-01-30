@@ -1362,7 +1362,7 @@ export default function Home() {
       {
         role: "system",
         content:
-          "Summarize the user's request in 3-6 words. Focus on what they asked the assistant to do. Avoid punctuation.",
+          "Summarize what the model was asked to do. Keep it simple and limited to 5 words. Avoid punctuation.",
       },
       firstUserMessage,
     ];
