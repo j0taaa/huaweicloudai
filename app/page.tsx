@@ -2297,10 +2297,10 @@ export default function Home() {
                 />
                 <div
                   ref={compactMenuRef}
-                  className="col-start-1 row-start-1 ml-2 flex items-center self-center"
+                  className="col-start-1 row-start-1 ml-2 flex w-fit items-center self-center justify-self-start"
                 >
                   <button
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-600 shadow-sm transition hover:border-zinc-300 hover:text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-100 dark:border-white/10 dark:bg-black dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-black/20 bg-black text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-600 dark:border-black/40 dark:bg-black dark:text-white dark:hover:bg-zinc-800"
                     type="button"
                     aria-haspopup="menu"
                     aria-expanded={compactMenuOpen}
@@ -2327,7 +2327,7 @@ export default function Home() {
                   </button>
                   {compactMenuOpen ? (
                     <div
-                      className="absolute left-2 top-[calc(100%+8px)] z-10 w-56 rounded-2xl border border-zinc-200 bg-white p-2 text-sm text-zinc-700 shadow-lg dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-200"
+                      className="absolute bottom-[calc(100%+8px)] left-2 z-10 w-56 rounded-2xl border border-zinc-200 bg-white p-2 text-sm text-zinc-700 shadow-lg dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-200"
                       role="menu"
                     >
                       <button
@@ -2339,7 +2339,22 @@ export default function Home() {
                         }
                         onClick={handleCompactConversation}
                       >
-                        Compact conversation
+                        <svg
+                          className="h-4 w-4"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M8 4H4v4" />
+                          <path d="M16 4h4v4" />
+                          <path d="M8 20H4v-4" />
+                          <path d="M16 20h4v-4" />
+                        </svg>
+                        <span>Compact conversation</span>
                       </button>
                     </div>
                   ) : null}
