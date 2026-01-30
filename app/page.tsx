@@ -119,7 +119,7 @@ export default function Home() {
   const [activeConversationId, setActiveConversationId] = useState<
     string | null
   >(null);
-  const [input, setInput] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [loadingConversationIds, setLoadingConversationIds] = useState<Set<string>>(
     new Set(),
   );
@@ -172,6 +172,7 @@ export default function Home() {
     );
   }, [activeConversationId, conversations]);
   const messages = activeConversation?.messages ?? [];
+  const input = activeConversationId ? drafts[activeConversationId] ?? "" : "";
   const error =
     activeConversationId ? conversationErrors[activeConversationId] ?? null : null;
   const isLoading = activeConversationId
@@ -218,6 +219,19 @@ export default function Home() {
     } catch {
       localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
     }
+  };
+
+  const updateDraft = (conversationId: string, value: string) => {
+    setDrafts((prev) => ({ ...prev, [conversationId]: value }));
+  };
+
+  const clearDraft = (conversationId: string) => {
+    setDrafts((prev) => {
+      if (!(conversationId in prev)) return prev;
+      const next = { ...prev };
+      delete next[conversationId];
+      return next;
+    });
   };
 
   const trimmedInput = useMemo(() => input.trim(), [input]);
@@ -1124,7 +1138,7 @@ export default function Home() {
     ];
 
     updateConversationMessages(conversationId, nextMessages);
-    setInput("");
+    clearDraft(conversationId);
     markConversationLoading(conversationId);
     setConversationError(conversationId, null);
     localStorage.setItem(
@@ -1307,7 +1321,6 @@ export default function Home() {
     const newConversation = createEmptyConversation();
     setConversations((prev) => [newConversation, ...prev]);
     setActiveConversationId(newConversation.id);
-    setInput("");
     setConversationError(newConversation.id, null);
     setPendingChoice(null);
     setSelectedChoice("");
@@ -1324,13 +1337,13 @@ export default function Home() {
     clearConversationError(conversationId);
     setConversations((prev) => {
       const next = prev.filter((conversation) => conversation.id !== conversationId);
+      clearDraft(conversationId);
       if (conversationId === activeConversationId) {
         clearPendingRequestForConversation(conversationId);
       }
       if (next.length === 0) {
         const seed = createEmptyConversation();
         setActiveConversationId(seed.id);
-        setInput("");
         setConversationError(seed.id, null);
         setPendingChoice(null);
         setSelectedChoice("");
@@ -1339,7 +1352,6 @@ export default function Home() {
       }
       if (conversationId === activeConversationId) {
         setActiveConversationId(next[0].id);
-        setInput("");
         setConversationError(next[0].id, null);
         setPendingChoice(null);
         setSelectedChoice("");
@@ -2014,7 +2026,10 @@ export default function Home() {
                   className="col-start-1 row-start-1 min-h-[48px] w-full resize-none rounded-3xl border border-zinc-200 bg-white px-4 py-3 pr-14 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
                   placeholder="Type your message..."
                   value={input}
-                  onChange={(event) => setInput(event.target.value)}
+                  onChange={(event) => {
+                    if (!activeConversationId) return;
+                    updateDraft(activeConversationId, event.target.value);
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault();
