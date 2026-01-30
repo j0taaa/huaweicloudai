@@ -156,12 +156,14 @@ export default function Home() {
     question: string;
     options: string[];
   } | null>(null);
+  const [compactMenuOpen, setCompactMenuOpen] = useState(false);
   const [selectedChoice, setSelectedChoice] = useState("");
   const [customChoice, setCustomChoice] = useState("");
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const formRef = useRef<HTMLFormElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const compactMenuRef = useRef<HTMLDivElement | null>(null);
   const summaryInFlightRef = useRef<Set<string>>(new Set());
   const credentialHydratedRef = useRef(false);
   const credentialResetSkipRef = useRef(true);
@@ -303,6 +305,26 @@ export default function Home() {
     if (!container || !shouldAutoScrollRef.current) return;
     container.scrollTop = container.scrollHeight;
   }, [messages, isLoading, pendingChoice, hasRunningToolCalls]);
+
+  useEffect(() => {
+    if (!compactMenuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!compactMenuRef.current) return;
+      if (!compactMenuRef.current.contains(event.target as Node)) {
+        setCompactMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [compactMenuOpen]);
+
+  useEffect(() => {
+    if (isLoading || hasRunningToolCalls || pendingChoice) {
+      setCompactMenuOpen(false);
+    }
+  }, [hasRunningToolCalls, isLoading, pendingChoice]);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
@@ -1330,6 +1352,71 @@ export default function Home() {
     );
   };
 
+  const handleCompactConversation = async () => {
+    if (!activeConversationId || !activeConversation) return;
+    if (isLoading || hasRunningToolCalls || pendingChoice) return;
+    const conversationId = activeConversationId;
+    setCompactMenuOpen(false);
+    markConversationLoading(conversationId);
+    setConversationError(conversationId, null);
+
+    const compactPrompt: ChatMessage[] = [
+      {
+        role: "system",
+        content:
+          "Summarize the conversation so far into a compact context for future turns. Include goals, key decisions, important details, and open questions. Keep it concise and use bullet points.",
+      },
+      ...activeConversation.messages,
+    ];
+
+    localStorage.setItem(
+      PENDING_REQUEST_STORAGE_KEY,
+      JSON.stringify({
+        conversationId,
+        messages: compactPrompt,
+      }),
+    );
+
+    try {
+      const response = await sendMessages(conversationId, compactPrompt);
+      const summary = response.reply?.trim();
+      if (!summary) {
+        throw new Error("Unable to compact the conversation.");
+      }
+      setConversations((prev) =>
+        prev.map((conversation) =>
+          conversation.id === conversationId
+            ? {
+                ...conversation,
+                messages: [
+                  {
+                    role: "system",
+                    content:
+                      "Conversation compacted. Use the summary below for future context.",
+                  },
+                  {
+                    role: "assistant",
+                    content: summary,
+                  },
+                ],
+                updatedAt: Date.now(),
+                lastSummaryMessageCount: 2,
+              }
+            : conversation,
+        ),
+      );
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Something went wrong.";
+      setConversationError(conversationId, message);
+    } finally {
+      clearConversationLoading(conversationId);
+      clearPendingRequestForConversation(conversationId);
+    }
+  };
+
   const handleNewConversation = () => {
     const newConversation = createEmptyConversation();
     setConversations((prev) => [newConversation, ...prev]);
@@ -2039,7 +2126,7 @@ export default function Home() {
               <div className="relative grid flex-1">
                 <textarea
                   ref={textareaRef}
-                  className="col-start-1 row-start-1 min-h-[48px] w-full resize-none rounded-3xl border border-zinc-200 bg-white px-4 py-3 pr-14 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                  className="col-start-1 row-start-1 min-h-[48px] w-full resize-none rounded-3xl border border-zinc-200 bg-white px-4 py-3 pl-14 pr-14 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
                   placeholder="Type your message..."
                   value={input}
                   onChange={(event) => {
@@ -2055,6 +2142,55 @@ export default function Home() {
                   disabled={isLoading || Boolean(pendingChoice)}
                   rows={1}
                 />
+                <div
+                  ref={compactMenuRef}
+                  className="col-start-1 row-start-1 ml-2 flex items-center self-center"
+                >
+                  <button
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-600 shadow-sm transition hover:border-zinc-300 hover:text-zinc-900 disabled:cursor-not-allowed disabled:bg-zinc-100 dark:border-white/10 dark:bg-black dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+                    type="button"
+                    aria-haspopup="menu"
+                    aria-expanded={compactMenuOpen}
+                    aria-label="Open compact conversation menu"
+                    disabled={isLoading || hasRunningToolCalls || Boolean(pendingChoice)}
+                    onClick={() => {
+                      if (isLoading || hasRunningToolCalls || pendingChoice) return;
+                      setCompactMenuOpen((prev) => !prev);
+                    }}
+                  >
+                    <svg
+                      className="h-4 w-4"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M12 5v14" />
+                      <path d="M5 12h14" />
+                    </svg>
+                  </button>
+                  {compactMenuOpen ? (
+                    <div
+                      className="absolute left-2 top-[calc(100%+8px)] z-10 w-56 rounded-2xl border border-zinc-200 bg-white p-2 text-sm text-zinc-700 shadow-lg dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-200"
+                      role="menu"
+                    >
+                      <button
+                        className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:text-zinc-400 dark:text-zinc-200 dark:hover:bg-white/10 dark:disabled:text-zinc-500"
+                        type="button"
+                        role="menuitem"
+                        disabled={
+                          isLoading || hasRunningToolCalls || Boolean(pendingChoice)
+                        }
+                        onClick={handleCompactConversation}
+                      >
+                        Compact conversation
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
                 <button
                   className="col-start-1 row-start-1 mr-2 flex h-9 w-9 items-center justify-center justify-self-end self-center rounded-full bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
                   type={isLoading || hasRunningToolCalls ? "button" : "submit"}
