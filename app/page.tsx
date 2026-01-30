@@ -77,6 +77,11 @@ const TOOL_RESULT_COLLAPSE_LINES = 16;
 const INPUT_MIN_HEIGHT = 48;
 const INPUT_MAX_HEIGHT = 220;
 const SCROLL_BOTTOM_THRESHOLD = 48;
+const estimateTokens = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  return Math.max(1, Math.ceil(trimmed.length / 4));
+};
 const createConversationId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -178,6 +183,14 @@ export default function Home() {
   const isLoading = activeConversationId
     ? loadingConversationIds.has(activeConversationId)
     : false;
+  const tokenFormatter = useMemo(() => new Intl.NumberFormat(), []);
+  const estimatedTokenCount = useMemo(() => {
+    if (!activeConversation) return 0;
+    return activeConversation.messages.reduce(
+      (total, message) => total + estimateTokens(message.content),
+      0,
+    );
+  }, [activeConversation]);
 
   const setConversationError = (conversationId: string, message: string | null) => {
     setConversationErrors((prev) => ({ ...prev, [conversationId]: message }));
@@ -1746,7 +1759,10 @@ export default function Home() {
             New
           </button>
         </header>
-        <section className="flex h-full flex-1 flex-col gap-6 bg-white px-4 py-5 shadow-sm dark:bg-zinc-950 sm:px-6 sm:py-6">
+        <section className="relative flex h-full flex-1 flex-col gap-6 bg-white px-4 py-5 shadow-sm dark:bg-zinc-950 sm:px-6 sm:py-6">
+          <div className="absolute right-4 top-4 rounded-full border border-zinc-200 bg-white/90 px-3 py-1 text-xs font-semibold text-zinc-600 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/80 dark:text-zinc-300">
+            Tokens used: {tokenFormatter.format(estimatedTokenCount)}
+          </div>
           <div
             className="flex flex-1 flex-col gap-4 overflow-y-auto"
             ref={messagesContainerRef}
