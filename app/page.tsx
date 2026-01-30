@@ -292,11 +292,14 @@ export default function Home() {
       INFERENCE_SETTINGS_STORAGE_KEY,
     );
 
+    let hydratedProjectIds = false;
+
     if (storedCredentials) {
       try {
         const parsed = JSON.parse(storedCredentials) as {
           accessKey?: string;
           secretKey?: string;
+          projectIds?: ProjectIdEntry[];
         };
         if (typeof parsed.accessKey === "string") {
           setAccessKey(parsed.accessKey);
@@ -304,12 +307,19 @@ export default function Home() {
         if (typeof parsed.secretKey === "string") {
           setSecretKey(parsed.secretKey);
         }
+        if (Array.isArray(parsed.projectIds)) {
+          setProjectIds(parsed.projectIds);
+          hydratedProjectIds = true;
+          if (parsed.projectIds.length > 0) {
+            setCredentialStatus("saved");
+          }
+        }
       } catch {
         // Ignore invalid stored credentials.
       }
     }
 
-    if (storedProjectIds) {
+    if (storedProjectIds && !hydratedProjectIds) {
       try {
         const parsed = JSON.parse(storedProjectIds) as ProjectIdEntry[];
         if (Array.isArray(parsed)) {
@@ -379,24 +389,22 @@ export default function Home() {
 
   useEffect(() => {
     if (!credentialHydratedRef.current) return;
-    if (accessKey || secretKey) {
+    const hasCredentials = accessKey || secretKey;
+    const hasProjectIds = projectIds.length > 0;
+    if (hasCredentials || hasProjectIds) {
       localStorage.setItem(
         CREDENTIALS_STORAGE_KEY,
-        JSON.stringify({ accessKey, secretKey }),
+        JSON.stringify({ accessKey, secretKey, projectIds }),
       );
     } else {
       localStorage.removeItem(CREDENTIALS_STORAGE_KEY);
     }
-  }, [accessKey, secretKey]);
-
-  useEffect(() => {
-    if (!credentialHydratedRef.current) return;
-    if (projectIds.length > 0) {
+    if (hasProjectIds) {
       localStorage.setItem(PROJECT_IDS_STORAGE_KEY, JSON.stringify(projectIds));
     } else {
       localStorage.removeItem(PROJECT_IDS_STORAGE_KEY);
     }
-  }, [projectIds]);
+  }, [accessKey, projectIds, secretKey]);
 
   useEffect(() => {
     if (
