@@ -1352,19 +1352,19 @@ export default function Home() {
   const requestSummary = async (
     conversationMessages: ChatMessage[],
   ): Promise<string | null> => {
-    const relevantMessages = conversationMessages
-      .filter((message) => message.role === "user" || message.role === "assistant")
-      .slice(-12);
+    const firstUserMessage = conversationMessages.find(
+      (message) => message.role === "user",
+    );
 
-    if (relevantMessages.length === 0) return null;
+    if (!firstUserMessage) return null;
 
     const summaryPrompt: ChatMessage[] = [
       {
         role: "system",
         content:
-          "Summarize this conversation in 3-5 words. Keep it short, clear, and avoid punctuation.",
+          "Summarize the user's request in 3-6 words. Focus on what they asked the assistant to do. Avoid punctuation.",
       },
-      ...relevantMessages,
+      firstUserMessage,
     ];
 
     const response = await fetch("/api/chat", {
@@ -1387,12 +1387,7 @@ export default function Home() {
     if (!activeConversation) return;
     if (isLoading || pendingChoice) return;
     if (activeConversation.messages.length < 2) return;
-    if (
-      activeConversation.lastSummaryMessageCount ===
-      activeConversation.messages.length
-    ) {
-      return;
-    }
+    if (activeConversation.lastSummaryMessageCount > 0) return;
 
     const lastMessage =
       activeConversation.messages[activeConversation.messages.length - 1];
