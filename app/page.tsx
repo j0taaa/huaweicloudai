@@ -63,6 +63,9 @@ type Conversation = {
   messages: ChatMessage[];
   updatedAt: number;
   lastSummaryMessageCount: number;
+  compactionSummary: string | null;
+  compactedAt: number | null;
+  compactionMessageCount: number;
 };
 
 const STORAGE_KEY = "huaweicloudai-conversations";
@@ -77,6 +80,7 @@ const TOOL_RESULT_COLLAPSE_LINES = 16;
 const INPUT_MIN_HEIGHT = 48;
 const INPUT_MAX_HEIGHT = 220;
 const SCROLL_BOTTOM_THRESHOLD = 48;
+const COMPACTION_MARKER_PREFIX = "Conversation compacted";
 const estimateTokens = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return 0;
@@ -92,6 +96,44 @@ const createEmptyConversation = (): Conversation => ({
   messages: [],
   updatedAt: Date.now(),
   lastSummaryMessageCount: 0,
+  compactionSummary: null,
+  compactedAt: null,
+  compactionMessageCount: 0,
+});
+
+const isCompactionMarkerMessage = (message: ChatMessage) =>
+  message.role === "system" &&
+  message.content.trim().startsWith(COMPACTION_MARKER_PREFIX);
+
+const createCompactionMarkerMessage = (timestamp: number): ChatMessage => ({
+  role: "system",
+  content: `${COMPACTION_MARKER_PREFIX} on ${new Date(
+    timestamp,
+  ).toLocaleString()}.`,
+});
+
+const normalizeConversation = (conversation: Partial<Conversation>): Conversation => ({
+  id: typeof conversation.id === "string" ? conversation.id : createConversationId(),
+  title:
+    typeof conversation.title === "string"
+      ? conversation.title
+      : "New conversation",
+  messages: Array.isArray(conversation.messages) ? conversation.messages : [],
+  updatedAt: typeof conversation.updatedAt === "number" ? conversation.updatedAt : Date.now(),
+  lastSummaryMessageCount:
+    typeof conversation.lastSummaryMessageCount === "number"
+      ? conversation.lastSummaryMessageCount
+      : 0,
+  compactionSummary:
+    typeof conversation.compactionSummary === "string"
+      ? conversation.compactionSummary
+      : null,
+  compactedAt:
+    typeof conversation.compactedAt === "number" ? conversation.compactedAt : null,
+  compactionMessageCount:
+    typeof conversation.compactionMessageCount === "number"
+      ? conversation.compactionMessageCount
+      : 0,
 });
 
 const fetchProjectIds = async (ak: string, sk: string) => {
@@ -409,10 +451,13 @@ export default function Home() {
       try {
         const parsed = JSON.parse(stored) as Conversation[];
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setConversations(parsed);
-          const activeId = parsed.find((conv) => conv.id === storedActive)
+          const normalized = parsed.map((conversation) =>
+            normalizeConversation(conversation),
+          );
+          setConversations(normalized);
+          const activeId = normalized.find((conv) => conv.id === storedActive)
             ? storedActive
-            : parsed[0].id;
+            : normalized[0].id;
           setActiveConversationId(activeId);
           return;
         }
@@ -1352,6 +1397,58 @@ export default function Home() {
     );
   };
 
+  const requestCompactionSummary = async (
+    conversationMessages: ChatMessage[],
+  ): Promise<string> => {
+    const messagesToSummarize = conversationMessages.filter(
+      (message) => !isCompactionMarkerMessage(message),
+    );
+
+    const compactionPrompt: ChatMessage[] = [
+      {
+        role: "system",
+        content:
+          "Summarize the entire conversation while preserving every detail and all key facts. Produce a structured summary suitable for continuing the conversation without information loss.",
+      },
+      ...messagesToSummarize,
+    ];
+
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: compactionPrompt,
+        context: {
+          accessKey: accessKey.trim(),
+          secretKey: secretKey.trim(),
+          projectIds,
+        },
+        inference:
+          inferenceMode === "custom"
+            ? {
+                mode: "custom",
+                baseUrl: customInference.baseUrl.trim(),
+                model: customInference.model.trim(),
+                apiKey: customInference.apiKey.trim(),
+              }
+            : { mode: "default" },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || "Unable to compact the conversation.");
+    }
+
+    const data = (await response.json()) as ChatResponse;
+    const summary = data.reply?.trim();
+    if (!summary) {
+      throw new Error("Unable to compact the conversation.");
+    }
+
+    return summary;
+  };
+
   const handleCompactConversation = async () => {
     if (!activeConversationId || !activeConversation) return;
     if (isLoading || hasRunningToolCalls || pendingChoice) return;
@@ -1360,47 +1457,22 @@ export default function Home() {
     markConversationLoading(conversationId);
     setConversationError(conversationId, null);
 
-    const compactPrompt: ChatMessage[] = [
-      {
-        role: "system",
-        content:
-          "Summarize the conversation so far into a compact context for future turns. Include goals, key decisions, important details, and open questions. Keep it concise and use bullet points.",
-      },
-      ...activeConversation.messages,
-    ];
-
-    localStorage.setItem(
-      PENDING_REQUEST_STORAGE_KEY,
-      JSON.stringify({
-        conversationId,
-        messages: compactPrompt,
-      }),
-    );
-
     try {
-      const response = await sendMessages(conversationId, compactPrompt);
-      const summary = response.reply?.trim();
-      if (!summary) {
-        throw new Error("Unable to compact the conversation.");
-      }
+      const summary = await requestCompactionSummary(activeConversation.messages);
+      const compactedAt = Date.now();
       setConversations((prev) =>
         prev.map((conversation) =>
           conversation.id === conversationId
             ? {
                 ...conversation,
                 messages: [
-                  {
-                    role: "system",
-                    content:
-                      "Conversation compacted. Use the summary below for future context.",
-                  },
-                  {
-                    role: "assistant",
-                    content: summary,
-                  },
+                  ...conversation.messages,
+                  createCompactionMarkerMessage(compactedAt),
                 ],
+                compactionSummary: summary,
+                compactedAt,
+                compactionMessageCount: conversation.messages.length,
                 updatedAt: Date.now(),
-                lastSummaryMessageCount: 2,
               }
             : conversation,
         ),
@@ -1413,7 +1485,6 @@ export default function Home() {
       setConversationError(conversationId, message);
     } finally {
       clearConversationLoading(conversationId);
-      clearPendingRequestForConversation(conversationId);
     }
   };
 
