@@ -105,6 +105,9 @@ async function main() {
   return await res.json();
 }
 ```
+**IMPORTANT**
+ - The APIs can use different measurements for each thing, so be sure of what is being used before using. For example, storage normally is measured in GBs, but sometimes is in MBs. 
+ - When getting you need a specific information from an API that return lots of information, don't just call the API (unless it is necessary). For example, if I need you search for an ECS flavor that has exactly 1vcpu and 1GB ram, there is no need to add 21000 lines of flavors to the context. You can just take a look at the format of the response of the API and make a code that filters for the results that have 1vcpu and 1GB of ram (might be written as 1024MB).
 
 ## Asking for missing information
 
