@@ -118,6 +118,15 @@ When user command lacks key details, like:
 
 ask for information using your ask_multiple_choice tool.
 
+## SSH access tools
+
+If you need to execute commands on a remote host (for example, to validate a newly created ECS), you can use the SSH tools:
+
+1. Use `ssh_connect` with host, username, and password to open a session.
+2. Use `ssh_send` to run commands.
+3. Use `ssh_read` to fetch recent output (optionally clearing the buffer).
+4. Use `ssh_close` when finished.
+
 ## Error handling and retries
 
 * For API calls, handle HTTP errors with retries and exponential backoff.
