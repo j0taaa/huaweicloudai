@@ -112,6 +112,27 @@ const createCompactionMarkerMessage = (timestamp: number): ChatMessage => ({
   ).toLocaleString()}.`,
 });
 
+const buildModelMessages = (conversation: Conversation): ChatMessage[] => {
+  const messages = conversation.messages;
+  if (!conversation.compactionSummary) {
+    return messages.filter((message) => !isCompactionMarkerMessage(message));
+  }
+
+  const summaryMessage: ChatMessage = {
+    role: "system",
+    content: conversation.compactionSummary,
+  };
+  const startIndex = Math.min(
+    Math.max(conversation.compactionMessageCount, 0),
+    messages.length,
+  );
+  const compactedMessages = messages
+    .slice(startIndex)
+    .filter((message) => !isCompactionMarkerMessage(message));
+
+  return [summaryMessage, ...compactedMessages];
+};
+
 const normalizeConversation = (conversation: Partial<Conversation>): Conversation => ({
   id: typeof conversation.id === "string" ? conversation.id : createConversationId(),
   title:
@@ -207,6 +228,7 @@ export default function Home() {
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const compactMenuRef = useRef<HTMLDivElement | null>(null);
   const summaryInFlightRef = useRef<Set<string>>(new Set());
+  const compactionInFlightRef = useRef<Set<string>>(new Set());
   const credentialHydratedRef = useRef(false);
   const credentialResetSkipRef = useRef(true);
   const pendingResumeRef = useRef(false);
@@ -577,11 +599,18 @@ export default function Home() {
     }
     abortControllersRef.current.set(conversationId, controller);
     try {
+      const conversation =
+        conversations.find((item) => item.id === conversationId) ?? null;
+      const modelMessages = buildModelMessages(
+        conversation
+          ? { ...conversation, messages: nextMessages }
+          : { ...createEmptyConversation(), messages: nextMessages },
+      );
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: nextMessages,
+          messages: modelMessages,
           context: {
             accessKey: accessKey.trim(),
             secretKey: secretKey.trim(),
@@ -1452,7 +1481,9 @@ export default function Home() {
   const handleCompactConversation = async () => {
     if (!activeConversationId || !activeConversation) return;
     if (isLoading || hasRunningToolCalls || pendingChoice) return;
+    if (compactionInFlightRef.current.has(activeConversationId)) return;
     const conversationId = activeConversationId;
+    compactionInFlightRef.current.add(conversationId);
     setCompactMenuOpen(false);
     markConversationLoading(conversationId);
     setConversationError(conversationId, null);
@@ -1484,6 +1515,7 @@ export default function Home() {
           : "Something went wrong.";
       setConversationError(conversationId, message);
     } finally {
+      compactionInFlightRef.current.delete(conversationId);
       clearConversationLoading(conversationId);
     }
   };
@@ -1598,6 +1630,56 @@ export default function Home() {
         summaryInFlightRef.current.delete(activeConversation.id);
       });
   }, [activeConversation, isLoading, pendingChoice]);
+
+  useEffect(() => {
+    if (!activeConversation) return;
+    if (estimatedTokenCount < 100000) return;
+    if (isLoading || pendingChoice) return;
+    if (compactionInFlightRef.current.has(activeConversation.id)) return;
+    if (
+      activeConversation.compactionSummary &&
+      activeConversation.messages.length <= activeConversation.compactionMessageCount + 1
+    ) {
+      return;
+    }
+
+    compactionInFlightRef.current.add(activeConversation.id);
+    markConversationLoading(activeConversation.id);
+    setConversationError(activeConversation.id, null);
+
+    void requestCompactionSummary(activeConversation.messages)
+      .then((summary) => {
+        const compactedAt = Date.now();
+        setConversations((prev) =>
+          prev.map((conversation) =>
+            conversation.id === activeConversation.id
+              ? {
+                  ...conversation,
+                  messages: [
+                    ...conversation.messages,
+                    createCompactionMarkerMessage(compactedAt),
+                  ],
+                  compactionSummary: summary,
+                  compactedAt,
+                  compactionMessageCount: conversation.messages.length,
+                  updatedAt: Date.now(),
+                }
+              : conversation,
+          ),
+        );
+      })
+      .catch((caughtError) => {
+        const message =
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Something went wrong.";
+        setConversationError(activeConversation.id, message);
+      })
+      .finally(() => {
+        compactionInFlightRef.current.delete(activeConversation.id);
+        clearConversationLoading(activeConversation.id);
+      });
+  }, [activeConversation, estimatedTokenCount, isLoading, pendingChoice]);
 
   return (
     <div className="flex h-dvh w-screen flex-col bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50 lg:flex-row">
