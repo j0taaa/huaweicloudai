@@ -32,6 +32,15 @@ type ToolPayload = {
   productShort?: string;
   action?: string;
   regionId?: string;
+  host?: string;
+  port?: number;
+  username?: string;
+  password?: string;
+  sessionId?: string;
+  command?: string;
+  appendNewline?: boolean;
+  maxChars?: number;
+  clear?: boolean;
   error?: string;
 };
 
@@ -503,7 +512,23 @@ export default function Home() {
   };
 
   const parseToolPayload = (toolCall: ToolCall): ToolPayload => {
-    let payload: { code?: string; question?: string; options?: string[]; productShort?: string; action?: string; regionId?: string } = {};
+    let payload: {
+      code?: string;
+      question?: string;
+      options?: string[];
+      productShort?: string;
+      action?: string;
+      regionId?: string;
+      host?: string;
+      port?: number;
+      username?: string;
+      password?: string;
+      sessionId?: string;
+      command?: string;
+      appendNewline?: boolean;
+      maxChars?: number;
+      clear?: boolean;
+    } = {};
 
     try {
       payload = JSON.parse(toolCall.function.arguments || "{}") as {
@@ -555,6 +580,46 @@ export default function Home() {
       }
 
       return { productShort: payload.productShort, action: payload.action, regionId: payload.regionId };
+    }
+
+    if (toolCall.function.name === "ssh_connect") {
+      if (!payload.host || !payload.username || !payload.password) {
+        return {
+          error: "Error: host, username, and password are required for ssh_connect.",
+        };
+      }
+
+      return { host: payload.host, port: payload.port, username: payload.username, password: payload.password };
+    }
+
+    if (toolCall.function.name === "ssh_send") {
+      if (!payload.sessionId || !payload.command) {
+        return {
+          error: "Error: sessionId and command are required for ssh_send.",
+        };
+      }
+
+      return { sessionId: payload.sessionId, command: payload.command, appendNewline: payload.appendNewline };
+    }
+
+    if (toolCall.function.name === "ssh_read") {
+      if (!payload.sessionId) {
+        return {
+          error: "Error: sessionId is required for ssh_read.",
+        };
+      }
+
+      return { sessionId: payload.sessionId, maxChars: payload.maxChars, clear: payload.clear };
+    }
+
+    if (toolCall.function.name === "ssh_close") {
+      if (!payload.sessionId) {
+        return {
+          error: "Error: sessionId is required for ssh_close.",
+        };
+      }
+
+      return { sessionId: payload.sessionId };
     }
 
     return {
@@ -741,6 +806,197 @@ export default function Home() {
     }
   };
 
+  const executeSshConnectTool = async (toolCall: ToolCall): Promise<ChatMessage> => {
+    const payload = parseToolPayload(toolCall);
+
+    if (payload.error) {
+      return {
+        role: "tool",
+        content: payload.error,
+        tool_call_id: toolCall.id,
+      };
+    }
+
+    try {
+      const response = await fetch("/api/ssh/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          host: payload.host,
+          port: payload.port,
+          username: payload.username,
+          password: payload.password,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          role: "tool",
+          content: errorText || "Error establishing SSH session.",
+          tool_call_id: toolCall.id,
+        };
+      }
+
+      const data = (await response.json()) as { sessionId?: string; error?: string };
+      return {
+        role: "tool",
+        content: data.error ?? data.sessionId ?? "No sessionId returned from server.",
+        tool_call_id: toolCall.id,
+      };
+    } catch (error) {
+      return {
+        role: "tool",
+        content: `Error executing ssh_connect: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+        tool_call_id: toolCall.id,
+      };
+    }
+  };
+
+  const executeSshSendTool = async (toolCall: ToolCall): Promise<ChatMessage> => {
+    const payload = parseToolPayload(toolCall);
+
+    if (payload.error) {
+      return {
+        role: "tool",
+        content: payload.error,
+        tool_call_id: toolCall.id,
+      };
+    }
+
+    try {
+      const response = await fetch("/api/ssh/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: payload.sessionId,
+          command: payload.command,
+          appendNewline: payload.appendNewline,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          role: "tool",
+          content: errorText || "Error sending SSH command.",
+          tool_call_id: toolCall.id,
+        };
+      }
+
+      const data = (await response.json()) as { result?: string; error?: string };
+      return {
+        role: "tool",
+        content: data.error ?? data.result ?? "No result returned from server.",
+        tool_call_id: toolCall.id,
+      };
+    } catch (error) {
+      return {
+        role: "tool",
+        content: `Error executing ssh_send: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+        tool_call_id: toolCall.id,
+      };
+    }
+  };
+
+  const executeSshReadTool = async (toolCall: ToolCall): Promise<ChatMessage> => {
+    const payload = parseToolPayload(toolCall);
+
+    if (payload.error) {
+      return {
+        role: "tool",
+        content: payload.error,
+        tool_call_id: toolCall.id,
+      };
+    }
+
+    try {
+      const response = await fetch("/api/ssh/read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: payload.sessionId,
+          maxChars: payload.maxChars,
+          clear: payload.clear,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          role: "tool",
+          content: errorText || "Error reading SSH output.",
+          tool_call_id: toolCall.id,
+        };
+      }
+
+      const data = (await response.json()) as { output?: string; error?: string };
+      return {
+        role: "tool",
+        content: data.error ?? data.output ?? "No output returned from server.",
+        tool_call_id: toolCall.id,
+      };
+    } catch (error) {
+      return {
+        role: "tool",
+        content: `Error executing ssh_read: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+        tool_call_id: toolCall.id,
+      };
+    }
+  };
+
+  const executeSshCloseTool = async (toolCall: ToolCall): Promise<ChatMessage> => {
+    const payload = parseToolPayload(toolCall);
+
+    if (payload.error) {
+      return {
+        role: "tool",
+        content: payload.error,
+        tool_call_id: toolCall.id,
+      };
+    }
+
+    try {
+      const response = await fetch("/api/ssh/close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: payload.sessionId,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          role: "tool",
+          content: errorText || "Error closing SSH session.",
+          tool_call_id: toolCall.id,
+        };
+      }
+
+      const data = (await response.json()) as { result?: string; error?: string };
+      return {
+        role: "tool",
+        content: data.error ?? data.result ?? "No result returned from server.",
+        tool_call_id: toolCall.id,
+      };
+    } catch (error) {
+      return {
+        role: "tool",
+        content: `Error executing ssh_close: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+        tool_call_id: toolCall.id,
+      };
+    }
+  };
+
   const runToolCalls = async (toolCalls: ToolCall[]) => {
     return Promise.all(
       toolCalls.map(async (toolCall) => {
@@ -754,6 +1010,22 @@ export default function Home() {
 
         if (toolCall.function.name === "get_api_details") {
           return executeGetApiDetailsTool(toolCall);
+        }
+
+        if (toolCall.function.name === "ssh_connect") {
+          return executeSshConnectTool(toolCall);
+        }
+
+        if (toolCall.function.name === "ssh_send") {
+          return executeSshSendTool(toolCall);
+        }
+
+        if (toolCall.function.name === "ssh_read") {
+          return executeSshReadTool(toolCall);
+        }
+
+        if (toolCall.function.name === "ssh_close") {
+          return executeSshCloseTool(toolCall);
         }
 
         return {
