@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
   try {
     sendCommand(sessionId, command, appendNewline);
-    return NextResponse.json({ result: "Command sent." });
+    return NextResponse.json({ result: `Command sent: ${command}` });
   } catch (error) {
     return NextResponse.json(
       {
