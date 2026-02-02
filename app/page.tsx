@@ -250,13 +250,19 @@ export default function Home() {
     ? loadingConversationIds.has(activeConversationId)
     : false;
   const tokenFormatter = useMemo(() => new Intl.NumberFormat(), []);
+  const isCompacting = activeConversationId
+    ? compactionInFlightRef.current.has(activeConversationId)
+    : false;
   const estimatedTokenCount = useMemo(() => {
     if (!activeConversation) return 0;
-    return activeConversation.messages.reduce(
+    return buildModelMessages(activeConversation).reduce(
       (total, message) => total + estimateTokens(message.content),
       0,
     );
   }, [activeConversation]);
+  const tokenCountLabel = activeConversation?.compactionSummary
+    ? "Tokens used (compacted)"
+    : "Tokens used";
 
   const setConversationError = (conversationId: string, message: string | null) => {
     setConversationErrors((prev) => ({ ...prev, [conversationId]: message }));
@@ -2001,7 +2007,7 @@ export default function Home() {
         </header>
         <section className="relative flex h-full flex-1 flex-col gap-6 bg-white px-4 py-5 shadow-sm dark:bg-zinc-950 sm:px-6 sm:py-6">
           <div className="absolute right-4 top-4 rounded-full border border-zinc-200 bg-white/90 px-3 py-1 text-xs font-semibold text-zinc-600 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/80 dark:text-zinc-300">
-            Tokens used: {tokenFormatter.format(estimatedTokenCount)}
+            {tokenCountLabel}: {tokenFormatter.format(estimatedTokenCount)}
           </div>
           <div
             className="flex flex-1 flex-col gap-4 overflow-y-auto"
@@ -2194,7 +2200,7 @@ export default function Home() {
                   className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600 dark:border-white/20 dark:border-t-white"
                   aria-hidden="true"
                 />
-                <span>Thinking...</span>
+                <span>{isCompacting ? "Compacting..." : "Thinking..."}</span>
               </div>
             ) : null}
           </div>
