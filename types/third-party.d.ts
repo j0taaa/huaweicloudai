@@ -43,3 +43,16 @@ declare module "turndown" {
     turndown(input: string): string;
   }
 }
+
+declare module "commander" {
+  export class Command {
+    constructor();
+    name(value: string): this;
+    description(text: string): this;
+    version(value: string): this;
+    option(...args: any[]): this;
+    requiredOption(...args: any[]): this;
+    action(handler: (...args: any[]) => void | Promise<void>): this;
+    parse(argv?: string[]): this;
+  }
+}
