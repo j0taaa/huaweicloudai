@@ -42,7 +42,7 @@ export const createSession = async (input: SshConnectInput) => {
           cols: 120,
           rows: 40,
         },
-        (shellError, stream) => {
+        (shellError: Error | undefined, stream: ClientChannel) => {
           if (shellError) {
             client.end();
             reject(shellError);
@@ -85,7 +85,7 @@ export const createSession = async (input: SshConnectInput) => {
       );
     });
 
-    client.on("error", (error) => {
+    client.on("error", (error: Error) => {
       if (!resolved) {
         reject(error);
       }
