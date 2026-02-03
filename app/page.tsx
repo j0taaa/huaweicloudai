@@ -550,14 +550,19 @@ export default function Home() {
         messages?: ChatMessage[];
       };
 
-      if (!parsed.conversationId || !Array.isArray(parsed.messages)) {
+      const conversationId = parsed.conversationId;
+      const pendingMessages = Array.isArray(parsed.messages)
+        ? (parsed.messages as ChatMessage[])
+        : null;
+
+      if (!conversationId || !pendingMessages) {
         localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
         pendingResumeRef.current = true;
         return;
       }
 
       const pendingConversation = conversations.find(
-        (conversation) => conversation.id === parsed.conversationId,
+        (conversation) => conversation.id === conversationId,
       );
       if (!pendingConversation) {
         localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
@@ -566,27 +571,27 @@ export default function Home() {
       }
 
       pendingResumeRef.current = true;
-      if (activeConversationId !== parsed.conversationId) {
-        setActiveConversationId(parsed.conversationId);
+      if (activeConversationId !== conversationId) {
+        setActiveConversationId(conversationId);
       }
 
-      markConversationLoading(parsed.conversationId);
-      setConversationError(parsed.conversationId, null);
+      markConversationLoading(conversationId);
+      setConversationError(conversationId, null);
 
-      void sendMessages(parsed.conversationId, parsed.messages)
+      void sendMessages(conversationId, pendingMessages)
         .then((response) =>
-          continueConversation(parsed.conversationId, [...parsed.messages], response),
+          continueConversation(conversationId, [...pendingMessages], response),
         )
         .catch((caughtError) => {
           const message =
             caughtError instanceof Error
               ? caughtError.message
               : "Something went wrong.";
-          setConversationError(parsed.conversationId, message);
+          setConversationError(conversationId, message);
         })
         .finally(() => {
-          clearConversationLoading(parsed.conversationId);
-          clearPendingRequestForConversation(parsed.conversationId);
+          clearConversationLoading(conversationId);
+          clearPendingRequestForConversation(conversationId);
         });
     } catch {
       localStorage.removeItem(PENDING_REQUEST_STORAGE_KEY);
