@@ -112,6 +112,13 @@ export async function POST(request: Request) {
   const baseUrl =
     inferenceMode === "custom" ? customBaseUrl : process.env.ZAI_URL;
 
+  if (!apiKey || !baseUrl) {
+    return NextResponse.json(
+      { error: "Missing API key or base URL configuration." },
+      { status: 500 },
+    );
+  }
+
   const normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
   const endpoint = new URL("chat/completions", normalizedBaseUrl).toString();
 
