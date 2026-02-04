@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { pipeline } from "@xenova/transformers";
 
 // Cache directory
 const CACHE_DIR = path.join(process.cwd(), "rag_cache");
@@ -71,6 +70,10 @@ async function getEmbeddingPipeline(): Promise<any> {
 
   console.log("Loading embedding model (Xenova/all-MiniLM-L6-v2)...");
   updateProgress("loading_model", 0, 1);
+  if (typeof process !== "undefined") {
+    process.env.TRANSFORMERS_BACKEND ??= "wasm";
+  }
+  const { pipeline } = await import("@xenova/transformers");
   ragState.embeddingPipeline = await pipeline(
     "feature-extraction",
     "Xenova/all-MiniLM-L6-v2",
