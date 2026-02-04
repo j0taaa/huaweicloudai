@@ -56,3 +56,12 @@ declare module "commander" {
     parse(argv?: string[]): this;
   }
 }
+
+declare module "cheerio" {
+  const cheerio: any;
+  export = cheerio;
+}
+
+declare namespace cheerio {
+  type Cheerio<T> = any;
+}

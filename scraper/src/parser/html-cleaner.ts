@@ -80,7 +80,7 @@ export class HtmlCleaner {
       });
 
       // Remove comments
-      $('*').contents().filter(function() {
+      $('*').contents().filter(function(this: { type?: string }) {
         return this.type === 'comment';
       }).remove();
 
