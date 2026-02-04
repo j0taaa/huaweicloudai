@@ -1,0 +1,9 @@
+{
+  "name": "Pre-compute RAG Embeddings",
+  "version": "1.0.0",
+  "description": "Pre-compute and persist RAG embeddings for faster server startup",
+  "main": "scripts/precompute-rag.ts",
+  "scripts": {
+    "precompute-rag": "tsx scripts/precompute-rag.ts"
+  }
+}
