@@ -28,7 +28,7 @@ docker run --rm -p 3000:3000 huaweicloudai
 Or use Docker Compose:
 
 ```bash
-docker compose up --build
+./scripts/compose-up.sh
 ```
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
