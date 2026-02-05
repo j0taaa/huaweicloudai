@@ -141,3 +141,55 @@ body {
     background: rgba(148, 163, 184, 0.12);
   }
 }
+
+.chart-block__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  min-height: 180px;
+  padding-top: 0.5rem;
+}
+
+.chart-block__item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.chart-block__value {
+  font-size: 0.7rem;
+  color: rgb(82 82 91);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-block__bar {
+  width: 100%;
+  max-width: 38px;
+  min-height: 2px;
+  border-radius: 0.45rem 0.45rem 0.2rem 0.2rem;
+  background: linear-gradient(180deg, rgb(59 130 246 / 0.92), rgb(37 99 235 / 0.78));
+}
+
+.chart-block__label {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.68rem;
+  text-align: center;
+  color: rgb(82 82 91);
+}
+
+@media (prefers-color-scheme: dark) {
+  .chart-block__value,
+  .chart-block__label {
+    color: rgb(212 212 216);
+  }
+
+  .chart-block__bar {
+    background: linear-gradient(180deg, rgb(96 165 250 / 0.96), rgb(59 130 246 / 0.86));
+  }
+}
