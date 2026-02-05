@@ -74,18 +74,18 @@ export class HtmlCleaner {
       REMOVE_SELECTORS.forEach(selector => {
         try {
           $(selector).remove();
-        } catch (e) {
+        } catch {
           // Ignore errors for individual selectors
         }
       });
 
       // Remove comments
-      $('*').contents().filter(function() {
+      $('*').contents().filter(function(this: { type?: string }) {
         return this.type === 'comment';
       }).remove();
 
       // Find main content
-      let $content: cheerio.Cheerio<any> | null = null;
+      let $content: ReturnType<typeof $> | null = null;
       
       for (const selector of CONTENT_SELECTORS) {
         const $found = $(selector);
@@ -145,7 +145,7 @@ export class HtmlCleaner {
         'Untitled';
 
       return title;
-    } catch (error) {
+    } catch {
       return 'Untitled';
     }
   }

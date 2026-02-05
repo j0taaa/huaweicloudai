@@ -35,7 +35,7 @@ const collectFiles = async (dir: string, rootDir: string): Promise<FileEntry[]> 
   return files;
 };
 
-const buildExtensionZip = async (): Promise<Uint8Array> => {
+const buildExtensionZip = async (): Promise<ArrayBuffer> => {
   const extensionStats = await fs.stat(EXTENSION_DIR);
   if (!extensionStats.isDirectory()) {
     throw new Error("Extension source directory not found.");
@@ -55,8 +55,7 @@ const buildExtensionZip = async (): Promise<Uint8Array> => {
     }),
   );
 
-  const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
-  return new Uint8Array(zipBuffer);
+  return zip.generateAsync({ type: "arraybuffer" });
 };
 
 const extensionZipPromise = buildExtensionZip();
