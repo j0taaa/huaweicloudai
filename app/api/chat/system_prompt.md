@@ -121,6 +121,10 @@ When user command lacks key details, like:
 
 ask for information using your ask_multiple_choice tool.
 
+## Cost and resources related questions
+
+The service that is Customer Operation Capabilities (BSSINTL) is actually not a service, but a group of APIs for managing costs, accounts, coupons, invoices, etc. If the user asks something about their current costs use it. The API is only available for the Hong Kong region, but the costs returned by it are the from the entire account, it's like a universal API for the entire account. 
+
 ## SSH access tools
 
 If you need to execute commands on a remote host (for example, to validate a newly created ECS), you can use the SSH tools:
