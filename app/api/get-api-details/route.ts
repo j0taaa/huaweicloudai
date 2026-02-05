@@ -81,7 +81,7 @@ function setCachedApiDetails(cacheKey: string, value: ApiResponse) {
   apiDetailsCache.set(cacheKey, { value, expiresAt: Date.now() + API_CACHE_TTL_MS });
 }
 
-async function fetchRegions(productShort: string, apiName: string, regionId: string = 'ap-southeast-1'): Promise<Region[]> {
+async function fetchRegions(productShort: string, apiName: string, regionId: string = 'sa-brazil-1'): Promise<Region[]> {
   const response = await fetch(`https://${regionId}-console.huaweicloud.com/apiexplorer/new/v6/regions?product_short=${productShort}&api_name=${apiName}`, {
     headers: {
       'X-Language': 'en-us'
@@ -104,14 +104,19 @@ async function fetchRegions(productShort: string, apiName: string, regionId: str
   return [];
 }
 
-async function getApiDetails(productShort: string, action: string, regionId: string = 'ap-southeast-1'): Promise<ApiResponse> {
+async function getApiDetails(productShort: string, action: string, regionId: string = 'sa-brazil-1'): Promise<ApiResponse> {
   const cacheKey = `${productShort}:${action}:${regionId}`;
   const cached = getCachedApiDetails(cacheKey);
   if (cached) {
     return cached;
   }
 
-  const response = await fetch(`https://${regionId}-console.huaweicloud.com/apiexplorer/new/v4/apis/detail?product_short=${productShort}&name=${action}&region_id=${regionId}`, {
+  // BSSINTL is only available in ap-southeast-1 (Hong Kong) but needs a working region for the host
+  const isBssIntl = productShort.toUpperCase() === 'BSSINTL';
+  const hostRegion = isBssIntl ? 'sa-brazil-1' : regionId;
+  const targetRegion = isBssIntl ? 'ap-southeast-1' : regionId;
+  
+  const response = await fetch(`https://${hostRegion}-console.huaweicloud.com/apiexplorer/new/v4/apis/detail?product_short=${productShort}&name=${action}&region_id=${targetRegion}`, {
     headers: {
       'X-Language': 'en-us'
     }
@@ -250,7 +255,7 @@ async function getApiDetails(productShort: string, action: string, regionId: str
   requestInfo.queryParams = queryParams;
   requestInfo.bodyParams = bodyParams.length > 0 ? bodyParams : undefined;
 
-  const regions = await fetchRegions(productShort, action, regionId);
+  const regions = await fetchRegions(productShort, action, hostRegion);
 
   const apiDetails = {
     name: data.name,
