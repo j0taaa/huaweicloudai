@@ -2259,8 +2259,16 @@ export default function Home() {
           </button>
         </header>
         <section className="relative flex h-full flex-1 flex-col gap-6 bg-white px-4 py-5 shadow-sm dark:bg-zinc-950 sm:px-6 sm:py-6">
-          <div className="absolute right-4 top-4 rounded-full border border-zinc-200 bg-white/90 px-3 py-1 text-xs font-semibold text-zinc-600 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/80 dark:text-zinc-300">
-            {tokenCountLabel}: {tokenFormatter.format(estimatedTokenCount)}
+          <div className="absolute right-4 top-4 flex items-center gap-2">
+            <a
+              href="/api/extension-download"
+              className="rounded-full border border-zinc-200 bg-white/90 px-3 py-1 text-xs font-semibold text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-900 dark:border-white/10 dark:bg-black/80 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+            >
+              Download extension ZIP
+            </a>
+            <div className="rounded-full border border-zinc-200 bg-white/90 px-3 py-1 text-xs font-semibold text-zinc-600 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/80 dark:text-zinc-300">
+              {tokenCountLabel}: {tokenFormatter.format(estimatedTokenCount)}
+            </div>
           </div>
           <div
             className="flex flex-1 flex-col gap-4 overflow-y-auto"
