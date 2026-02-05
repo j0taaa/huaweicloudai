@@ -2,7 +2,7 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 type ChatMessage = {
   role: "user" | "assistant" | "tool" | "system";
@@ -161,71 +161,145 @@ const normalizeConversation = (conversation: Partial<Conversation>): Conversatio
 });
 
 
-type ChartPoint = {
+type ChartDatum = {
   label: string;
   value: number;
 };
 
-const parseChartData = (value: string): ChartPoint[] | null => {
+const parseChartData = (rawChartData: string): ChartDatum[] | null => {
   try {
-    const parsed = JSON.parse(value) as unknown;
-    if (!Array.isArray(parsed) || parsed.length === 0) {
+    const parsed = JSON.parse(rawChartData) as unknown;
+    if (!Array.isArray(parsed)) {
       return null;
     }
 
-    const points: ChartPoint[] = [];
-    for (const item of parsed) {
-      if (!item || typeof item !== "object") {
-        return null;
-      }
+    const normalizedData = parsed
+      .map((entry) => {
+        if (!entry || typeof entry !== "object") {
+          return null;
+        }
 
-      const label = (item as { label?: unknown }).label;
-      const pointValue = (item as { value?: unknown }).value;
+        const label = "label" in entry ? entry.label : undefined;
+        const value = "value" in entry ? entry.value : undefined;
+        const numericValue =
+          typeof value === "number"
+            ? value
+            : typeof value === "string"
+              ? Number(value)
+              : Number.NaN;
 
-      if (typeof label !== "string" || !label.trim()) {
-        return null;
-      }
+        if (typeof label !== "string" || !Number.isFinite(numericValue)) {
+          return null;
+        }
 
-      if (typeof pointValue !== "number" || !Number.isFinite(pointValue)) {
-        return null;
-      }
+        return {
+          label: label.trim(),
+          value: numericValue,
+        };
+      })
+      .filter((entry): entry is ChartDatum =>
+        Boolean(entry && entry.label.length > 0),
+      );
 
-      points.push({ label, value: pointValue });
-    }
-
-    return points;
+    return normalizedData.length > 0 ? normalizedData : null;
   } catch {
     return null;
   }
 };
 
-const ChartBlock = ({ data }: { data: ChartPoint[] }) => {
-  const maxValue = Math.max(...data.map((point) => point.value), 0);
+const ChartBlock = ({ data }: { data: ChartDatum[] }) => {
+  const maxValue = Math.max(...data.map((entry) => entry.value), 0);
+  const formatter = new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 2,
+  });
 
   return (
-    <div className="chart-block not-prose mt-2 rounded-xl border border-zinc-200 bg-white/70 p-3 dark:border-white/10 dark:bg-black/20">
-      <div className="chart-block__bars">
-        {data.map((point, index) => {
-          const barHeight =
-            maxValue === 0 ? 0 : Math.max((Math.abs(point.value) / maxValue) * 100, 2);
-
+    <div className="mt-2 rounded-2xl border border-zinc-200 bg-white px-3 py-4 dark:border-white/10 dark:bg-black/25">
+      <div className="flex h-52 items-end gap-2">
+        {data.map((entry, index) => {
+          const heightPercent =
+            maxValue > 0 ? Math.max((entry.value / maxValue) * 100, 0) : 0;
           return (
-            <div key={`${point.label}-${index}`} className="chart-block__item">
-              <div className="chart-block__value">{point.value}</div>
-              <div
-                className="chart-block__bar"
-                style={{ height: `${barHeight}%` }}
-                title={`${point.label}: ${point.value}`}
-              />
-              <div className="chart-block__label" title={point.label}>
-                {point.label}
+            <div
+              key={`${entry.label}-${index}`}
+              className="flex min-w-0 flex-1 flex-col items-center gap-2"
+            >
+              <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
+                {formatter.format(entry.value)}
+              </span>
+              <div className="flex h-36 w-full items-end justify-center">
+                <div
+                  className="w-full max-w-10 rounded-t-md bg-blue-500"
+                  style={{ height: `${heightPercent}%` }}
+                  title={`${entry.label}: ${formatter.format(entry.value)}`}
+                />
               </div>
+              <span className="w-full truncate text-center text-[11px] text-zinc-500 dark:text-zinc-400">
+                {entry.label}
+              </span>
             </div>
           );
         })}
       </div>
     </div>
   );
+};
+
+const renderAssistantMessageContent = (content: string): ReactNode[] => {
+  const chartBlockPattern = /```chart\s*([\s\S]*?)```/g;
+  const blocks: ReactNode[] = [];
+  let lastIndex = 0;
+  let chartIndex = 0;
+  let match = chartBlockPattern.exec(content);
+
+  while (match) {
+    const markdownContent = content.slice(lastIndex, match.index).trim();
+    if (markdownContent) {
+      blocks.push(
+        <ReactMarkdown
+          key={`markdown-${chartIndex}-${match.index}`}
+          remarkPlugins={[remarkGfm]}
+        >
+          {markdownContent}
+        </ReactMarkdown>,
+      );
+    }
+
+    const rawChartData = match[1]?.trim() ?? "";
+    const chartData = parseChartData(rawChartData);
+
+    if (chartData) {
+      blocks.push(
+        <ChartBlock key={`chart-${chartIndex}-${match.index}`} data={chartData} />,
+      );
+    } else {
+      blocks.push(
+        <ReactMarkdown
+          key={`invalid-chart-${chartIndex}-${match.index}`}
+          remarkPlugins={[remarkGfm]}
+        >
+          {`\`\`\`chart
+${rawChartData}
+\`\`\``}
+        </ReactMarkdown>,
+      );
+    }
+
+    lastIndex = chartBlockPattern.lastIndex;
+    chartIndex += 1;
+    match = chartBlockPattern.exec(content);
+  }
+
+  const remainingContent = content.slice(lastIndex).trim();
+  if (remainingContent) {
+    blocks.push(
+      <ReactMarkdown key="markdown-final" remarkPlugins={[remarkGfm]}>
+        {remainingContent}
+      </ReactMarkdown>,
+    );
+  }
+
+  return blocks.length > 0 ? blocks : [content];
 };
 
 const fetchProjectIds = async (ak: string, sk: string) => {
@@ -2250,48 +2324,7 @@ export default function Home() {
                           >
                             {message.role === "assistant" ? (
                               <div className="markdown-content">
-                                <ReactMarkdown
-                                  remarkPlugins={[remarkGfm]}
-                                  components={{
-                                    code({ className, children, ...props }) {
-                                      const rawValue = String(children).replace(/\n$/, "");
-                                      const language = className?.replace("language-", "").toLowerCase();
-                                      const isInlineCode = !className && !rawValue.includes("\n");
-
-                                      if (language === "chart") {
-                                        const chartData = parseChartData(rawValue);
-
-                                        if (!chartData) {
-                                          return (
-                                            <pre className="rounded-xl border border-amber-300 bg-amber-50/80 p-3 text-xs text-amber-900 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-100">
-                                              Invalid chart data. Expected a JSON array of objects with label and value fields.
-                                            </pre>
-                                          );
-                                        }
-
-                                        return <ChartBlock data={chartData} />;
-                                      }
-
-                                      if (isInlineCode) {
-                                        return (
-                                          <code className={className} {...props}>
-                                            {children}
-                                          </code>
-                                        );
-                                      }
-
-                                      return (
-                                        <pre>
-                                          <code className={className} {...props}>
-                                            {rawValue}
-                                          </code>
-                                        </pre>
-                                      );
-                                    },
-                                  }}
-                                >
-                                  {message.content}
-                                </ReactMarkdown>
+                                {renderAssistantMessageContent(message.content)}
                               </div>
                             ) : (
                               message.content
