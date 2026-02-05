@@ -118,7 +118,6 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
-
   const normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
   const endpoint = new URL("chat/completions", normalizedBaseUrl).toString();
 
@@ -325,6 +324,35 @@ export async function POST(request: Request) {
                 },
               },
               required: ["sessionId"],
+            },
+          },
+        },
+        {
+          type: "function",
+          function: {
+            name: "search_rag_docs",
+            description:
+              "Search Huawei Cloud documentation using semantic RAG. Returns relevant documentation snippets with source URLs. Use this when the user asks about: 1) Huawei Cloud service concepts, 2) Configuration best practices, 3) How-to guides, 4) Feature explanations, 5) Quotas and limits. NOT for API discovery (use get_all_apis instead).",
+            parameters: {
+              type: "object",
+              properties: {
+                query: {
+                  type: "string",
+                  description:
+                    "The search query describing what information is needed. Be specific for better results.",
+                },
+                product: {
+                  type: "string",
+                  description:
+                    "Optional: Filter to a specific service (e.g., 'ECS', 'VPC', 'OBS', 'RDS', 'ELB', 'CCE'). Leave empty to search all docs.",
+                },
+                top_k: {
+                  type: "number",
+                  description: "Number of results to return (1-10). Default is 3.",
+                  default: 3,
+                },
+              },
+              required: ["query"],
             },
           },
         },

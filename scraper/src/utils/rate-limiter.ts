@@ -121,7 +121,7 @@ export class RateLimiter {
 /**
  * Create a rate limiter with default settings
  */
-export function createRateLimiter(maxConcurrent = 10, baseDelayMs = 100): RateLimiter {
+export function createRateLimiter(maxConcurrent = 50, baseDelayMs = 50): RateLimiter {
   return new RateLimiter({
     maxConcurrent,
     baseDelayMs,

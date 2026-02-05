@@ -42,6 +42,9 @@ type ToolPayload = {
   maxChars?: number;
   clear?: boolean;
   error?: string;
+  query?: string;
+  product?: string;
+  top_k?: number;
 };
 
 type ToolPreview = {
@@ -670,6 +673,9 @@ export default function Home() {
       appendNewline?: boolean;
       maxChars?: number;
       clear?: boolean;
+      query?: string;
+      product?: string;
+      top_k?: number;
     } = {};
 
     try {
@@ -764,6 +770,19 @@ export default function Home() {
       return { sessionId: payload.sessionId };
     }
 
+    if (toolCall.function.name === "search_rag_docs") {
+      if (!payload.query) {
+        return {
+          error: "Error: query is required for search_rag_docs.",
+        };
+      }
+
+      return {
+        query: payload.query,
+        product: payload.product,
+        top_k: payload.top_k,
+      };
+    }
     return {
       error: `Error: Unsupported tool payload for ${toolCall.function.name}.`,
     };
@@ -1139,6 +1158,90 @@ export default function Home() {
     }
   };
 
+  const executeSearchRagTool = async (toolCall: ToolCall): Promise<ChatMessage> => {
+    const payload = parseToolPayload(toolCall);
+
+    if (payload.error) {
+      return {
+        role: "tool",
+        content: payload.error,
+        tool_call_id: toolCall.id,
+      };
+    }
+
+    try {
+      const response = await fetch("/api/search-rag", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: payload.query,
+          product: payload.product,
+          top_k: payload.top_k ?? 3,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          role: "tool",
+          content: errorText || "Error searching RAG.",
+          tool_call_id: toolCall.id,
+        };
+      }
+
+      const data = (await response.json()) as {
+        results?: Array<{
+          similarity: number;
+          snippet: string;
+          source: string;
+          title: string;
+          product: string;
+        }>;
+        totalDocs?: number;
+        queryTime?: number;
+        threshold?: number;
+        error?: string;
+      };
+
+      if (data.error) {
+        return {
+          role: "tool",
+          content: `RAG search failed: ${data.error}`,
+          tool_call_id: toolCall.id,
+        };
+      }
+
+      if (!data.results || data.results.length === 0) {
+        return {
+          role: "tool",
+          content: `No relevant documents found for query "${payload.query}" (threshold: ${data.threshold ?? 55}%). Try rephrasing or removing the product filter.`,
+          tool_call_id: toolCall.id,
+        };
+      }
+
+      // Format results for LLM
+      const formattedResults = data.results
+        .map(
+          (r, i) =>
+            `[${i + 1}] ${r.title} (${r.product}) - Relevance: ${(r.similarity * 100).toFixed(1)}%\nSource: ${r.source}\n${r.snippet.slice(0, 800)}${r.snippet.length > 800 ? "..." : ""}`
+        )
+        .join("\n\n---\n\n");
+
+      return {
+        role: "tool",
+        content: `Found ${data.results.length} relevant documents from ${data.totalDocs ?? "unknown"} total (query time: ${data.queryTime ?? "unknown"}ms, threshold: ${((data.threshold ?? 0.55) * 100).toFixed(0)}%):\n\n${formattedResults}`,
+        tool_call_id: toolCall.id,
+      };
+    } catch (error) {
+      return {
+        role: "tool",
+        content: `Error searching RAG: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+        tool_call_id: toolCall.id,
+      };
+    }
+  };
   const runToolCalls = async (toolCalls: ToolCall[]) => {
     return Promise.all(
       toolCalls.map(async (toolCall) => {
@@ -1170,6 +1273,9 @@ export default function Home() {
           return executeSshCloseTool(toolCall);
         }
 
+        if (toolCall.function.name === "search_rag_docs") {
+          return executeSearchRagTool(toolCall);
+        }
         return {
           role: "tool" as const,
           content: `Unsupported tool: ${toolCall.function.name}`,

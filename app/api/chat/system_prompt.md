@@ -130,6 +130,37 @@ The service that is Customer Operation Capabilities (BSSINTL) is actually not a 
 - When actually calling BSSINTL APIs (via eval_code with signRequest), use the Hong Kong region (`ap-southeast-1`) as the endpoint - BSSINTL APIs are only available in Hong Kong but cover the entire account globally
 - Example: To call ShowCustomerAccountBalances, use `https://bssintl.ap-southeast-1.myhuaweicloud.com/v2/accounts/customer-accounts/balances` 
 
+## Documentation Search (RAG)
+
+For questions about Huawei Cloud concepts, configuration, best practices, quotas, limits, or how-to guides, use the `search_rag_docs` tool to find relevant documentation from 15,000+ pre-indexed documents.
+
+**When to use:**
+- Explaining concepts: "What is a VPC subnet?"
+- Best practices: "How to secure an OBS bucket?"
+- Quotas and limits: "What are the ECS instance limits?"
+- Configuration: "How do I configure an ELB health check?"
+- Troubleshooting: "Why can't I connect to my RDS instance?"
+
+**When NOT to use:**
+- API discovery: Use `get_all_apis` → `get_api_details` workflow instead
+- Live resource status: Use `eval_code` with actual API calls
+- Code execution: Use `eval_code`
+
+**Usage pattern:**
+1. Call `search_rag_docs` with a specific, descriptive query
+2. Optionally filter by `product` (e.g., "ECS", "VPC", "OBS") if you know the service
+3. Review returned documentation snippets (55%+ relevance threshold)
+4. Synthesize the information and cite the sources in your response
+
+**Example workflow:**
+```
+User: "How do I create a highly available setup with ELB?"
+
+1. search_rag_docs({ "query": "ELB high availability best practices", "product": "ELB" })
+2. Review results about multi-AZ deployment, health checks, backend server groups
+3. Provide recommendations with source citations
+```
+
 ## SSH access tools
 
 If you need to execute commands on a remote host (for example, to validate a newly created ECS), you can use the SSH tools:

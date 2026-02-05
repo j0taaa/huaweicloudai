@@ -5,19 +5,25 @@
   "type": "module",
   "scripts": {
     "scrape": "tsx scripts/scrape-all.ts",
-    "build-rag": "cd .. && tsx scripts/build-rag.ts",
+    "rag:ingest": "tsx src/rag/cli/ingest.ts",
+    "rag:query": "tsx src/rag/cli/query.ts",
+    "rag:test": "tsx src/rag/test/evaluate.ts",
+    "rag:build": "npm run rag:ingest -- --clear && npm run rag:test",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "cheerio": "^1.0.0-rc.12",
-    "turndown": "^7.1.2",
-    "commander": "^11.1.0",
-    "chalk": "^5.3.0",
-    "ora": "^8.0.1",
     "@xenova/transformers": "^2.17.2",
-    "glob": "^10.3.10"
+    "chalk": "^5.3.0",
+    "cheerio": "^1.0.0-rc.12",
+    "chromadb": "^3.2.2",
+    "commander": "^11.1.0",
+    "glob": "^10.3.10",
+    "markdown-it": "^14.1.0",
+    "ora": "^8.0.1",
+    "turndown": "^7.1.2"
   },
   "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
     "@types/node": "^20.10.0",
     "tsx": "^4.7.0",
     "typescript": "^5.3.0"

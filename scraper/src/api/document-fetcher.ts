@@ -4,11 +4,11 @@
  */
 import type { RawHtmlDocument } from '../types/index.js';
 import { logger } from '../utils/logger.js';
-import { RateLimiter } from '../utils/rate-limiter.js';
+import { AdaptiveRateLimiter } from '../utils/adaptive-rate-limiter.js';
 import { withRetry, isRateLimitError, isNetworkError } from '../utils/retry-handler.js';
 
 interface FetchOptions {
-  rateLimiter: RateLimiter;
+  rateLimiter: AdaptiveRateLimiter;
   timeoutMs?: number;
 }
 

@@ -172,7 +172,7 @@ export const DEFAULT_CONFIG: ScraperConfig = {
   cleanDocsDir: '../rag_cache/clean_docs',
   failedPagesFile: '../rag_cache/failed_pages.json',
   serviceCatalogFile: '../rag_cache/service-catalog.json',
-  serviceApiUrl: 'https://portal.huaweicloud.com/rest/cbc/portaldocdataservice/v1/books/items?appId=INTL',
+  serviceApiUrl: 'https://portal.huaweicloud.com/rest/cbc/portaldocdataservice/v1/books/items?appId=INTL-EN_US',
   docBaseUrl: 'https://support.huaweicloud.com/intl/en-us',
   navigationUrlTemplate: 'https://support.huaweicloud.com/intl/en-us/{service}/v3_support_leftmenu_fragment.html'
 };

@@ -6,12 +6,13 @@ import fs from 'fs';
 import path from 'path';
 import type { RawHtmlDocument } from '../types/index.js';
 import { logger } from '../utils/logger.js';
+import { RAW_HTML_DIR } from '../config/paths.js';
 
 export class RawHtmlStore {
   private readonly baseDir: string;
 
-  constructor(baseDir = '../../rag_cache/raw_html') {
-    this.baseDir = path.resolve(baseDir);
+  constructor() {
+    this.baseDir = RAW_HTML_DIR;
     this.ensureDirectory();
   }
 

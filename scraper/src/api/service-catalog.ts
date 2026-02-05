@@ -33,7 +33,7 @@ interface ApiResponse {
 export class ServiceCatalogFetcher {
   private readonly apiUrl: string;
 
-  constructor(apiUrl = 'https://portal.huaweicloud.com/rest/cbc/portaldocdataservice/v1/books/items?appId=INTL') {
+  constructor(apiUrl = 'https://portal.huaweicloud.com/rest/cbc/portaldocdataservice/v1/books/items?appId=INTL-EN_US') {
     this.apiUrl = apiUrl;
   }
 

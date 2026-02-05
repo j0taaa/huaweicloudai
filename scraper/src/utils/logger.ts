@@ -58,6 +58,18 @@ export class Logger {
   clearLine(): void {
     process.stdout.write('\r' + ' '.repeat(80) + '\r');
   }
+
+  /**
+   * Show global progress with time tracking
+   */
+  showGlobalProgress(percent: number, bar: string, completed: number, total: number, elapsed: string, eta: string): void {
+    const line = `${chalk.magenta(`[GLOBAL ${bar}] ${percent}%`)} ${completed}/${total} pages | ⏱️ ${elapsed} | ⏳ ${eta}`;
+    process.stdout.write(`\r${line}`);
+  }
+
+  clearGlobalProgress(): void {
+    process.stdout.write('\r' + ' '.repeat(100) + '\r');
+  }
 }
 
 export const logger = Logger.getInstance();

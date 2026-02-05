@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-
 export const metadata: Metadata = {
   title: "Huawei Cloud AI Chat",
   description: "Mobile-friendly Huawei Cloud AI chat workspace.",

@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import type { CleanDocument, DocumentCategory } from '../types/index.js';
 import { logger } from '../utils/logger.js';
+import { CLEAN_DOCS_DIR } from '../config/paths.js';
 
 export interface DocumentMetadata {
   id: string;
@@ -21,8 +22,8 @@ export interface DocumentMetadata {
 export class CleanDocsStore {
   private readonly baseDir: string;
 
-  constructor(baseDir = '../../rag_cache/clean_docs') {
-    this.baseDir = path.resolve(baseDir);
+  constructor() {
+    this.baseDir = CLEAN_DOCS_DIR;
     this.ensureDirectory();
   }
 

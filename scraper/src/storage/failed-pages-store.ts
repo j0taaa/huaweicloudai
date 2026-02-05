@@ -6,12 +6,13 @@ import fs from 'fs';
 import path from 'path';
 import type { FailedPage, FailedPagesLog } from '../types/index.js';
 import { logger } from '../utils/logger.js';
+import { FAILED_PAGES_FILE } from '../config/paths.js';
 
 export class FailedPagesStore {
   private readonly filePath: string;
 
-  constructor(filePath = '../rag_cache/failed_pages.json') {
-    this.filePath = path.resolve(filePath);
+  constructor() {
+    this.filePath = FAILED_PAGES_FILE;
     this.ensureDirectory();
   }
 
