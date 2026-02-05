@@ -186,3 +186,17 @@ If you need to execute commands on a remote host (for example, to validate a new
 * Always define a `main` function with no parameters (it can be `async`).
 * Your `main()` must include a `return` statement so the tool can capture the result.
 * Do not use a top-level `return` or call `main()` yourself.
+
+## Chart rendering support
+
+You can render charts in the chat UI by outputting a fenced code block with language `chart` that contains a JSON array.
+Each array item must be an object with:
+- `label` (string): x-axis category text (for example, month)
+- `value` (number): numeric value that defines bar height
+
+Format:
+```chart
+[{"label":"Jan","value":120},{"label":"Feb","value":98}]
+```
+
+When the user asks for trends over time (for example monthly cost changes), provide a concise explanation plus a `chart` block.

@@ -160,6 +160,74 @@ const normalizeConversation = (conversation: Partial<Conversation>): Conversatio
       : 0,
 });
 
+
+type ChartPoint = {
+  label: string;
+  value: number;
+};
+
+const parseChartData = (value: string): ChartPoint[] | null => {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return null;
+    }
+
+    const points: ChartPoint[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
+
+      const label = (item as { label?: unknown }).label;
+      const pointValue = (item as { value?: unknown }).value;
+
+      if (typeof label !== "string" || !label.trim()) {
+        return null;
+      }
+
+      if (typeof pointValue !== "number" || !Number.isFinite(pointValue)) {
+        return null;
+      }
+
+      points.push({ label, value: pointValue });
+    }
+
+    return points;
+  } catch {
+    return null;
+  }
+};
+
+const ChartBlock = ({ data }: { data: ChartPoint[] }) => {
+  const maxValue = Math.max(...data.map((point) => point.value), 0);
+
+  return (
+    <div className="chart-block not-prose mt-2 rounded-xl border border-zinc-200 bg-white/70 p-3 dark:border-white/10 dark:bg-black/20">
+      <div className="chart-block__bars">
+        {data.map((point, index) => {
+          const barHeight =
+            maxValue === 0 ? 0 : Math.max((Math.abs(point.value) / maxValue) * 100, 2);
+
+          return (
+            <div key={`${point.label}-${index}`} className="chart-block__item">
+              <div className="chart-block__value">{point.value}</div>
+              <div
+                className="chart-block__bar"
+                style={{ height: `${barHeight}%` }}
+                title={`${point.label}: ${point.value}`}
+              />
+              <div className="chart-block__label" title={point.label}>
+                {point.label}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 const fetchProjectIds = async (ak: string, sk: string) => {
   const response = await fetch("/api/project-ids", {
     method: "POST",
@@ -2182,7 +2250,46 @@ export default function Home() {
                           >
                             {message.role === "assistant" ? (
                               <div className="markdown-content">
-                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                <ReactMarkdown
+                                  remarkPlugins={[remarkGfm]}
+                                  components={{
+                                    code({ className, children, ...props }) {
+                                      const rawValue = String(children).replace(/\n$/, "");
+                                      const language = className?.replace("language-", "").toLowerCase();
+                                      const isInlineCode = !className && !rawValue.includes("\n");
+
+                                      if (language === "chart") {
+                                        const chartData = parseChartData(rawValue);
+
+                                        if (!chartData) {
+                                          return (
+                                            <pre className="rounded-xl border border-amber-300 bg-amber-50/80 p-3 text-xs text-amber-900 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-100">
+                                              Invalid chart data. Expected a JSON array of objects with label and value fields.
+                                            </pre>
+                                          );
+                                        }
+
+                                        return <ChartBlock data={chartData} />;
+                                      }
+
+                                      if (isInlineCode) {
+                                        return (
+                                          <code className={className} {...props}>
+                                            {children}
+                                          </code>
+                                        );
+                                      }
+
+                                      return (
+                                        <pre>
+                                          <code className={className} {...props}>
+                                            {rawValue}
+                                          </code>
+                                        </pre>
+                                      );
+                                    },
+                                  }}
+                                >
                                   {message.content}
                                 </ReactMarkdown>
                               </div>
