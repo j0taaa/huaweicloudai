@@ -102,7 +102,82 @@ export class ChromaStore {
   }
 
   /**
-   * Search for similar documents
+   * Extract service names from query
+   */
+  private extractServiceNames(query: string): string[] {
+    const services = ['EVS', 'OBS', 'ECS', 'VPC', 'RDS', 'CCE', 'ELB', 'IAM', 'APM', 'CSS', 'DWS', 
+                      'DLI', 'DDS', 'Kafka', 'SMN', 'SMS', 'CSE', 'DCS', 'DDM', 'DRS', 'GES',
+                      'GaussDB', 'MRS', 'SFS', 'SWR', 'FunctionGraph', 'ModelArts', 'DLV', 'DIS',
+                      'CDN', 'DNS', 'VOD', 'Live', 'RTC', 'LTS', 'AOM', 'APM', 'CES', 'AS', 'CAE',
+                      'CCI', 'CSBS', 'VBS', 'SDRS', 'CBR', 'DES', 'CloudTable', 'LakeFormation',
+                      'APIG', 'ROMA', 'WAF', 'CFW', 'HSS', 'DBSS', 'IAM', 'RAM', 'TMS', 'SCM'];
+    
+    const found: string[] = [];
+    const queryUpper = query.toUpperCase();
+
+    for (const service of services) {
+      if (queryUpper.includes(service.toUpperCase())) {
+        found.push(service.toUpperCase());
+      }
+    }
+
+    return found;
+  }
+
+  /**
+   * Calculate relevance score with service boosting
+   */
+  private calculateRelevanceScore(
+    semanticScore: number,
+    chunk: DocumentChunk,
+    extractedServices: string[],
+    query: string
+  ): number {
+    let score = semanticScore;
+
+    // Boost if service name matches
+    if (extractedServices.length > 0) {
+      const chunkService = chunk.service.toUpperCase();
+      for (const service of extractedServices) {
+        if (chunkService === service) {
+          score *= 1.5; // 50% boost for exact service match
+          break;
+        }
+      }
+    }
+
+    // Boost if service name appears in headers
+    if (extractedServices.length > 0) {
+      const headersUpper = chunk.headers.join(' ').toUpperCase();
+      for (const service of extractedServices) {
+        if (headersUpper.includes(service)) {
+          score *= 1.2; // 20% boost for service in headers
+          break;
+        }
+      }
+    }
+
+    // Slight boost if query keywords appear in document content
+    const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+    const contentLower = chunk.content.toLowerCase();
+    
+    let keywordMatches = 0;
+    for (const word of queryWords) {
+      if (contentLower.includes(word)) {
+        keywordMatches++;
+      }
+    }
+
+    if (queryWords.length > 0 && keywordMatches > 0) {
+      const keywordMatchRatio = keywordMatches / queryWords.length;
+      score *= (1 + keywordMatchRatio * 0.2); // Up to 20% boost for keyword matches
+    }
+
+    return Math.min(score, 1.0); // Cap at 1.0
+  }
+
+  /**
+   * Search for similar documents with hybrid ranking
    */
   async search(query: string, options: QueryOptions = {}): Promise<SearchResult[]> {
     if (!this.collection) {
@@ -111,6 +186,9 @@ export class ChromaStore {
 
     const topK = options.topK || RAG_CONFIG.DEFAULT_TOP_K;
     const filter = options.filter || {};
+
+    // Extract service names from query
+    const extractedServices = this.extractServiceNames(query);
 
     // Generate query embedding
     const queryEmbedding = await this.embedder.embed(query);
@@ -121,15 +199,20 @@ export class ChromaStore {
       whereClause.service = filter.service;
     }
 
+    // If service names are extracted and no explicit filter, try to get more results for reranking
+    const searchTopK = (extractedServices.length > 0 && !filter.service) 
+      ? Math.min(topK * 3, RAG_CONFIG.MAX_TOP_K) 
+      : topK;
+
     // Perform search
     const results = await this.collection.query({
       queryEmbeddings: [queryEmbedding],
-      nResults: topK,
+      nResults: searchTopK,
       where: Object.keys(whereClause).length > 0 ? whereClause : undefined,
       include: ['documents', 'metadatas', 'distances'],
     });
 
-    // Transform results
+    // Transform and rerank results
     const searchResults: SearchResult[] = [];
     
     if (results.ids && results.ids.length > 0) {
@@ -151,15 +234,58 @@ export class ChromaStore {
           tokenCount: metadata?.token_count || 0,
         };
 
+        const semanticScore = 1 - (distances[i] || 0);
+        const boostedScore = this.calculateRelevanceScore(
+          semanticScore,
+          chunk,
+          extractedServices,
+          query
+        );
+
         searchResults.push({
           chunk,
-          score: 1 - (distances[i] || 0), // Convert distance to similarity score
+          score: boostedScore,
           distance: distances[i] || 0,
         });
       }
     }
 
-    return searchResults;
+    // If we have service matches, ensure we have at least some results from those services
+    if (extractedServices.length > 0 && !filter.service) {
+      const serviceMatchResults = searchResults.filter((r) =>
+        extractedServices.includes(r.chunk.service.toUpperCase())
+      );
+      
+      if (serviceMatchResults.length > 0) {
+        // Sort by boosted score
+        searchResults.sort((a, b) => b.score - a.score);
+        
+        // Ensure at least 2 service matches are in the results
+        const nonServiceMatches = searchResults.filter(
+          (s) => !extractedServices.includes(s.chunk.service.toUpperCase())
+        );
+        const serviceMatches = searchResults.filter((s) =>
+          extractedServices.includes(s.chunk.service.toUpperCase())
+        );
+        
+        const serviceMatchesToInclude = Math.max(
+          2, 
+          Math.min(serviceMatches.length, Math.ceil(topK * 0.6))
+        );
+        
+        // Combine: prioritize service matches, then fill with best other results
+        const combined = [
+          ...serviceMatches.slice(0, serviceMatchesToInclude),
+          ...nonServiceMatches.slice(0, topK - serviceMatchesToInclude)
+        ].slice(0, topK);
+        
+        return combined;
+      }
+    }
+
+    // Sort by score and return topK
+    searchResults.sort((a, b) => b.score - a.score);
+    return searchResults.slice(0, topK);
   }
 
   /**
