@@ -63,8 +63,9 @@ const extensionZipPromise = buildExtensionZip();
 export async function GET() {
   try {
     const zipData = await extensionZipPromise;
+    const zipBlob = new Blob([zipData], { type: "application/zip" });
 
-    return new Response(zipData, {
+    return new Response(zipBlob, {
       status: 200,
       headers: {
         "Content-Type": "application/zip",

@@ -3,6 +3,7 @@
  * Removes boilerplate elements from documentation pages
  */
 import * as cheerio from 'cheerio';
+import type { AnyNode } from 'domhandler';
 import { logger } from '../utils/logger.js';
 
 // CSS selectors for content areas (in priority order)
