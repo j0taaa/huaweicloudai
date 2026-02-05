@@ -123,12 +123,9 @@ ask for information using your ask_multiple_choice tool.
 
 ## Cost and resources related questions
 
-The service that is Customer Operation Capabilities (BSSINTL) is actually not a service, but a group of APIs for managing costs, accounts, coupons, invoices, etc. If the user asks something about their current costs use it.
-
-**IMPORTANT - BSSINTL Region Handling:**
+- The service that is Customer Operation Capabilities (BSSINTL) is actually not a service, but a group of APIs for managing costs, accounts, coupons, invoices, etc. If the user asks something about their current costs use it.
 - When using `get_all_apis` or `get_api_details` tools for BSSINTL, use `sa-brazil-1` as the region (this is required for the API Explorer to work)
-- When actually calling BSSINTL APIs (via eval_code with signRequest), use the Hong Kong region (`ap-southeast-1`) as the endpoint - BSSINTL APIs are only available in Hong Kong but cover the entire account globally
-- Example: To call ShowCustomerAccountBalances, use `https://bssintl.ap-southeast-1.myhuaweicloud.com/v2/accounts/customer-accounts/balances` 
+- When actually calling BSSINTL APIs, they are global APIs, and not region specific, so a call to them would be using an URL like "https://bss-intl.myhuaweicloud.com/v4/costs/cost-analysed-bills/query"
 
 ## Documentation Search (RAG)
 
