@@ -1862,7 +1862,7 @@ export default function Home() {
       },
       {
         role: "user",
-        content: `User request: """${firstUserMessage.content.trim()}"""\nWrite a 2-5 word summary ending with \"request\". Use only plain words. No punctuation. Do not respond as an assistant.`,
+        content: `User request: """${firstUserMessage.content.trim()}"""\nWrite a 2-5 word summary ending with \"request\". Use only plain words. No punctuation. Do not respond as an assistant. Unless it makes sense not to, the first letter should be uppercase. This is going to be the title of the conversation.`,
       },
     ];
 
