@@ -81,12 +81,12 @@ export class HtmlCleaner {
       });
 
       // Remove comments
-      $('*').contents().filter(function(this: AnyNode) {
+      $('*').contents().filter(function(this: { type?: string }) {
         return this.type === 'comment';
       }).remove();
 
       // Find main content
-      let $content: cheerio.Cheerio<AnyNode> | null = null;
+      let $content: ReturnType<typeof $> | null = null;
       
       for (const selector of CONTENT_SELECTORS) {
         const $found = $(selector);
