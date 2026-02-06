@@ -723,6 +723,13 @@ export default function Home() {
       markConversationLoading(conversationId);
       setConversationError(conversationId, null);
 
+      if (
+        pendingConversation.title === "New conversation" &&
+        pendingConversation.lastSummaryMessageCount === 0
+      ) {
+        triggerInitialSummary(conversationId, pendingMessages);
+      }
+
       void sendMessages(conversationId, pendingMessages)
         .then((response) =>
           continueConversation(conversationId, [...pendingMessages], response),
@@ -1516,6 +1523,14 @@ export default function Home() {
     clearDraft(conversationId);
     markConversationLoading(conversationId);
     setConversationError(conversationId, null);
+
+    if (
+      messages.length === 0 &&
+      activeConversation?.title === "New conversation" &&
+      activeConversation.lastSummaryMessageCount === 0
+    ) {
+      triggerInitialSummary(conversationId, nextMessages);
+    }
     localStorage.setItem(
       PENDING_REQUEST_STORAGE_KEY,
       JSON.stringify({
@@ -1843,9 +1858,12 @@ export default function Home() {
       {
         role: "system",
         content:
-          "Summarize what the model was asked to do. Keep it simple and limited to 5 words. Avoid punctuation.",
+          "You generate concise conversation list titles based on the user's first request.",
       },
-      firstUserMessage,
+      {
+        role: "user",
+        content: `User request: """${firstUserMessage.content.trim()}"""\nWrite a 2-5 word summary ending with \"request\". Use only plain words. No punctuation. Do not respond as an assistant.`,
+      },
     ];
 
     const response = await fetch("/api/chat", {
@@ -1864,25 +1882,19 @@ export default function Home() {
     return summary.length > 48 ? `${summary.slice(0, 45).trim()}...` : summary;
   };
 
-  useEffect(() => {
-    if (!activeConversation) return;
-    if (isLoading || pendingChoice) return;
-    if (activeConversation.messages.length < 2) return;
-    if (activeConversation.lastSummaryMessageCount > 0) return;
+  const triggerInitialSummary = (
+    conversationId: string,
+    conversationMessages: ChatMessage[],
+  ) => {
+    if (summaryInFlightRef.current.has(conversationId)) return;
+    summaryInFlightRef.current.add(conversationId);
 
-    const lastMessage =
-      activeConversation.messages[activeConversation.messages.length - 1];
-    if (lastMessage.role !== "assistant") return;
-
-    if (summaryInFlightRef.current.has(activeConversation.id)) return;
-    summaryInFlightRef.current.add(activeConversation.id);
-
-    void requestSummary(activeConversation.messages)
+    void requestSummary(conversationMessages)
       .then((summary) => {
         if (!summary) return;
         setConversations((prev) =>
           prev.map((conversation) =>
-            conversation.id === activeConversation.id
+            conversation.id === conversationId
               ? {
                   ...conversation,
                   title: summary,
@@ -1893,8 +1905,18 @@ export default function Home() {
         );
       })
       .finally(() => {
-        summaryInFlightRef.current.delete(activeConversation.id);
+        summaryInFlightRef.current.delete(conversationId);
       });
+  };
+
+  useEffect(() => {
+    if (!activeConversation) return;
+    if (activeConversation.messages.length === 0) return;
+    if (activeConversation.lastSummaryMessageCount > 0) return;
+    if (activeConversation.title !== "New conversation") return;
+    if (isLoading || pendingChoice) return;
+
+    triggerInitialSummary(activeConversation.id, activeConversation.messages);
   }, [activeConversation, isLoading, pendingChoice]);
 
   useEffect(() => {
