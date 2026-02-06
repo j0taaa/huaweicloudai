@@ -17,6 +17,12 @@ const signRequest = (options: RequestOptions, ak: string, sk: string) => {
   return HuaweiCloudSigner.signRequest(options as any, ak, sk);
 };
 
+const AK = process.env.HUAWEI_CLOUD_AK;
+const SK = process.env.HUAWEI_CLOUD_SK;
+const REGION = process.env.HUAWEI_CLOUD_REGION || "sa-brazil-1";
+const PROJECT_ID = process.env.HUAWEI_CLOUD_PROJECT_ID;
+const FUNCTION_URN = process.env.FUNCTIONGRAPH_EVAL_URN;
+
 export async function POST(request: Request) {
   const { code } = (await request.json()) as EvalRequest;
 
@@ -27,19 +33,64 @@ export async function POST(request: Request) {
     );
   }
 
-  try {
-    const fn = new Function(
-      "signRequest",
-      `return (async () => {
-        ${code}
-        if (typeof main !== "function") {
-          throw new Error("main() is not defined. Please define a main() function.");
-        }
-        return await main();
-      })();`,
+  if (!AK || !SK || !PROJECT_ID || !FUNCTION_URN) {
+    return NextResponse.json(
+      { error: "Missing required environment variables: HUAWEI_CLOUD_AK, HUAWEI_CLOUD_SK, HUAWEI_CLOUD_PROJECT_ID, FUNCTIONGRAPH_EVAL_URN" },
+      { status: 500 },
     );
-    const evalResult = fn(signRequest);
-    const resolvedResult = await evalResult;
+  }
+
+  try {
+    // Wrap the code to automatically call main() like the original implementation
+    const wrappedCode = `
+      ${code}
+      if (typeof main !== "function") {
+        throw new Error("main() is not defined. Please define a main() function.");
+      }
+      return await main();
+    `;
+
+    const testEvent = {
+      code: wrappedCode
+    };
+
+    const options = {
+      method: 'POST',
+      url: `https://functiongraph.${REGION}.myhuaweicloud.com/v2/${PROJECT_ID}/fgs/functions/${FUNCTION_URN}/invocations`,
+      params: {},
+      data: JSON.stringify(testEvent),
+      headers: { 
+        'content-type': 'application/json',
+        'X-Cff-Request-Version': 'v1'
+      },
+    };
+
+    const signedHeaders = signRequest(options as RequestOptions, AK, SK);
+    
+    const response = await fetch(options.url, {
+      method: options.method,
+      headers: signedHeaders,
+      body: options.data,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return NextResponse.json(
+        { error: `FunctionGraph request failed: ${errorText}` },
+        { status: response.status },
+      );
+    }
+
+    const fgResult = await response.json();
+    
+    if (fgResult.error) {
+      return NextResponse.json(
+        { error: `FunctionGraph execution error: ${fgResult.error}` },
+        { status: 500 },
+      );
+    }
+
+    const resolvedResult = fgResult.result;
 
     let serializedResult: string;
     if (typeof resolvedResult === "string") {
