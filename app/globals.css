@@ -27,9 +27,66 @@ body {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), "Inter", "Segoe UI", system-ui, sans-serif;
   min-height: 100dvh;
   overscroll-behavior-y: none;
+}
+
+.app-shell {
+  position: relative;
+  isolation: isolate;
+  background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 50%),
+    radial-gradient(circle at 15% 70%, rgba(14, 116, 144, 0.08), transparent 55%),
+    radial-gradient(circle at 85% 15%, rgba(124, 58, 237, 0.08), transparent 45%),
+    linear-gradient(135deg, rgba(248, 250, 252, 0.92), rgba(255, 255, 255, 1));
+}
+
+.app-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(148, 163, 184, 0.2) 1px, transparent 0);
+  background-size: 28px 28px;
+  opacity: 0.25;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.app-shell > * {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  .app-shell {
+    background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 55%),
+      radial-gradient(circle at 20% 70%, rgba(45, 212, 191, 0.08), transparent 50%),
+      radial-gradient(circle at 85% 15%, rgba(167, 139, 250, 0.12), transparent 50%),
+      linear-gradient(135deg, rgba(8, 10, 18, 1), rgba(12, 15, 25, 1));
+  }
+
+  .app-shell::before {
+    background-image: radial-gradient(rgba(148, 163, 184, 0.2) 1px, transparent 0);
+    opacity: 0.2;
+  }
+}
+
+.surface-card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow:
+    0 24px 60px -40px rgba(15, 23, 42, 0.5),
+    0 6px 18px -12px rgba(15, 23, 42, 0.25);
+}
+
+@media (prefers-color-scheme: dark) {
+  .surface-card {
+    background: rgba(10, 11, 15, 0.85);
+    border-color: rgba(148, 163, 184, 0.2);
+    box-shadow:
+      0 24px 60px -40px rgba(0, 0, 0, 0.7),
+      0 10px 22px -14px rgba(0, 0, 0, 0.5);
+  }
 }
 
 :where(
