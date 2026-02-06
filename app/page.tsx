@@ -2120,7 +2120,7 @@ export default function Home() {
         />
       ) : null}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-80 max-w-full flex-col gap-4 border-r border-zinc-200 bg-white/90 p-4 shadow-lg backdrop-blur-xl transition-transform duration-200 dark:border-white/10 dark:bg-black/80 lg:static lg:m-4 lg:h-[calc(100%-2rem)] lg:w-72 lg:translate-x-0 lg:rounded-3xl lg:border lg:border-white/60 lg:shadow-xl dark:lg:border-white/10 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-80 max-w-full flex-col gap-4 border-r border-white/60 bg-white/65 p-4 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.5)] backdrop-blur-2xl transition-transform duration-200 dark:border-white/15 dark:bg-black/65 lg:static lg:m-4 lg:h-[calc(100%-2rem)] lg:w-72 lg:translate-x-0 lg:rounded-3xl lg:border lg:border-white/60 lg:shadow-xl dark:lg:border-white/10 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
       >
