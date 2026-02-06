@@ -377,7 +377,7 @@ export default function Home() {
   });
   const [activeToolPreview, setActiveToolPreview] =
     useState<ToolPreview | null>(null);
-  const [toolGroupFocus, setToolGroupFocus] = useState<Record<string, number>>({});
+  const [toolGroupFocus, setToolGroupFocus] = useState<Record<string, number>>({ });
   const [pendingChoice, setPendingChoice] = useState<{
     toolCall: ToolCall;
     question: string;
