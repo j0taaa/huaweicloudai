@@ -1858,9 +1858,12 @@ export default function Home() {
       {
         role: "system",
         content:
-          "Summarize what the model was asked to do. Keep it simple and limited to 5 words. Avoid punctuation.",
+          "You generate concise conversation list titles based on the user's first request.",
       },
-      firstUserMessage,
+      {
+        role: "user",
+        content: `User request: """${firstUserMessage.content.trim()}"""\nWrite a 2-5 word summary ending with \"request\". Use only plain words. No punctuation. Do not respond as an assistant.`,
+      },
     ];
 
     const response = await fetch("/api/chat", {
