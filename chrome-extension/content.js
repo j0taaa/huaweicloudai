@@ -629,6 +629,78 @@ if (!existingWidget) {
   const isTableDivider = (line) =>
     /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/.test(line);
 
+  const parseChartData = (rawChartData) => {
+    try {
+      const parsed = JSON.parse(rawChartData);
+      if (!Array.isArray(parsed)) {
+        return null;
+      }
+
+      const normalizedData = parsed
+        .map((entry) => {
+          if (!entry || typeof entry !== "object") {
+            return null;
+          }
+
+          const label = entry.label;
+          const value = entry.value;
+          const numericValue =
+            typeof value === "number"
+              ? value
+              : typeof value === "string"
+                ? Number(value)
+                : Number.NaN;
+
+          if (typeof label !== "string" || !Number.isFinite(numericValue)) {
+            return null;
+          }
+
+          return {
+            label: label.trim(),
+            value: numericValue,
+          };
+        })
+        .filter((entry) => Boolean(entry && entry.label.length > 0));
+
+      return normalizedData.length > 0 ? normalizedData : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const renderChartBlock = (data) => {
+    const maxValue = Math.max(...data.map((entry) => entry.value), 0);
+    const formatter = new Intl.NumberFormat(undefined, {
+      maximumFractionDigits: 2,
+    });
+
+    const bars = data
+      .map((entry, index) => {
+        const heightPercent =
+          maxValue > 0 ? Math.max((entry.value / maxValue) * 100, 0) : 0;
+        const formattedValue = formatter.format(entry.value);
+        const safeLabel = escapeHtml(entry.label);
+        const safeTitle = escapeHtml(`${entry.label}: ${formattedValue}`);
+
+        return `
+          <div class="hwc-chat-chart-block__item" data-index="${index}">
+            <span class="hwc-chat-chart-block__value">${formattedValue}</span>
+            <div class="hwc-chat-chart-block__bar-wrap">
+              <div
+                class="hwc-chat-chart-block__bar"
+                style="height: ${heightPercent}%;"
+                title="${safeTitle}"
+              ></div>
+            </div>
+            <span class="hwc-chat-chart-block__label">${safeLabel}</span>
+          </div>
+        `;
+      })
+      .join("");
+
+    return `<div class="hwc-chat-chart-block"><div class="hwc-chat-chart-block__bars">${bars}</div></div>`;
+  };
+
   const renderMarkdown = (text) => {
     const lines = text.split(/\r?\n/);
     const blocks = [];
@@ -774,11 +846,44 @@ if (!existingWidget) {
     return blocks.join("");
   };
 
+  const renderAssistantMessageContent = (content) => {
+    const chartBlockPattern = /```chart\s*([\s\S]*?)```/g;
+    const blocks = [];
+    let lastIndex = 0;
+    let match = chartBlockPattern.exec(content);
+
+    while (match) {
+      const markdownContent = content.slice(lastIndex, match.index).trim();
+      if (markdownContent) {
+        blocks.push(renderMarkdown(markdownContent));
+      }
+
+      const rawChartData = (match[1] || "").trim();
+      const chartData = parseChartData(rawChartData);
+
+      if (chartData) {
+        blocks.push(renderChartBlock(chartData));
+      } else {
+        blocks.push(renderMarkdown(`\`\`\`chart\n${rawChartData}\n\`\`\``));
+      }
+
+      lastIndex = chartBlockPattern.lastIndex;
+      match = chartBlockPattern.exec(content);
+    }
+
+    const remainingContent = content.slice(lastIndex).trim();
+    if (remainingContent) {
+      blocks.push(renderMarkdown(remainingContent));
+    }
+
+    return blocks.length > 0 ? blocks.join("") : renderMarkdown(content);
+  };
+
   const renderBubble = (role, text, { markdown = false } = {}) => {
     const bubble = document.createElement("div");
     bubble.className = `hwc-chat-bubble hwc-chat-bubble-${role}`;
     if (markdown) {
-      bubble.innerHTML = `<div class="hwc-chat-markdown">${renderMarkdown(
+      bubble.innerHTML = `<div class="hwc-chat-markdown">${renderAssistantMessageContent(
         text,
       )}</div>`;
     } else {

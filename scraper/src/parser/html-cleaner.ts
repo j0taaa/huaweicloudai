@@ -3,6 +3,7 @@
  * Removes boilerplate elements from documentation pages
  */
 import * as cheerio from 'cheerio';
+import type { AnyNode } from 'domhandler';
 import { logger } from '../utils/logger.js';
 
 // CSS selectors for content areas (in priority order)
@@ -74,18 +75,18 @@ export class HtmlCleaner {
       REMOVE_SELECTORS.forEach(selector => {
         try {
           $(selector).remove();
-        } catch (e) {
+        } catch {
           // Ignore errors for individual selectors
         }
       });
 
       // Remove comments
-      $('*').contents().filter(function() {
+      $('*').contents().filter(function(this: AnyNode) {
         return this.type === 'comment';
       }).remove();
 
       // Find main content
-      let $content: cheerio.Cheerio<any> | null = null;
+      let $content: cheerio.Cheerio<AnyNode> | null = null;
       
       for (const selector of CONTENT_SELECTORS) {
         const $found = $(selector);
@@ -145,7 +146,7 @@ export class HtmlCleaner {
         'Untitled';
 
       return title;
-    } catch (error) {
+    } catch {
       return 'Untitled';
     }
   }

@@ -200,3 +200,6 @@ Format:
 ```
 
 When the user asks for trends over time (for example monthly cost changes), provide a concise explanation plus a `chart` block.
+
+## Other information
+- If the user asks something about a time period that is relative to the current date, like some statistics about last year, get the current date and time first to see which year was last year.

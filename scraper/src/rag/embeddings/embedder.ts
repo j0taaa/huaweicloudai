@@ -1,6 +1,8 @@
-import { pipeline, FeatureExtractionPipeline } from '@xenova/transformers';
+import { pipeline } from '@xenova/transformers';
 import { RAG_CONFIG } from '../config.js';
 import { DocumentChunk } from '../types.js';
+
+type FeatureExtractionPipeline = Awaited<ReturnType<typeof pipeline>>;
 
 export class Embedder {
   private model: FeatureExtractionPipeline | null = null;
@@ -43,7 +45,7 @@ export class Embedder {
       normalize: true,
     });
 
-    return Array.from(result.data);
+    return Array.from(result.data as Iterable<number>);
   }
 
   /**
@@ -78,7 +80,7 @@ export class Embedder {
       
       // Store embeddings
       for (let j = 0; j < batch.length; j++) {
-        const embedding = Array.from(batchResults[j].data);
+        const embedding = Array.from(batchResults[j].data as Iterable<number>);
         embeddings.set(batch[j].id, embedding);
       }
       
