@@ -1947,6 +1947,146 @@ export default function Home() {
       });
   }, [activeConversation, estimatedTokenCount, isLoading, pendingChoice]);
 
+  const showEmptyState = messages.length === 0;
+
+  const chatInput = (
+    <form
+      className="flex flex-col gap-3 pb-[env(safe-area-inset-bottom)]"
+      onSubmit={handleSubmit}
+      ref={formRef}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="relative grid flex-1">
+          <textarea
+            ref={textareaRef}
+            className="col-start-1 row-start-1 min-h-[48px] w-full resize-none rounded-3xl border border-zinc-200 bg-white px-4 py-3 pl-14 pr-14 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+            placeholder="Type your message..."
+            value={input}
+            onChange={(event) => {
+              if (!activeConversationId) return;
+              updateDraft(activeConversationId, event.target.value);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                formRef.current?.requestSubmit();
+              }
+            }}
+            disabled={isLoading || Boolean(pendingChoice)}
+            rows={1}
+          />
+          <div
+            ref={compactMenuRef}
+            className="col-start-1 row-start-1 ml-2 flex w-fit items-center self-center justify-self-start"
+          >
+            <button
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-black/20 bg-black text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-600 dark:border-black/40 dark:bg-black dark:text-white dark:hover:bg-zinc-800"
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={compactMenuOpen}
+              aria-label="Open compact conversation menu"
+              disabled={isLoading || hasRunningToolCalls || Boolean(pendingChoice)}
+              onClick={() => {
+                if (isLoading || hasRunningToolCalls || pendingChoice) return;
+                setCompactMenuOpen((prev) => !prev);
+              }}
+            >
+              <svg
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 5v14" />
+                <path d="M5 12h14" />
+              </svg>
+            </button>
+            {compactMenuOpen ? (
+              <div
+                className="absolute bottom-[calc(100%+8px)] left-2 z-10 w-56 rounded-2xl border border-zinc-200 bg-white p-2 text-sm text-zinc-700 shadow-lg dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-200"
+                role="menu"
+              >
+                <button
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:text-zinc-400 dark:text-zinc-200 dark:hover:bg-white/10 dark:disabled:text-zinc-500"
+                  type="button"
+                  role="menuitem"
+                  disabled={
+                    isLoading || hasRunningToolCalls || Boolean(pendingChoice)
+                  }
+                  onClick={handleCompactConversation}
+                >
+                  <svg
+                    className="h-4 w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M8 4H4v4" />
+                    <path d="M16 4h4v4" />
+                    <path d="M8 20H4v-4" />
+                    <path d="M16 20h4v-4" />
+                  </svg>
+                  <span>Compact conversation</span>
+                </button>
+              </div>
+            ) : null}
+          </div>
+          <button
+            className="col-start-1 row-start-1 mr-2 flex h-9 w-9 items-center justify-center justify-self-end self-center rounded-full bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
+            type={isLoading || hasRunningToolCalls ? "button" : "submit"}
+            disabled={
+              (!isLoading && !hasRunningToolCalls && !trimmedInput) ||
+              Boolean(pendingChoice)
+            }
+            onClick={() => {
+              if (isLoading || hasRunningToolCalls) {
+                handleCancel();
+              }
+            }}
+            aria-label={
+              isLoading || hasRunningToolCalls
+                ? "Cancel response"
+                : "Send message"
+            }
+          >
+            {isLoading || hasRunningToolCalls ? (
+              <svg
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+            ) : (
+              <svg
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 19V5" />
+                <path d="m5 12 7-7 7 7" />
+              </svg>
+            )}
+          </button>
+        </div>
+      </div>
+    </form>
+  );
+
   return (
     <div className="app-shell flex h-dvh w-screen flex-col text-zinc-900 dark:text-zinc-50 lg:flex-row">
       {sidebarOpen ? (
@@ -2278,42 +2418,47 @@ export default function Home() {
             </div>
           </div>
           <div
-            className="flex flex-1 flex-col gap-4 overflow-y-auto"
+            className={`flex flex-1 flex-col gap-4 ${
+              showEmptyState ? "overflow-hidden" : "overflow-y-auto"
+            }`}
             ref={messagesContainerRef}
           >
-            {messages.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-zinc-200/80 bg-white/80 p-6 text-sm text-zinc-600 shadow-inner dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500">
-                  Getting started
-                </p>
-                <h3 className="mt-2 text-lg font-semibold text-zinc-900 dark:text-white">
-                  Learn how to use this Huawei Cloud assistant
-                </h3>
-                <ol className="mt-4 flex flex-col gap-3">
-                  <li>
-                    <span className="font-semibold text-zinc-900 dark:text-white">
-                      1. Add your AK/SK credentials.
-                    </span>{" "}
-                    Use the sidebar to enter your Access Key (AK) and Secret Key
-                    (SK). They are required to sign API requests on your behalf.
-                  </li>
-                  <li>
-                    <span className="font-semibold text-zinc-900 dark:text-white">
-                      2. Understand account access.
-                    </span>{" "}
-                    When you run actions, the assistant uses your AK/SK to make
-                    Huawei Cloud API calls, which can read or modify resources in
-                    your account.
-                  </li>
-                  <li>
-                    <span className="font-semibold text-zinc-900 dark:text-white">
-                      3. Ask for workflows or API help.
-                    </span>{" "}
-                    Try “list my projects,” “create an ECS instance,” or “show
-                    available APIs,” and the assistant will guide you through the
-                    required parameters.
-                  </li>
-                </ol>
+            {showEmptyState ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-6 py-6">
+                <div className="w-full max-w-2xl rounded-2xl border border-dashed border-zinc-200/80 bg-white/80 p-6 text-sm text-zinc-600 shadow-inner dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500">
+                    Getting started
+                  </p>
+                  <h3 className="mt-2 text-lg font-semibold text-zinc-900 dark:text-white">
+                    Learn how to use this Huawei Cloud assistant
+                  </h3>
+                  <ol className="mt-4 flex flex-col gap-3">
+                    <li>
+                      <span className="font-semibold text-zinc-900 dark:text-white">
+                        1. Add your AK/SK credentials.
+                      </span>{" "}
+                      Use the sidebar to enter your Access Key (AK) and Secret Key
+                      (SK). They are required to sign API requests on your behalf.
+                    </li>
+                    <li>
+                      <span className="font-semibold text-zinc-900 dark:text-white">
+                        2. Understand account access.
+                      </span>{" "}
+                      When you run actions, the assistant uses your AK/SK to make
+                      Huawei Cloud API calls, which can read or modify resources in
+                      your account.
+                    </li>
+                    <li>
+                      <span className="font-semibold text-zinc-900 dark:text-white">
+                        3. Ask for workflows or API help.
+                      </span>{" "}
+                      Try “list my projects,” “create an ECS instance,” or “show
+                      available APIs,” and the assistant will guide you through the
+                      required parameters.
+                    </li>
+                  </ol>
+                </div>
+                <div className="w-full max-w-2xl">{chatInput}</div>
               </div>
             ) : (
               messages
@@ -2367,6 +2512,12 @@ export default function Home() {
 
                               if (toolCall.function.name === "get_api_details") {
                                 summary = payload.productShort && payload.action ? `Gets details for ${payload.productShort} API: ${payload.action}.` : "Gets API details.";
+                              }
+
+                              if (toolCall.function.name === "search_rag_docs") {
+                                summary = payload.query
+                                  ? `Searches Huawei Cloud documentation for “${payload.query}”.`
+                                  : "Searches Huawei Cloud documentation.";
                               }
 
                               const hasResult = toolResults.has(toolCall.id);
@@ -2464,7 +2615,9 @@ export default function Home() {
                   className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600 dark:border-white/20 dark:border-t-white"
                   aria-hidden="true"
                 />
-                <span>{isCompacting ? "Compacting..." : "Thinking..."}</span>
+                <span className="thinking-text">
+                  {isCompacting ? "Compacting" : "Thinking"}
+                </span>
               </div>
             ) : null}
           </div>
@@ -2540,141 +2693,7 @@ export default function Home() {
             </form>
           ) : null}
 
-          <form
-            className="flex flex-col gap-3 pb-[env(safe-area-inset-bottom)]"
-            onSubmit={handleSubmit}
-            ref={formRef}
-          >
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <div className="relative grid flex-1">
-                <textarea
-                  ref={textareaRef}
-                  className="col-start-1 row-start-1 min-h-[48px] w-full resize-none rounded-3xl border border-zinc-200 bg-white px-4 py-3 pl-14 pr-14 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
-                  placeholder="Type your message..."
-                  value={input}
-                  onChange={(event) => {
-                    if (!activeConversationId) return;
-                    updateDraft(activeConversationId, event.target.value);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      formRef.current?.requestSubmit();
-                    }
-                  }}
-                  disabled={isLoading || Boolean(pendingChoice)}
-                  rows={1}
-                />
-                <div
-                  ref={compactMenuRef}
-                  className="col-start-1 row-start-1 ml-2 flex w-fit items-center self-center justify-self-start"
-                >
-                  <button
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-black/20 bg-black text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-600 dark:border-black/40 dark:bg-black dark:text-white dark:hover:bg-zinc-800"
-                    type="button"
-                    aria-haspopup="menu"
-                    aria-expanded={compactMenuOpen}
-                    aria-label="Open compact conversation menu"
-                    disabled={isLoading || hasRunningToolCalls || Boolean(pendingChoice)}
-                    onClick={() => {
-                      if (isLoading || hasRunningToolCalls || pendingChoice) return;
-                      setCompactMenuOpen((prev) => !prev);
-                    }}
-                  >
-                    <svg
-                      className="h-4 w-4"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="M12 5v14" />
-                      <path d="M5 12h14" />
-                    </svg>
-                  </button>
-                  {compactMenuOpen ? (
-                    <div
-                      className="absolute bottom-[calc(100%+8px)] left-2 z-10 w-56 rounded-2xl border border-zinc-200 bg-white p-2 text-sm text-zinc-700 shadow-lg dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-200"
-                      role="menu"
-                    >
-                      <button
-                        className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:text-zinc-400 dark:text-zinc-200 dark:hover:bg-white/10 dark:disabled:text-zinc-500"
-                        type="button"
-                        role="menuitem"
-                        disabled={
-                          isLoading || hasRunningToolCalls || Boolean(pendingChoice)
-                        }
-                        onClick={handleCompactConversation}
-                      >
-                        <svg
-                          className="h-4 w-4"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
-                        >
-                          <path d="M8 4H4v4" />
-                          <path d="M16 4h4v4" />
-                          <path d="M8 20H4v-4" />
-                          <path d="M16 20h4v-4" />
-                        </svg>
-                        <span>Compact conversation</span>
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-                <button
-                  className="col-start-1 row-start-1 mr-2 flex h-9 w-9 items-center justify-center justify-self-end self-center rounded-full bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
-                  type={isLoading || hasRunningToolCalls ? "button" : "submit"}
-                  disabled={
-                    (!isLoading && !hasRunningToolCalls && !trimmedInput) ||
-                    Boolean(pendingChoice)
-                  }
-                  onClick={() => {
-                    if (isLoading || hasRunningToolCalls) {
-                      handleCancel();
-                    }
-                  }}
-                  aria-label={
-                    isLoading || hasRunningToolCalls
-                      ? "Cancel response"
-                      : "Send message"
-                  }
-                >
-                  {isLoading || hasRunningToolCalls ? (
-                    <svg
-                      className="h-4 w-4"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                      aria-hidden="true"
-                    >
-                      <rect x="6" y="6" width="12" height="12" rx="2" />
-                    </svg>
-                  ) : (
-                    <svg
-                      className="h-4 w-4"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="M12 19V5" />
-                      <path d="m5 12 7-7 7 7" />
-                    </svg>
-                  )}
-                </button>
-              </div>
-            </div>
-          </form>
+          {showEmptyState ? null : chatInput}
         </section>
       </main>
 
