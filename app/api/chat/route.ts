@@ -44,24 +44,41 @@ const DEFAULT_SYSTEM_PROMPT = fs.readFileSync(SYSTEM_PROMPT_PATH, "utf8");
 const SYSTEM_PROMPT_PLACEHOLDER = "{{CREDENTIALS_BLOCK}}";
 
 const buildSystemPrompt = (context: ChatRequest["context"] = {}) => {
-  const akValue = context.accessKey?.trim() || "[not provided]";
-  const skValue = context.secretKey?.trim() || "[not provided]";
-  const projectLines =
-    context.projectIds && context.projectIds.length > 0
-      ? [
-          "Huawei Cloud Project IDs:",
-          ...context.projectIds.map((entry) =>
-            entry.name
-              ? `- ${entry.region}: ${entry.projectId} (${entry.name})`
-              : `- ${entry.region}: ${entry.projectId}`,
-          ),
-        ]
-      : [];
+  const hasCredentials = context.accessKey?.trim() && context.secretKey?.trim();
+  const hasProjectIds = context.projectIds && context.projectIds.length > 0;
+
+  if (!hasCredentials) {
+    const credentialBlock = [
+      "Huawei Cloud Access Key (AK): [not provided]",
+      "Huawei Cloud Secret Key (SK): [not provided]",
+      "Status: User has not provided credentials yet.",
+    ].join("\n");
+    return DEFAULT_SYSTEM_PROMPT.replace(SYSTEM_PROMPT_PLACEHOLDER, credentialBlock);
+  }
+
+  const projectLines = hasProjectIds && context.projectIds
+    ? [
+        "Available Project IDs (use these region-project mappings):",
+        ...context.projectIds.map((entry) =>
+          entry.name
+            ? `- Region: ${entry.region} | Project ID: ${entry.projectId} | Name: ${entry.name}`
+            : `- Region: ${entry.region} | Project ID: ${entry.projectId}`,
+        ),
+      ]
+    : ["No project IDs configured."];
 
   const credentialBlock = [
-    `Huawei Cloud Access Key (AK): ${akValue}`,
-    `Huawei Cloud Secret Key (SK): ${skValue}`,
+    "✓ Huawei Cloud credentials are configured",
+    "IMPORTANT: For security, credentials are NOT shown directly.",
+    "",
+    "Use these placeholders in your eval_code calls:",
+    "- `${AK}` - Access Key placeholder",
+    "- `${SK}` - Secret Key placeholder",
+    "- `${PROJECT_ID:<region>}` - Project ID for a specific region (e.g., ${PROJECT_ID:sa-brazil-1})",
+    "",
     ...projectLines,
+    "",
+    "The system will automatically replace these placeholders with actual values when executing code.",
   ].join("\n");
 
   return DEFAULT_SYSTEM_PROMPT.replace(
