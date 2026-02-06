@@ -359,6 +359,7 @@ export default function Home() {
   });
   const [activeToolPreview, setActiveToolPreview] =
     useState<ToolPreview | null>(null);
+  const [toolCallFocus, setToolCallFocus] = useState<Record<string, number>>({});
   const [pendingChoice, setPendingChoice] = useState<{
     toolCall: ToolCall;
     question: string;
@@ -2515,7 +2516,18 @@ export default function Home() {
                         message.tool_calls &&
                         message.tool_calls.length > 0 ? (
                           <div className="flex flex-col gap-3">
-                            {message.tool_calls.map((toolCall) => {
+                            {(() => {
+                              const toolCalls = message.tool_calls ?? [];
+                              const toolCallKey = `tool-calls-${index}`;
+                              const defaultIndex = toolCalls.length - 1;
+                              const storedIndex = toolCallFocus[toolCallKey];
+                              const activeIndex =
+                                storedIndex === undefined ? defaultIndex : storedIndex;
+                              const clampedIndex = Math.min(
+                                Math.max(activeIndex, 0),
+                                toolCalls.length - 1,
+                              );
+                              const toolCall = toolCalls[clampedIndex];
                               const payload = parseToolPayload(toolCall);
                               const code = payload.code ?? "";
                               const isChoiceTool =
@@ -2529,11 +2541,16 @@ export default function Home() {
                                   : summarizeCode(code);
 
                               if (toolCall.function.name === "get_all_apis") {
-                                summary = payload.productShort ? `Lists all APIs for ${payload.productShort} service.` : "Lists all APIs for a service.";
+                                summary = payload.productShort
+                                  ? `Lists all APIs for ${payload.productShort} service.`
+                                  : "Lists all APIs for a service.";
                               }
 
                               if (toolCall.function.name === "get_api_details") {
-                                summary = payload.productShort && payload.action ? `Gets details for ${payload.productShort} API: ${payload.action}.` : "Gets API details.";
+                                summary =
+                                  payload.productShort && payload.action
+                                    ? `Gets details for ${payload.productShort} API: ${payload.action}.`
+                                    : "Gets API details.";
                               }
 
                               if (toolCall.function.name === "search_rag_docs") {
@@ -2548,13 +2565,50 @@ export default function Home() {
                               const shouldCollapseResult =
                                 result.length > TOOL_RESULT_COLLAPSE_THRESHOLD ||
                                 resultLineCount > TOOL_RESULT_COLLAPSE_LINES;
+                              const hasPrevious = clampedIndex > 0;
+                              const hasNext = clampedIndex < toolCalls.length - 1;
 
                               return (
                                 <div
                                   key={toolCall.id}
                                   className="rounded-2xl border border-zinc-200 bg-white px-4 py-4 text-sm text-zinc-700 shadow-sm dark:border-white/10 dark:bg-black dark:text-zinc-200"
                                 >
-                                  <div className="flex items-center justify-between gap-4">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+                                      Tool calls {clampedIndex + 1} of {toolCalls.length}
+                                    </p>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        className="rounded-full border border-zinc-200 px-2 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+                                        type="button"
+                                        onClick={() =>
+                                          setToolCallFocus((prev) => ({
+                                            ...prev,
+                                            [toolCallKey]: clampedIndex - 1,
+                                          }))
+                                        }
+                                        disabled={!hasPrevious}
+                                        aria-label="Show previous tool call"
+                                      >
+                                        ←
+                                      </button>
+                                      <button
+                                        className="rounded-full border border-zinc-200 px-2 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+                                        type="button"
+                                        onClick={() =>
+                                          setToolCallFocus((prev) => ({
+                                            ...prev,
+                                            [toolCallKey]: clampedIndex + 1,
+                                          }))
+                                        }
+                                        disabled={!hasNext}
+                                        aria-label="Show next tool call"
+                                      >
+                                        →
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="mt-3 flex items-center justify-between gap-4">
                                     <div>
                                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
                                         Tool run
@@ -2623,7 +2677,7 @@ export default function Home() {
                                   </div>
                                 </div>
                               );
-                            })}
+                            })()}
                           </div>
                         ) : null}
                       </div>
