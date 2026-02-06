@@ -988,7 +988,14 @@ export default function Home() {
       const response = await fetch("/api/eval", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: payload.code }),
+        body: JSON.stringify({
+          code: payload.code,
+          context: {
+            accessKey: accessKey.trim() || undefined,
+            secretKey: secretKey.trim() || undefined,
+            projectIds: projectIds.length > 0 ? projectIds : undefined,
+          },
+        }),
       });
 
       if (!response.ok) {
