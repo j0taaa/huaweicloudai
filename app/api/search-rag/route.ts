@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import zlib from "zlib";
 import { pipeline } from "@xenova/transformers";
 
 // Cache directory
@@ -108,14 +109,21 @@ async function getEmbeddingPipeline(): Promise<any> {
   return ragState.embeddingPipeline;
 }
 
-// Load embeddings and documents from disk
+// Load embeddings and documents from disk (supports .gz files)
 function loadEmbeddingsFromDisk(): {
   documents: RAGState["documents"];
   embeddings: Float32Array[];
 } | null {
   console.log("Loading RAG data from disk...");
 
-  if (!fs.existsSync(DOCUMENTS_FILE) || !fs.existsSync(EMBEDDINGS_FILE)) {
+  // Check for gzipped or regular files
+  const documentsGz = DOCUMENTS_FILE + ".gz";
+  const embeddingsGz = EMBEDDINGS_FILE + ".gz";
+  
+  const hasDocs = fs.existsSync(DOCUMENTS_FILE) || fs.existsSync(documentsGz);
+  const hasEmbeddings = fs.existsSync(EMBEDDINGS_FILE) || fs.existsSync(embeddingsGz);
+  
+  if (!hasDocs || !hasEmbeddings) {
     console.log("RAG data not found on disk");
     return null;
   }
@@ -123,14 +131,33 @@ function loadEmbeddingsFromDisk(): {
   try {
     updateProgress("loading_from_disk", 0, 2);
 
-    const documentsJson = fs.readFileSync(DOCUMENTS_FILE, "utf8");
+    // Load documents (support .gz)
+    let documentsJson: string;
+    if (fs.existsSync(documentsGz)) {
+      const compressed = fs.readFileSync(documentsGz);
+      documentsJson = zlib.gunzipSync(compressed).toString("utf8");
+      console.log(`Loaded documents from ${documentsGz}`);
+    } else {
+      documentsJson = fs.readFileSync(DOCUMENTS_FILE, "utf8");
+      console.log(`Loaded documents from ${DOCUMENTS_FILE}`);
+    }
+    
     const documents = JSON.parse(documentsJson);
-    console.log(`Loaded ${documents.length} documents from ${DOCUMENTS_FILE}`);
+    console.log(`Loaded ${documents.length} documents`);
     updateProgress("loading_from_disk", 1, 2);
 
-    const buffer = fs.readFileSync(EMBEDDINGS_FILE);
+    // Load embeddings (support .gz)
+    let buffer: Buffer;
+    if (fs.existsSync(embeddingsGz)) {
+      const compressed = fs.readFileSync(embeddingsGz);
+      buffer = zlib.gunzipSync(compressed);
+      console.log(`Loaded embeddings from ${embeddingsGz}`);
+    } else {
+      buffer = fs.readFileSync(EMBEDDINGS_FILE);
+      console.log(`Loaded embeddings from ${EMBEDDINGS_FILE}`);
+    }
+    
     let offset = 0;
-
     const count = buffer.readUInt32LE(offset);
     offset += 4;
 
@@ -149,7 +176,7 @@ function loadEmbeddingsFromDisk(): {
       embeddings.push(embedding);
     }
 
-    console.log(`Loaded ${embeddings.length} embeddings from ${EMBEDDINGS_FILE}`);
+    console.log(`Loaded ${embeddings.length} embeddings`);
     updateProgress("loading_from_disk", 2, 2);
 
     return { documents, embeddings };

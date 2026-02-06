@@ -40,5 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# rag cache
-/rag_cache/
+# rag cache - allow compressed RAG files but not source data
+/rag_cache/clean_docs/
+/rag_cache/raw_html/
+/rag_cache/*.backup
