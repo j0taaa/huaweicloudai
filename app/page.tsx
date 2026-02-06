@@ -2228,7 +2228,7 @@ export default function Home() {
           )}
         </div>
       </aside>
-      <main className="flex h-full w-full flex-1 flex-col overflow-hidden">
+      <main className="flex h-full w-full min-h-0 flex-1 flex-col overflow-hidden">
         <header className="surface-card flex items-center justify-between border-b border-zinc-200/70 px-4 py-3 backdrop-blur lg:hidden">
           <button
             type="button"
@@ -2265,7 +2265,7 @@ export default function Home() {
             New
           </button>
         </header>
-        <section className="surface-card relative flex h-full flex-1 flex-col gap-6 px-4 py-5 backdrop-blur sm:px-6 sm:py-6 lg:mx-4 lg:mb-4 lg:mt-4 lg:rounded-3xl">
+        <section className="surface-card relative flex h-full min-h-0 flex-1 flex-col gap-6 px-4 py-5 backdrop-blur sm:px-6 sm:py-6 lg:mx-4 lg:mb-4 lg:mt-4 lg:rounded-3xl">
           <div className="absolute right-4 top-4 flex items-center gap-2">
             <a
               href="/api/extension-download"
@@ -2278,7 +2278,7 @@ export default function Home() {
             </div>
           </div>
           <div
-            className="flex flex-1 flex-col gap-4 overflow-y-auto"
+            className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto"
             ref={messagesContainerRef}
           >
             {messages.length === 0 ? (
