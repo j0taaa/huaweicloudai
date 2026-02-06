@@ -21,7 +21,7 @@ const AK = process.env.HUAWEI_CLOUD_AK;
 const SK = process.env.HUAWEI_CLOUD_SK;
 const REGION = process.env.HUAWEI_CLOUD_REGION || "sa-brazil-1";
 const PROJECT_ID = process.env.HUAWEI_CLOUD_PROJECT_ID;
-const FUNCTION_URN = process.env.FUNCTIONGRAPH_EVAL_URN;
+const FUNCTION_URN = process.env.FUNCTIONGRAPH_EVAL_URN || "urn:fss:sa-brazil-1:9803447aabf141f495dfa6939e308f6e:function:default:code-evaluator:latest";
 
 export async function POST(request: Request) {
   const { code } = (await request.json()) as EvalRequest;
@@ -33,9 +33,9 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!AK || !SK || !PROJECT_ID || !FUNCTION_URN) {
+  if (!AK || !SK || !PROJECT_ID) {
     return NextResponse.json(
-      { error: "Missing required environment variables: HUAWEI_CLOUD_AK, HUAWEI_CLOUD_SK, HUAWEI_CLOUD_PROJECT_ID, FUNCTIONGRAPH_EVAL_URN" },
+      { error: "Missing required environment variables: HUAWEI_CLOUD_AK, HUAWEI_CLOUD_SK, HUAWEI_CLOUD_PROJECT_ID" },
       { status: 500 },
     );
   }
