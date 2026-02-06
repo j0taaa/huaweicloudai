@@ -1948,7 +1948,7 @@ export default function Home() {
   }, [activeConversation, estimatedTokenCount, isLoading, pendingChoice]);
 
   return (
-    <div className="app-shell flex h-dvh w-screen flex-col text-zinc-900 dark:text-zinc-50 lg:flex-row">
+    <div className="app-shell flex h-dvh w-full overflow-hidden text-zinc-900 dark:text-zinc-50 lg:flex-row">
       {sidebarOpen ? (
         <button
           type="button"
@@ -2228,7 +2228,7 @@ export default function Home() {
           )}
         </div>
       </aside>
-      <main className="flex h-full w-full flex-1 flex-col">
+      <main className="flex h-full w-full flex-1 flex-col overflow-hidden">
         <header className="surface-card flex items-center justify-between border-b border-zinc-200/70 px-4 py-3 backdrop-blur lg:hidden">
           <button
             type="button"
@@ -2265,7 +2265,7 @@ export default function Home() {
             New
           </button>
         </header>
-        <section className="surface-card relative flex h-full flex-1 flex-col gap-6 px-4 py-5 backdrop-blur sm:px-6 sm:py-6 lg:m-4 lg:rounded-3xl">
+        <section className="surface-card relative flex h-full flex-1 flex-col gap-6 px-4 py-5 backdrop-blur sm:px-6 sm:py-6 lg:mx-4 lg:mb-4 lg:mt-4 lg:rounded-3xl">
           <div className="absolute right-4 top-4 flex items-center gap-2">
             <a
               href="/api/extension-download"
