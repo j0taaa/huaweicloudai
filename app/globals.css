@@ -176,6 +176,21 @@ body {
   background: rgba(148, 163, 184, 0.08);
 }
 
+.thinking-text::after {
+  content: "...";
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  width: 0;
+  animation: thinking-ellipsis 1.2s steps(4, end) infinite;
+}
+
+@keyframes thinking-ellipsis {
+  to {
+    width: 1.2em;
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   .markdown-content code {
     background: rgba(148, 163, 184, 0.25);
