@@ -214,7 +214,7 @@ const ChartBlock = ({ data }: { data: ChartDatum[] }) => {
   });
 
   return (
-    <div className="mt-2 rounded-2xl border border-zinc-200 bg-white px-3 py-4 dark:border-white/10 dark:bg-black/25">
+    <div className="mt-2 rounded-2xl border border-neutral-200 bg-white px-3 py-4 shadow-sm dark:border-white/10 dark:bg-neutral-900/40">
       <div className="flex h-52 items-end gap-2">
         {data.map((entry, index) => {
           const heightPercent =
@@ -224,17 +224,17 @@ const ChartBlock = ({ data }: { data: ChartDatum[] }) => {
               key={`${entry.label}-${index}`}
               className="flex min-w-0 flex-1 flex-col items-center gap-2"
             >
-              <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
+              <span className="text-[11px] font-semibold text-neutral-600 dark:text-neutral-300">
                 {formatter.format(entry.value)}
               </span>
               <div className="flex h-36 w-full items-end justify-center">
                 <div
-                  className="w-full max-w-10 rounded-t-md bg-blue-500"
+                  className="w-full max-w-10 rounded-t-md bg-red-500"
                   style={{ height: `${heightPercent}%` }}
                   title={`${entry.label}: ${formatter.format(entry.value)}`}
                 />
               </div>
-              <span className="w-full truncate text-center text-[11px] text-zinc-500 dark:text-zinc-400">
+              <span className="w-full truncate text-center text-[11px] text-neutral-500 dark:text-neutral-400">
                 {entry.label}
               </span>
             </div>
@@ -1941,7 +1941,7 @@ export default function Home() {
   }, [activeConversation, estimatedTokenCount, isLoading, pendingChoice]);
 
   return (
-    <div className="flex h-dvh w-screen flex-col bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50 lg:flex-row">
+    <div className="flex h-dvh w-screen flex-col bg-neutral-100 text-neutral-900 dark:bg-black dark:text-white lg:flex-row">
       {sidebarOpen ? (
         <button
           type="button"
@@ -1951,16 +1951,21 @@ export default function Home() {
         />
       ) : null}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-80 max-w-full flex-col gap-4 border-r border-zinc-200 bg-white/95 p-4 shadow-lg backdrop-blur transition-transform duration-200 dark:border-white/10 dark:bg-black/90 lg:static lg:w-72 lg:translate-x-0 lg:shadow-sm ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-80 max-w-full flex-col gap-4 border-r border-neutral-200 bg-white/95 p-4 shadow-xl backdrop-blur transition-transform duration-200 dark:border-white/10 dark:bg-black/90 lg:static lg:w-72 lg:translate-x-0 lg:shadow-sm ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-            Conversations
-          </h2>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-neutral-400 dark:text-neutral-500">
+              Console
+            </p>
+            <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+              Conversations
+            </h2>
+          </div>
           <button
-            className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+            className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 transition hover:border-red-300 hover:bg-red-100 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200"
             type="button"
             onClick={() => {
               handleNewConversation();
@@ -1976,8 +1981,8 @@ export default function Home() {
               key={conversation.id}
               className={`flex w-full items-start justify-between gap-3 rounded-2xl border px-3 py-2 text-left text-sm transition ${
                 conversation.id === activeConversationId
-                  ? "border-zinc-900 bg-zinc-900 text-white shadow-sm dark:border-white/70 dark:bg-white/10"
-                  : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 dark:border-white/10 dark:bg-black/40 dark:text-zinc-200"
+                  ? "border-red-600 bg-red-600 text-white shadow-md shadow-red-500/20 dark:border-red-400 dark:bg-red-500/20"
+                  : "border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300 hover:bg-neutral-50 dark:border-white/10 dark:bg-neutral-900/60 dark:text-neutral-200"
               }`}
             >
               <button
@@ -1994,8 +1999,8 @@ export default function Home() {
                 <span
                   className={`truncate text-xs ${
                     conversation.id === activeConversationId
-                      ? "text-zinc-200"
-                      : "text-zinc-500 dark:text-zinc-400"
+                      ? "text-red-100"
+                      : "text-neutral-500 dark:text-neutral-400"
                   }`}
                 >
                   {conversation.messages.length} messages
@@ -2005,7 +2010,7 @@ export default function Home() {
                 className={`rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] transition ${
                   conversation.id === activeConversationId
                     ? "border-white/40 text-white hover:border-white/70"
-                    : "border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:text-zinc-700 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+                    : "border-neutral-200 text-neutral-500 hover:border-neutral-300 hover:text-neutral-700 dark:border-white/10 dark:text-neutral-300 dark:hover:border-white/30 dark:hover:text-white"
                 }`}
                 type="button"
                 onClick={() => handleDeleteConversation(conversation.id)}
@@ -2031,34 +2036,34 @@ export default function Home() {
             </div>
           ))}
         </div>
-        <div className="rounded-2xl border border-zinc-200 bg-white/90 p-4 shadow-sm dark:border-white/10 dark:bg-black/80">
+        <div className="rounded-2xl border border-neutral-200 bg-white/95 p-4 shadow-sm dark:border-white/10 dark:bg-neutral-950/80">
           <button
-            className="flex w-full items-center justify-between text-left text-sm font-semibold text-zinc-900 dark:text-zinc-100"
+            className="flex w-full items-center justify-between text-left text-sm font-semibold text-neutral-900 dark:text-neutral-100"
             type="button"
             onClick={() => setCredentialsOpen((prev) => !prev)}
             aria-expanded={credentialsOpen}
           >
             <span>Huawei Cloud credentials</span>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="text-xs text-neutral-500 dark:text-neutral-400">
               {credentialsOpen ? "Hide" : "Show"}
             </span>
           </button>
           {credentialsOpen ? (
             <div className="mt-4 space-y-3">
-              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-neutral-500 dark:text-neutral-400">
                 Access Key (AK)
                 <input
-                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-normal text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                  className="rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-normal text-neutral-900 shadow-sm outline-none transition focus:border-red-300 focus:ring-2 focus:ring-red-100 dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-red-400 dark:focus:ring-red-400/10"
                   placeholder="Enter your Huawei Cloud AK"
                   value={accessKey}
                   onChange={(event) => setAccessKey(event.target.value)}
                   autoComplete="off"
                 />
               </label>
-              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-neutral-500 dark:text-neutral-400">
                 Secret Key (SK)
                 <input
-                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-normal text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                  className="rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-normal text-neutral-900 shadow-sm outline-none transition focus:border-red-300 focus:ring-2 focus:ring-red-100 dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-red-400 dark:focus:ring-red-400/10"
                   placeholder="Enter your Huawei Cloud SK"
                   value={secretKey}
                   onChange={(event) => setSecretKey(event.target.value)}
@@ -2066,13 +2071,13 @@ export default function Home() {
                   type="password"
                 />
               </label>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
                 These values are used as context in the system prompt and are
                 stored locally in this browser.
               </p>
-              <div className="flex flex-col gap-2 text-sm text-zinc-600 dark:text-zinc-300">
+              <div className="flex flex-col gap-2 text-sm text-neutral-600 dark:text-neutral-300">
                 <button
-                  className="rounded-2xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
+                  className="rounded-2xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-300 dark:bg-red-500 dark:hover:bg-red-400"
                   type="button"
                   onClick={handleSaveCredentials}
                   disabled={
@@ -2093,23 +2098,23 @@ export default function Home() {
                       Project IDs loaded: {projectIds.length}
                     </span>
                     <button
-                      className="text-left text-xs text-zinc-600 underline dark:text-zinc-300"
+                      className="text-left text-xs text-neutral-600 underline dark:text-neutral-300"
                       type="button"
                       onClick={() => setProjectIdsOpen((prev) => !prev)}
                     >
                       {projectIdsOpen ? "Hide" : "Show"} project IDs
                     </button>
                     {projectIdsOpen ? (
-                      <div className="max-h-40 overflow-y-auto rounded-xl border border-zinc-200 bg-zinc-50 p-2 text-xs dark:border-white/10 dark:bg-white/5">
+                      <div className="max-h-40 overflow-y-auto rounded-xl border border-neutral-200 bg-neutral-50 p-2 text-xs dark:border-white/10 dark:bg-white/5">
                         {projectIds.map((project) => (
                           <div
                             key={project.projectId}
-                            className="flex justify-between border-b border-zinc-200 py-1 last:border-0 dark:border-white/10"
+                            className="flex justify-between border-b border-neutral-200 py-1 last:border-0 dark:border-white/10"
                           >
-                            <span className="text-zinc-600 dark:text-zinc-300">
+                            <span className="text-neutral-600 dark:text-neutral-300">
                               {project.region}
                             </span>
-                            <span className="font-mono text-zinc-900 dark:text-zinc-100">
+                            <span className="font-mono text-neutral-900 dark:text-neutral-100">
                               {project.projectId}
                             </span>
                           </div>
@@ -2127,22 +2132,22 @@ export default function Home() {
             </div>
           ) : null}
         </div>
-        <div className="rounded-2xl border border-zinc-200 bg-white/90 p-4 shadow-sm dark:border-white/10 dark:bg-black/80">
+        <div className="rounded-2xl border border-neutral-200 bg-white/95 p-4 shadow-sm dark:border-white/10 dark:bg-neutral-950/80">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+            <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
               Inference
             </span>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="text-xs text-neutral-500 dark:text-neutral-400">
               {inferenceMode === "custom" ? "Custom LLM" : "Built-in"}
             </span>
           </div>
-          <div className="mt-3 flex items-center gap-2 rounded-full bg-zinc-100 p-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:bg-white/10 dark:text-zinc-300">
+          <div className="mt-3 flex items-center gap-2 rounded-full bg-neutral-100 p-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-neutral-500 dark:bg-white/10 dark:text-neutral-300">
             <button
               type="button"
               className={`flex-1 rounded-full px-3 py-1 transition ${
                 inferenceMode === "default"
-                  ? "bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-white"
-                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  ? "bg-white text-neutral-900 shadow-sm dark:bg-black dark:text-white"
+                  : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
               }`}
               onClick={() => setInferenceMode("default")}
             >
@@ -2152,8 +2157,8 @@ export default function Home() {
               type="button"
               className={`flex-1 rounded-full px-3 py-1 transition ${
                 inferenceMode === "custom"
-                  ? "bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-white"
-                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  ? "bg-white text-neutral-900 shadow-sm dark:bg-black dark:text-white"
+                  : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
               }`}
               onClick={() => setInferenceMode("custom")}
             >
@@ -2162,10 +2167,10 @@ export default function Home() {
           </div>
           {inferenceMode === "custom" ? (
             <div className="mt-4 space-y-3">
-              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-neutral-500 dark:text-neutral-400">
                 Base URL
                 <input
-                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-normal text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                  className="rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-normal text-neutral-900 shadow-sm outline-none transition focus:border-red-300 focus:ring-2 focus:ring-red-100 dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-red-400 dark:focus:ring-red-400/10"
                   placeholder="https://openrouter.ai/api/v1"
                   value={customInference.baseUrl}
                   onChange={(event) =>
@@ -2177,10 +2182,10 @@ export default function Home() {
                   autoComplete="off"
                 />
               </label>
-              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-neutral-500 dark:text-neutral-400">
                 Model
                 <input
-                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-normal text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                  className="rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-normal text-neutral-900 shadow-sm outline-none transition focus:border-red-300 focus:ring-2 focus:ring-red-100 dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-red-400 dark:focus:ring-red-400/10"
                   placeholder="openrouter/auto"
                   value={customInference.model}
                   onChange={(event) =>
@@ -2192,10 +2197,10 @@ export default function Home() {
                   autoComplete="off"
                 />
               </label>
-              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-neutral-500 dark:text-neutral-400">
                 API key
                 <input
-                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-normal text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                  className="rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-normal text-neutral-900 shadow-sm outline-none transition focus:border-red-300 focus:ring-2 focus:ring-red-100 dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-red-400 dark:focus:ring-red-400/10"
                   placeholder="Enter your provider key"
                   value={customInference.apiKey}
                   onChange={(event) =>
@@ -2208,13 +2213,13 @@ export default function Home() {
                   type="password"
                 />
               </label>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
                 These settings are stored locally and only sent when you choose
                 Custom inference.
               </p>
             </div>
           ) : (
-            <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="mt-3 text-xs text-neutral-500 dark:text-neutral-400">
               Uses the built-in GLM 4.7 ZAI coding plan configured on the
               server.
             </p>
@@ -2222,11 +2227,11 @@ export default function Home() {
         </div>
       </aside>
       <main className="flex h-full w-full flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-zinc-200 bg-white/90 px-4 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/80 lg:hidden">
+        <header className="flex items-center justify-between border-b border-neutral-200 bg-white/90 px-4 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/80 lg:hidden">
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 text-zinc-600 shadow-sm transition hover:border-zinc-300 hover:text-zinc-900 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-neutral-200 text-neutral-600 shadow-sm transition hover:border-neutral-300 hover:text-neutral-900 dark:border-white/10 dark:text-neutral-300 dark:hover:border-white/30 dark:hover:text-white"
             aria-label="Open conversations"
           >
             <svg
@@ -2246,27 +2251,82 @@ export default function Home() {
           </button>
           <div className="flex flex-1 flex-col items-center">
             <span className="text-sm font-semibold">Huawei Cloud AI</span>
-            <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+            <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
               Chat workspace
             </span>
           </div>
           <button
             type="button"
             onClick={handleNewConversation}
-            className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+            className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 transition hover:border-red-300 hover:bg-red-100 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200"
           >
             New
           </button>
         </header>
-        <section className="relative flex h-full flex-1 flex-col gap-6 bg-white px-4 py-5 shadow-sm dark:bg-zinc-950 sm:px-6 sm:py-6">
-          <div className="absolute right-4 top-4 flex items-center gap-2">
+        <header className="hidden items-center justify-between border-b border-neutral-200 bg-white/90 px-6 py-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/80 lg:flex">
+          <div className="flex items-center gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-neutral-400 dark:text-neutral-500">
+                Huawei Cloud
+              </p>
+              <h1 className="text-lg font-semibold text-neutral-900 dark:text-white">
+                AI Console Workspace
+              </h1>
+            </div>
+            <span className="rounded-full border border-red-100 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-200">
+              Console
+            </span>
+          </div>
+          <div className="flex flex-1 justify-center px-6">
+            <div className="flex w-full max-w-xl items-center gap-2 rounded-full border border-neutral-200 bg-neutral-50 px-4 py-2 text-sm text-neutral-500 shadow-sm focus-within:border-red-300 focus-within:ring-2 focus-within:ring-red-100 dark:border-white/10 dark:bg-neutral-900/60 dark:text-neutral-300 dark:focus-within:border-red-500 dark:focus-within:ring-red-500/10">
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="h-4 w-4 text-neutral-400"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="11" cy="11" r="7" />
+                <path d="m21 21-3.6-3.6" />
+              </svg>
+              <input
+                className="w-full bg-transparent text-sm text-neutral-700 outline-none placeholder:text-neutral-400 dark:text-neutral-100 dark:placeholder:text-neutral-500"
+                placeholder="Search services, resources, or API actions"
+                aria-label="Search services"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
             <a
               href="/api/extension-download"
-              className="rounded-full border border-zinc-200 bg-white/90 px-3 py-1 text-xs font-semibold text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-900 dark:border-white/10 dark:bg-black/80 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+              className="rounded-full border border-neutral-200 bg-white/90 px-3 py-1 text-xs font-semibold text-neutral-600 shadow-sm transition hover:border-neutral-300 hover:text-neutral-900 dark:border-white/10 dark:bg-black/80 dark:text-neutral-300 dark:hover:border-white/30 dark:hover:text-white"
             >
               Download extension ZIP
             </a>
-            <div className="rounded-full border border-zinc-200 bg-white/90 px-3 py-1 text-xs font-semibold text-zinc-600 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/80 dark:text-zinc-300">
+            <div className="rounded-full border border-neutral-200 bg-white/90 px-3 py-1 text-xs font-semibold text-neutral-600 shadow-sm dark:border-white/10 dark:bg-black/80 dark:text-neutral-300">
+              {tokenCountLabel}: {tokenFormatter.format(estimatedTokenCount)}
+            </div>
+            <button
+              type="button"
+              onClick={handleNewConversation}
+              className="rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-red-700"
+            >
+              New
+            </button>
+          </div>
+        </header>
+        <section className="relative flex h-full flex-1 flex-col gap-6 bg-neutral-50 px-4 py-5 shadow-sm dark:bg-neutral-950 sm:px-6 sm:py-6 lg:rounded-tl-3xl lg:border-l lg:border-neutral-200 lg:bg-white/70 lg:backdrop-blur dark:lg:border-white/10">
+          <div className="absolute right-4 top-4 flex items-center gap-2 lg:hidden">
+            <a
+              href="/api/extension-download"
+              className="rounded-full border border-neutral-200 bg-white/90 px-3 py-1 text-xs font-semibold text-neutral-600 shadow-sm backdrop-blur transition hover:border-neutral-300 hover:text-neutral-900 dark:border-white/10 dark:bg-black/80 dark:text-neutral-300 dark:hover:border-white/30 dark:hover:text-white"
+            >
+              Download extension ZIP
+            </a>
+            <div className="rounded-full border border-neutral-200 bg-white/90 px-3 py-1 text-xs font-semibold text-neutral-600 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/80 dark:text-neutral-300">
               {tokenCountLabel}: {tokenFormatter.format(estimatedTokenCount)}
             </div>
           </div>
@@ -2275,23 +2335,23 @@ export default function Home() {
             ref={messagesContainerRef}
           >
             {messages.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-6 text-sm text-zinc-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500">
+              <div className="rounded-2xl border border-dashed border-neutral-200 bg-white p-6 text-sm text-neutral-600 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-neutral-300">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-neutral-400 dark:text-neutral-500">
                   Getting started
                 </p>
-                <h3 className="mt-2 text-lg font-semibold text-zinc-900 dark:text-white">
+                <h3 className="mt-2 text-lg font-semibold text-neutral-900 dark:text-white">
                   Learn how to use this Huawei Cloud assistant
                 </h3>
                 <ol className="mt-4 flex flex-col gap-3">
                   <li>
-                    <span className="font-semibold text-zinc-900 dark:text-white">
+                    <span className="font-semibold text-neutral-900 dark:text-white">
                       1. Add your AK/SK credentials.
                     </span>{" "}
                     Use the sidebar to enter your Access Key (AK) and Secret Key
                     (SK). They are required to sign API requests on your behalf.
                   </li>
                   <li>
-                    <span className="font-semibold text-zinc-900 dark:text-white">
+                    <span className="font-semibold text-neutral-900 dark:text-white">
                       2. Understand account access.
                     </span>{" "}
                     When you run actions, the assistant uses your AK/SK to make
@@ -2299,7 +2359,7 @@ export default function Home() {
                     your account.
                   </li>
                   <li>
-                    <span className="font-semibold text-zinc-900 dark:text-white">
+                    <span className="font-semibold text-neutral-900 dark:text-white">
                       3. Ask for workflows or API help.
                     </span>{" "}
                     Try “list my projects,” “create an ECS instance,” or “show
@@ -2324,10 +2384,10 @@ export default function Home() {
                       <div className="flex flex-col gap-3">
                         {message.content.trim() ? (
                           <div
-                            className={`rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+                            className={`rounded-2xl border border-neutral-200 px-4 py-3 text-sm leading-relaxed shadow-sm ${
                               message.role === "user"
-                                ? "bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900"
-                                : "bg-zinc-100 text-zinc-900 dark:bg-white/10 dark:text-zinc-100"
+                                ? "bg-red-600 text-white shadow-red-500/30 dark:bg-red-500"
+                                : "bg-white text-neutral-900 shadow-neutral-200 dark:border-white/10 dark:bg-white/10 dark:text-neutral-100"
                             }`}
                           >
                             {message.role === "assistant" ? (
@@ -2374,21 +2434,21 @@ export default function Home() {
                               return (
                                 <div
                                   key={toolCall.id}
-                                  className="rounded-2xl border border-zinc-200 bg-white px-4 py-4 text-sm text-zinc-700 shadow-sm dark:border-white/10 dark:bg-black dark:text-zinc-200"
+                                  className="rounded-2xl border border-neutral-200 bg-white px-4 py-4 text-sm text-neutral-700 shadow-sm dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-200"
                                 >
                                   <div className="flex items-center justify-between gap-4">
                                     <div>
-                                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+                                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-neutral-500 dark:text-neutral-400">
                                         Tool run
                                       </p>
-                                      <p className="text-base font-semibold text-zinc-900 dark:text-white">
+                                      <p className="text-base font-semibold text-neutral-900 dark:text-white">
                                         {toolCall.function.name}
                                       </p>
                                     </div>
                                     <div className="flex items-center gap-2">
                                       {!hasResult ? (
-                                        <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600 dark:border-white/20 dark:border-t-white" />
+                                        <div className="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
+                                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-600 dark:border-white/20 dark:border-t-white" />
                                           Running
                                         </div>
                                       ) : (
@@ -2398,7 +2458,7 @@ export default function Home() {
                                       )}
                                       {isEvalTool ? (
                                         <button
-                                          className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+                                          className="rounded-full border border-neutral-200 px-3 py-1 text-xs font-semibold text-neutral-600 transition hover:border-neutral-400 hover:text-neutral-900 dark:border-white/10 dark:text-neutral-300 dark:hover:border-white/30 dark:hover:text-white"
                                           type="button"
                                           onClick={() =>
                                             setActiveToolPreview({
@@ -2415,30 +2475,30 @@ export default function Home() {
                                       ) : null}
                                     </div>
                                   </div>
-                                  <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
+                                  <p className="mt-3 text-sm text-neutral-600 dark:text-neutral-400">
                                     {summary}
                                   </p>
-                                  <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-3 text-xs text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200">
-                                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+                                  <div className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-xs text-neutral-700 dark:border-white/10 dark:bg-white/5 dark:text-neutral-200">
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-neutral-500 dark:text-neutral-400">
                                       Tool result
                                     </p>
                                     {hasResult ? (
                                       shouldCollapseResult ? (
-                                        <details className="mt-2 w-full max-w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700 dark:border-white/10 dark:bg-black/60 dark:text-zinc-200">
-                                          <summary className="cursor-pointer text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                                        <details className="mt-2 w-full max-w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-700 dark:border-white/10 dark:bg-black/60 dark:text-neutral-200">
+                                          <summary className="cursor-pointer text-xs font-semibold text-neutral-600 dark:text-neutral-300">
                                             Show full result ({resultLineCount} lines)
                                           </summary>
-                                          <pre className="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap break-words text-xs text-zinc-700 dark:text-zinc-200">
+                                          <pre className="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap break-words text-xs text-neutral-700 dark:text-neutral-200">
                                             {result}
                                           </pre>
                                         </details>
                                       ) : (
-                                        <pre className="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap break-words text-xs text-zinc-700 dark:text-zinc-200">
+                                        <pre className="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap break-words text-xs text-neutral-700 dark:text-neutral-200">
                                           {result}
                                         </pre>
                                       )
                                     ) : (
-                                      <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                                      <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
                                         Awaiting response from the tool...
                                       </p>
                                     )}
@@ -2454,9 +2514,9 @@ export default function Home() {
                 ))
             )}
             {isLoading ? (
-              <div className="flex items-center gap-2 rounded-2xl bg-zinc-100 px-4 py-3 text-sm text-zinc-600 dark:bg-white/10 dark:text-zinc-300">
+              <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm text-neutral-600 shadow-sm dark:bg-white/10 dark:text-neutral-300">
                 <span
-                  className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600 dark:border-white/20 dark:border-t-white"
+                  className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-600 dark:border-white/20 dark:border-t-white"
                   aria-hidden="true"
                 />
                 <span>{isCompacting ? "Compacting..." : "Thinking..."}</span>
@@ -2472,20 +2532,20 @@ export default function Home() {
 
           {pendingChoice ? (
             <form
-              className="rounded-2xl border border-dashed border-zinc-200 bg-white p-4 text-sm text-zinc-700 shadow-sm dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-200"
+              className="rounded-2xl border border-dashed border-neutral-200 bg-white p-4 text-sm text-neutral-700 shadow-sm dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-200"
               onSubmit={handleChoiceSubmit}
             >
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-neutral-500 dark:text-neutral-400">
                 Multiple choice
               </p>
-              <p className="mt-2 text-base font-semibold text-zinc-900 dark:text-white">
+              <p className="mt-2 text-base font-semibold text-neutral-900 dark:text-white">
                 {pendingChoice.question}
               </p>
               <div className="mt-4 flex flex-col gap-3">
                 {pendingChoice.options.map((option, index) => (
                   <label
                     key={`${option}-${index}`}
-                    className="flex cursor-pointer items-center gap-3 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-700 transition hover:border-zinc-300 dark:border-white/10 dark:text-zinc-200 dark:hover:border-white/20"
+                    className="flex cursor-pointer items-center gap-3 rounded-xl border border-neutral-200 px-3 py-2 text-sm text-neutral-700 transition hover:border-neutral-300 dark:border-white/10 dark:text-neutral-200 dark:hover:border-white/20"
                   >
                     <input
                       type="radio"
@@ -2498,7 +2558,7 @@ export default function Home() {
                     <span>{option}</span>
                   </label>
                 ))}
-                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-700 transition hover:border-zinc-300 dark:border-white/10 dark:text-zinc-200 dark:hover:border-white/20">
+                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-neutral-200 px-3 py-2 text-sm text-neutral-700 transition hover:border-neutral-300 dark:border-white/10 dark:text-neutral-200 dark:hover:border-white/20">
                   <input
                     type="radio"
                     name="multiple-choice"
@@ -2511,7 +2571,7 @@ export default function Home() {
                 </label>
                 {selectedChoice === "custom" ? (
                   <input
-                    className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                    className="rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 shadow-sm outline-none transition focus:border-red-300 focus:ring-2 focus:ring-red-100 dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-red-400 dark:focus:ring-red-400/10"
                     placeholder="Type your answer..."
                     value={customChoice}
                     onChange={(event) => setCustomChoice(event.target.value)}
@@ -2521,7 +2581,7 @@ export default function Home() {
               </div>
               <div className="mt-4 flex justify-end">
                 <button
-                  className="rounded-2xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
+                  className="rounded-2xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-300 dark:bg-red-500 dark:hover:bg-red-400"
                   type="submit"
                   disabled={
                     isLoading ||
@@ -2544,7 +2604,7 @@ export default function Home() {
               <div className="relative grid flex-1">
                 <textarea
                   ref={textareaRef}
-                  className="col-start-1 row-start-1 min-h-[48px] w-full resize-none rounded-3xl border border-zinc-200 bg-white px-4 py-3 pl-14 pr-14 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                  className="col-start-1 row-start-1 min-h-[48px] w-full resize-none rounded-3xl border border-neutral-200 bg-white px-4 py-3 pl-14 pr-14 text-sm text-neutral-900 shadow-sm outline-none transition focus:border-red-300 focus:ring-2 focus:ring-red-100 dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-red-400 dark:focus:ring-red-400/10"
                   placeholder="Type your message..."
                   value={input}
                   onChange={(event) => {
@@ -2565,7 +2625,7 @@ export default function Home() {
                   className="col-start-1 row-start-1 ml-2 flex w-fit items-center self-center justify-self-start"
                 >
                   <button
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-black/20 bg-black text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-600 dark:border-black/40 dark:bg-black dark:text-white dark:hover:bg-zinc-800"
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm transition hover:border-neutral-300 hover:text-neutral-900 disabled:cursor-not-allowed disabled:bg-neutral-100 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:border-white/20"
                     type="button"
                     aria-haspopup="menu"
                     aria-expanded={compactMenuOpen}
@@ -2592,11 +2652,11 @@ export default function Home() {
                   </button>
                   {compactMenuOpen ? (
                     <div
-                      className="absolute bottom-[calc(100%+8px)] left-2 z-10 w-56 rounded-2xl border border-zinc-200 bg-white p-2 text-sm text-zinc-700 shadow-lg dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-200"
+                      className="absolute bottom-[calc(100%+8px)] left-2 z-10 w-56 rounded-2xl border border-neutral-200 bg-white p-2 text-sm text-neutral-700 shadow-lg dark:border-white/10 dark:bg-neutral-950 dark:text-neutral-200"
                       role="menu"
                     >
                       <button
-                        className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:text-zinc-400 dark:text-zinc-200 dark:hover:bg-white/10 dark:disabled:text-zinc-500"
+                        className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-neutral-700 transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:text-neutral-400 dark:text-neutral-200 dark:hover:bg-white/10 dark:disabled:text-neutral-500"
                         type="button"
                         role="menuitem"
                         disabled={
@@ -2625,7 +2685,7 @@ export default function Home() {
                   ) : null}
                 </div>
                 <button
-                  className="col-start-1 row-start-1 mr-2 flex h-9 w-9 items-center justify-center justify-self-end self-center rounded-full bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
+                  className="col-start-1 row-start-1 mr-2 flex h-9 w-9 items-center justify-center justify-self-end self-center rounded-full bg-red-600 text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-300 dark:bg-red-500 dark:hover:bg-red-400"
                   type={isLoading || hasRunningToolCalls ? "button" : "submit"}
                   disabled={
                     (!isLoading && !hasRunningToolCalls && !trimmedInput) ||
@@ -2675,28 +2735,28 @@ export default function Home() {
 
       {activeToolPreview ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8">
-          <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-xl dark:bg-zinc-950">
+          <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-xl dark:bg-neutral-950">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-neutral-500 dark:text-neutral-400">
                   Tool code
                 </p>
-                <h2 className="text-xl font-semibold text-zinc-900 dark:text-white">
+                <h2 className="text-xl font-semibold text-neutral-900 dark:text-white">
                   {activeToolPreview.name}
                 </h2>
-                <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
                   {activeToolPreview.summary}
                 </p>
               </div>
               <button
-                className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+                className="rounded-full border border-neutral-200 px-3 py-1 text-xs font-semibold text-neutral-600 transition hover:border-neutral-400 hover:text-neutral-900 dark:border-white/10 dark:text-neutral-300 dark:hover:border-white/30 dark:hover:text-white"
                 type="button"
                 onClick={() => setActiveToolPreview(null)}
               >
                 Close
               </button>
             </div>
-            <pre className="mt-4 max-h-[60vh] overflow-y-auto rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-xs text-zinc-800 dark:border-white/10 dark:bg-white/5 dark:text-zinc-100">
+            <pre className="mt-4 max-h-[60vh] overflow-y-auto rounded-2xl border border-neutral-200 bg-neutral-50 p-4 text-xs text-neutral-800 dark:border-white/10 dark:bg-white/5 dark:text-neutral-100">
               {activeToolPreview.code}
             </pre>
           </div>
