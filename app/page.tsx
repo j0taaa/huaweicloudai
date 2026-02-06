@@ -2468,7 +2468,7 @@ export default function Home() {
                     key={`${message.role}-${index}`}
                     className={`flex ${
                       message.role === "user" ? "justify-end" : "justify-start"
-                    }`}
+                    } ${index === 0 ? "mt-10" : ""}`}
                   >
                     <div className="max-w-[80%]">
                       <div className="flex flex-col gap-3">
