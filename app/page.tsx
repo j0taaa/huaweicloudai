@@ -1941,7 +1941,7 @@ export default function Home() {
   }, [activeConversation, estimatedTokenCount, isLoading, pendingChoice]);
 
   return (
-    <div className="flex h-dvh w-screen flex-col bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50 lg:flex-row">
+    <div className="app-shell flex h-dvh w-full overflow-hidden text-zinc-900 dark:text-zinc-50 lg:flex-row">
       {sidebarOpen ? (
         <button
           type="button"
@@ -1951,7 +1951,7 @@ export default function Home() {
         />
       ) : null}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-80 max-w-full flex-col gap-4 border-r border-zinc-200 bg-white/95 p-4 shadow-lg backdrop-blur transition-transform duration-200 dark:border-white/10 dark:bg-black/90 lg:static lg:w-72 lg:translate-x-0 lg:shadow-sm ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-80 max-w-full flex-col gap-4 border-r border-zinc-200 bg-white/90 p-4 shadow-lg backdrop-blur-xl transition-transform duration-200 dark:border-white/10 dark:bg-black/80 lg:static lg:m-4 lg:h-[calc(100%-2rem)] lg:w-72 lg:translate-x-0 lg:rounded-3xl lg:border lg:border-white/60 lg:shadow-xl dark:lg:border-white/10 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
       >
@@ -1976,8 +1976,8 @@ export default function Home() {
               key={conversation.id}
               className={`flex w-full items-start justify-between gap-3 rounded-2xl border px-3 py-2 text-left text-sm transition ${
                 conversation.id === activeConversationId
-                  ? "border-zinc-900 bg-zinc-900 text-white shadow-sm dark:border-white/70 dark:bg-white/10"
-                  : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 dark:border-white/10 dark:bg-black/40 dark:text-zinc-200"
+                  ? "border-transparent bg-gradient-to-r from-zinc-900 via-slate-900 to-zinc-800 text-white shadow-md dark:border-white/40 dark:bg-white/10"
+                  : "border-zinc-200/80 bg-white/80 text-zinc-700 shadow-sm hover:border-zinc-300 dark:border-white/10 dark:bg-black/40 dark:text-zinc-200"
               }`}
             >
               <button
@@ -2031,7 +2031,7 @@ export default function Home() {
             </div>
           ))}
         </div>
-        <div className="rounded-2xl border border-zinc-200 bg-white/90 p-4 shadow-sm dark:border-white/10 dark:bg-black/80">
+        <div className="rounded-2xl border border-zinc-200/70 bg-white/90 p-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/80">
           <button
             className="flex w-full items-center justify-between text-left text-sm font-semibold text-zinc-900 dark:text-zinc-100"
             type="button"
@@ -2048,7 +2048,7 @@ export default function Home() {
               <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
                 Access Key (AK)
                 <input
-                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-normal text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                  className="rounded-xl border border-zinc-200 bg-white/95 px-3 py-2 text-sm font-normal text-zinc-900 shadow-sm outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200 dark:border-white/10 dark:bg-black/80 dark:text-zinc-100 dark:focus:border-sky-400 dark:focus:ring-sky-400/20"
                   placeholder="Enter your Huawei Cloud AK"
                   value={accessKey}
                   onChange={(event) => setAccessKey(event.target.value)}
@@ -2058,7 +2058,7 @@ export default function Home() {
               <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
                 Secret Key (SK)
                 <input
-                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-normal text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                  className="rounded-xl border border-zinc-200 bg-white/95 px-3 py-2 text-sm font-normal text-zinc-900 shadow-sm outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200 dark:border-white/10 dark:bg-black/80 dark:text-zinc-100 dark:focus:border-sky-400 dark:focus:ring-sky-400/20"
                   placeholder="Enter your Huawei Cloud SK"
                   value={secretKey}
                   onChange={(event) => setSecretKey(event.target.value)}
@@ -2072,7 +2072,7 @@ export default function Home() {
               </p>
               <div className="flex flex-col gap-2 text-sm text-zinc-600 dark:text-zinc-300">
                 <button
-                  className="rounded-2xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-white"
+                  className="rounded-2xl bg-gradient-to-r from-zinc-900 via-slate-900 to-zinc-800 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:from-zinc-800 hover:via-slate-800 hover:to-zinc-700 disabled:cursor-not-allowed disabled:from-zinc-400 disabled:to-zinc-400 dark:from-zinc-50 dark:via-white dark:to-zinc-200 dark:text-zinc-900 dark:hover:from-white dark:hover:to-zinc-100"
                   type="button"
                   onClick={handleSaveCredentials}
                   disabled={
@@ -2127,7 +2127,7 @@ export default function Home() {
             </div>
           ) : null}
         </div>
-        <div className="rounded-2xl border border-zinc-200 bg-white/90 p-4 shadow-sm dark:border-white/10 dark:bg-black/80">
+        <div className="rounded-2xl border border-zinc-200/70 bg-white/90 p-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/80">
           <div className="flex items-center justify-between">
             <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
               Inference
@@ -2136,7 +2136,7 @@ export default function Home() {
               {inferenceMode === "custom" ? "Custom LLM" : "Built-in"}
             </span>
           </div>
-          <div className="mt-3 flex items-center gap-2 rounded-full bg-zinc-100 p-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:bg-white/10 dark:text-zinc-300">
+          <div className="mt-3 flex items-center gap-2 rounded-full bg-zinc-100/80 p-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500 shadow-inner dark:bg-white/10 dark:text-zinc-300">
             <button
               type="button"
               className={`flex-1 rounded-full px-3 py-1 transition ${
@@ -2221,8 +2221,8 @@ export default function Home() {
           )}
         </div>
       </aside>
-      <main className="flex h-full w-full flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-zinc-200 bg-white/90 px-4 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/80 lg:hidden">
+      <main className="flex h-full w-full flex-1 flex-col overflow-hidden">
+        <header className="surface-card flex items-center justify-between border-b border-zinc-200/70 px-4 py-3 backdrop-blur lg:hidden">
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
@@ -2258,15 +2258,15 @@ export default function Home() {
             New
           </button>
         </header>
-        <section className="relative flex h-full flex-1 flex-col gap-6 bg-white px-4 py-5 shadow-sm dark:bg-zinc-950 sm:px-6 sm:py-6">
+        <section className="surface-card relative flex h-full flex-1 flex-col gap-6 px-4 py-5 backdrop-blur sm:px-6 sm:py-6 lg:mx-4 lg:mb-4 lg:mt-4 lg:rounded-3xl">
           <div className="absolute right-4 top-4 flex items-center gap-2">
             <a
               href="/api/extension-download"
-              className="rounded-full border border-zinc-200 bg-white/90 px-3 py-1 text-xs font-semibold text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-900 dark:border-white/10 dark:bg-black/80 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+              className="rounded-full border border-white/60 bg-gradient-to-r from-sky-600 via-indigo-600 to-blue-600 px-3 py-1 text-xs font-semibold text-white shadow-md transition hover:from-sky-500 hover:via-indigo-500 hover:to-blue-500 dark:border-white/20"
             >
               Download extension ZIP
             </a>
-            <div className="rounded-full border border-zinc-200 bg-white/90 px-3 py-1 text-xs font-semibold text-zinc-600 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/80 dark:text-zinc-300">
+            <div className="rounded-full border border-white/70 bg-white/80 px-3 py-1 text-xs font-semibold text-zinc-600 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/70 dark:text-zinc-300">
               {tokenCountLabel}: {tokenFormatter.format(estimatedTokenCount)}
             </div>
           </div>
@@ -2275,7 +2275,7 @@ export default function Home() {
             ref={messagesContainerRef}
           >
             {messages.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-6 text-sm text-zinc-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
+              <div className="rounded-2xl border border-dashed border-zinc-200/80 bg-white/80 p-6 text-sm text-zinc-600 shadow-inner dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500">
                   Getting started
                 </p>
@@ -2318,16 +2318,14 @@ export default function Home() {
                       message.role === "user" ? "justify-end" : "justify-start"
                     }`}
                   >
-                    <div
-                      className="max-w-[80%]"
-                    >
+                    <div className="max-w-[80%]">
                       <div className="flex flex-col gap-3">
                         {message.content.trim() ? (
                           <div
                             className={`rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
                               message.role === "user"
-                                ? "bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900"
-                                : "bg-zinc-100 text-zinc-900 dark:bg-white/10 dark:text-zinc-100"
+                                ? "bg-gradient-to-br from-zinc-900 via-slate-900 to-zinc-800 text-white shadow-md dark:from-zinc-50 dark:via-white dark:to-zinc-200 dark:text-zinc-900"
+                                : "bg-white/80 text-zinc-900 ring-1 ring-white/70 shadow-md dark:bg-white/10 dark:text-zinc-100 dark:ring-white/10"
                             }`}
                           >
                             {message.role === "assistant" ? (
