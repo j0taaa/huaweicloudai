@@ -327,6 +327,24 @@ const fetchProjectIds = async (ak: string, sk: string) => {
   return { entries: data.entries ?? [], errors: data.errors ?? [] };
 };
 
+const getToolCallGroup = (toolCall: ToolCall) => {
+  const name = toolCall.function.name;
+
+  if (name === "eval_code" || name === "search_rag_docs") {
+    return { key: "analysis", label: "Evaluation & RAG" };
+  }
+
+  if (name === "get_all_apis" || name === "get_api_details") {
+    return { key: "apis", label: "API lookup" };
+  }
+
+  if (name === "ask_multiple_choice") {
+    return { key: "choices", label: "User choices" };
+  }
+
+  return { key: name, label: name.replace(/_/g, " ") };
+};
+
 export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<
@@ -359,6 +377,7 @@ export default function Home() {
   });
   const [activeToolPreview, setActiveToolPreview] =
     useState<ToolPreview | null>(null);
+  const [toolGroupFocus, setToolGroupFocus] = useState<Record<string, number>>({});
   const [pendingChoice, setPendingChoice] = useState<{
     toolCall: ToolCall;
     question: string;
@@ -2515,7 +2534,44 @@ export default function Home() {
                         message.tool_calls &&
                         message.tool_calls.length > 0 ? (
                           <div className="flex flex-col gap-3">
-                            {message.tool_calls.map((toolCall) => {
+                            {(() => {
+                              const toolCalls = message.tool_calls ?? [];
+                              const toolCallKey = `tool-groups-${index}`;
+                              const groups = toolCalls.reduce<
+                                Array<{
+                                  key: string;
+                                  label: string;
+                                  toolCalls: ToolCall[];
+                                }>
+                              >((acc, call) => {
+                                const group = getToolCallGroup(call);
+                                const existing = acc.find(
+                                  (entry) => entry.key === group.key,
+                                );
+                                if (existing) {
+                                  existing.toolCalls.push(call);
+                                } else {
+                                  acc.push({
+                                    key: group.key,
+                                    label: group.label,
+                                    toolCalls: [call],
+                                  });
+                                }
+                                return acc;
+                              }, []);
+                              const defaultIndex = groups.length - 1;
+                              const storedIndex = toolGroupFocus[toolCallKey];
+                              const activeIndex =
+                                storedIndex === undefined ? defaultIndex : storedIndex;
+                              const clampedIndex = Math.min(
+                                Math.max(activeIndex, 0),
+                                groups.length - 1,
+                              );
+                              const activeGroup = groups[clampedIndex];
+                              const toolCall =
+                                activeGroup.toolCalls[
+                                  activeGroup.toolCalls.length - 1
+                                ];
                               const payload = parseToolPayload(toolCall);
                               const code = payload.code ?? "";
                               const isChoiceTool =
@@ -2529,11 +2585,16 @@ export default function Home() {
                                   : summarizeCode(code);
 
                               if (toolCall.function.name === "get_all_apis") {
-                                summary = payload.productShort ? `Lists all APIs for ${payload.productShort} service.` : "Lists all APIs for a service.";
+                                summary = payload.productShort
+                                  ? `Lists all APIs for ${payload.productShort} service.`
+                                  : "Lists all APIs for a service.";
                               }
 
                               if (toolCall.function.name === "get_api_details") {
-                                summary = payload.productShort && payload.action ? `Gets details for ${payload.productShort} API: ${payload.action}.` : "Gets API details.";
+                                summary =
+                                  payload.productShort && payload.action
+                                    ? `Gets details for ${payload.productShort} API: ${payload.action}.`
+                                    : "Gets API details.";
                               }
 
                               if (toolCall.function.name === "search_rag_docs") {
@@ -2548,13 +2609,54 @@ export default function Home() {
                               const shouldCollapseResult =
                                 result.length > TOOL_RESULT_COLLAPSE_THRESHOLD ||
                                 resultLineCount > TOOL_RESULT_COLLAPSE_LINES;
+                              const hasPrevious = clampedIndex > 0;
+                              const hasNext = clampedIndex < groups.length - 1;
 
                               return (
                                 <div
                                   key={toolCall.id}
                                   className="rounded-2xl border border-zinc-200 bg-white px-4 py-4 text-sm text-zinc-700 shadow-sm dark:border-white/10 dark:bg-black dark:text-zinc-200"
                                 >
-                                  <div className="flex items-center justify-between gap-4">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+                                      {activeGroup.label} ({activeGroup.toolCalls.length}{" "}
+                                      {activeGroup.toolCalls.length === 1
+                                        ? "call"
+                                        : "calls"}
+                                      ) · Group {clampedIndex + 1} of {groups.length}
+                                    </p>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        className="rounded-full border border-zinc-200 px-2 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+                                        type="button"
+                                        onClick={() =>
+                                          setToolGroupFocus((prev) => ({
+                                            ...prev,
+                                            [toolCallKey]: clampedIndex - 1,
+                                          }))
+                                        }
+                                        disabled={!hasPrevious}
+                                        aria-label="Show previous tool group"
+                                      >
+                                        ◀︎
+                                      </button>
+                                      <button
+                                        className="rounded-full border border-zinc-200 px-2 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+                                        type="button"
+                                        onClick={() =>
+                                          setToolGroupFocus((prev) => ({
+                                            ...prev,
+                                            [toolCallKey]: clampedIndex + 1,
+                                          }))
+                                        }
+                                        disabled={!hasNext}
+                                        aria-label="Show next tool group"
+                                      >
+                                        ▶︎
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="mt-3 flex items-center justify-between gap-4">
                                     <div>
                                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
                                         Tool run
@@ -2623,7 +2725,7 @@ export default function Home() {
                                   </div>
                                 </div>
                               );
-                            })}
+                            })()}
                           </div>
                         ) : null}
                       </div>
