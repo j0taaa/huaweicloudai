@@ -988,7 +988,14 @@ export default function Home() {
       const response = await fetch("/api/eval", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: payload.code }),
+        body: JSON.stringify({
+          code: payload.code,
+          context: {
+            accessKey: accessKey.trim() || undefined,
+            secretKey: secretKey.trim() || undefined,
+            projectIds: projectIds.length > 0 ? projectIds : undefined,
+          },
+        }),
       });
 
       if (!response.ok) {
@@ -2378,9 +2385,7 @@ export default function Home() {
                       message.role === "user" ? "justify-end" : "justify-start"
                     }`}
                   >
-                    <div
-                      className="max-w-[80%]"
-                    >
+                    <div className="max-w-[80%]">
                       <div className="flex flex-col gap-3">
                         {message.content.trim() ? (
                           <div
