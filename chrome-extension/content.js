@@ -998,6 +998,24 @@ if (!existingWidget) {
     return "Runs a tool with the provided arguments.";
   };
 
+  const formatToolName = (name) => {
+    const displayNameMap = {
+      eval_code: "Evaluate code",
+      search_rag_docs: "Search RAG docs",
+      get_all_apis: "List APIs",
+      get_api_details: "API details",
+      ask_multiple_choice: "Ask multiple choice",
+    };
+
+    if (displayNameMap[name]) {
+      return displayNameMap[name];
+    }
+
+    return name
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
   const updateToolCardStatus = (toolCallId, status) => {
     const card = toolCards.get(toolCallId);
     if (!card) {
@@ -1043,15 +1061,11 @@ if (!existingWidget) {
       const headerMeta = document.createElement("div");
       headerMeta.className = "hwc-chat-tool-meta";
 
-      const label = document.createElement("p");
-      label.className = "hwc-chat-tool-label";
-      label.textContent = "Tool run";
-
       const name = document.createElement("p");
       name.className = "hwc-chat-tool-name";
-      name.textContent = toolCall.function?.name || "Tool call";
+      name.textContent = formatToolName(toolCall.function?.name || "Tool call");
 
-      headerMeta.append(label, name);
+      headerMeta.append(name);
 
       const statusBadge = document.createElement("span");
       statusBadge.className = "hwc-chat-tool-status";
