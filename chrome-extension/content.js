@@ -1051,9 +1051,46 @@ if (!existingWidget) {
     const container = document.createElement("div");
     container.className = "hwc-chat-tool-calls";
 
-    toolCalls.forEach((toolCall) => {
+    let activeIndex = toolCalls.length - 1;
+    const cards = [];
+
+    let groupLabel = null;
+    let prevButton = null;
+    let nextButton = null;
+
+    if (toolCalls.length > 1) {
+      const groupHeader = document.createElement("div");
+      groupHeader.className = "hwc-chat-tool-group-header";
+
+      groupLabel = document.createElement("p");
+      groupLabel.className = "hwc-chat-tool-group-label";
+
+      const nav = document.createElement("div");
+      nav.className = "hwc-chat-tool-group-nav";
+
+      prevButton = document.createElement("button");
+      prevButton.type = "button";
+      prevButton.className = "hwc-chat-tool-group-button";
+      prevButton.textContent = "‹";
+      prevButton.setAttribute("aria-label", "Show previous tool call");
+
+      nextButton = document.createElement("button");
+      nextButton.type = "button";
+      nextButton.className = "hwc-chat-tool-group-button";
+      nextButton.textContent = "›";
+      nextButton.setAttribute("aria-label", "Show next tool call");
+
+      nav.append(prevButton, nextButton);
+      groupHeader.append(groupLabel, nav);
+      container.append(groupHeader);
+    }
+
+    toolCalls.forEach((toolCall, index) => {
       const card = document.createElement("div");
       card.className = "hwc-chat-tool-card";
+      if (toolCalls.length > 1) {
+        card.classList.add("hwc-chat-tool-card-grouped");
+      }
 
       const headerRow = document.createElement("div");
       headerRow.className = "hwc-chat-tool-header";
@@ -1136,7 +1173,44 @@ if (!existingWidget) {
       } else {
         updateToolCardStatus(toolCall.id, "running");
       }
+
+      if (toolCalls.length > 1 && index !== activeIndex) {
+        card.classList.add("hwc-chat-tool-card-hidden");
+      }
+
+      cards.push(card);
     });
+
+    const updateGroupView = () => {
+      if (!groupLabel || !prevButton || !nextButton) {
+        return;
+      }
+      groupLabel.textContent = `Tool calls ${activeIndex + 1} of ${toolCalls.length}`;
+      prevButton.disabled = activeIndex === 0;
+      nextButton.disabled = activeIndex === toolCalls.length - 1;
+
+      cards.forEach((card, index) => {
+        card.classList.toggle("hwc-chat-tool-card-hidden", index !== activeIndex);
+      });
+    };
+
+    if (toolCalls.length > 1 && prevButton && nextButton) {
+      prevButton.addEventListener("click", () => {
+        if (activeIndex > 0) {
+          activeIndex -= 1;
+          updateGroupView();
+        }
+      });
+
+      nextButton.addEventListener("click", () => {
+        if (activeIndex < toolCalls.length - 1) {
+          activeIndex += 1;
+          updateGroupView();
+        }
+      });
+
+      updateGroupView();
+    }
 
     messages.append(container);
     scrollToBottomIfNeeded();
