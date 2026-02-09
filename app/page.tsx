@@ -413,6 +413,10 @@ export default function Home() {
     );
   }, [activeConversationId, conversations]);
   const messages = activeConversation?.messages ?? [];
+  const filteredMessages = useMemo(
+    () => messages.filter((message) => message.role !== "tool"),
+    [messages],
+  );
   const input = activeConversationId ? drafts[activeConversationId] ?? "" : "";
   const error =
     activeConversationId ? conversationErrors[activeConversationId] ?? null : null;
@@ -2617,9 +2621,7 @@ export default function Home() {
                 <div className="w-full max-w-2xl">{chatInput}</div>
               </div>
             ) : (
-              messages
-                .filter((message) => message.role !== "tool")
-                .map((message, index, filteredMessages) => {
+              filteredMessages.map((message, index, filteredMessages) => {
                   // Check if this message is part of a tool call sequence (not the first)
                   const isPartOfToolSequence = 
                     message.role === "assistant" &&
@@ -2641,6 +2643,7 @@ export default function Home() {
                     className={`flex ${
                       message.role === "user" ? "justify-end" : "justify-start"
                     } ${index === 0 ? "mt-10" : ""}`}
+                    style={{ contentVisibility: "auto", containIntrinsicSize: "1px 240px" }}
                   >
                     <div className="max-w-[80%]">
                       <div className="flex flex-col gap-3">
