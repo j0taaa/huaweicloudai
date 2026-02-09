@@ -327,6 +327,24 @@ const fetchProjectIds = async (ak: string, sk: string) => {
   return { entries: data.entries ?? [], errors: data.errors ?? [] };
 };
 
+const formatToolName = (name: string) => {
+  const displayNameMap: Record<string, string> = {
+    eval_code: "Evaluate code",
+    search_rag_docs: "Search RAG docs",
+    get_all_apis: "List APIs",
+    get_api_details: "API details",
+    ask_multiple_choice: "Ask multiple choice",
+  };
+
+  if (displayNameMap[name]) {
+    return displayNameMap[name];
+  }
+
+  return name
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
 const getToolCallGroup = (toolCall: ToolCall) => {
   const name = toolCall.function.name;
 
@@ -342,7 +360,7 @@ const getToolCallGroup = (toolCall: ToolCall) => {
     return { key: "choices", label: "User choices" };
   }
 
-  return { key: name, label: name.replace(/_/g, " ") };
+  return { key: name, label: formatToolName(name) };
 };
 
 export default function Home() {
@@ -378,7 +396,6 @@ export default function Home() {
   const [activeToolPreview, setActiveToolPreview] =
     useState<ToolPreview | null>(null);
   const [toolGroupFocus, setToolGroupFocus] = useState<Record<string, number>>({});
-  const [toolCallFocus, setToolCallFocus] = useState<Record<string, number>>({});
   const [pendingChoice, setPendingChoice] = useState<{
     toolCall: ToolCall;
     question: string;
@@ -2537,7 +2554,6 @@ export default function Home() {
                           <div className="flex flex-col gap-3">
                             {(() => {
                               const toolCalls = message.tool_calls ?? [];
-<<<<<<< HEAD
                               const toolCallKey = `tool-groups-${index}`;
                               const groups = toolCalls.reduce<
                                 Array<{
@@ -2563,16 +2579,10 @@ export default function Home() {
                               }, []);
                               const defaultIndex = groups.length - 1;
                               const storedIndex = toolGroupFocus[toolCallKey];
-=======
-                              const toolCallKey = `tool-calls-${index}`;
-                              const defaultIndex = toolCalls.length - 1;
-                              const storedIndex = toolCallFocus[toolCallKey];
->>>>>>> origin/main
                               const activeIndex =
                                 storedIndex === undefined ? defaultIndex : storedIndex;
                               const clampedIndex = Math.min(
                                 Math.max(activeIndex, 0),
-<<<<<<< HEAD
                                 groups.length - 1,
                               );
                               const activeGroup = groups[clampedIndex];
@@ -2580,11 +2590,6 @@ export default function Home() {
                                 activeGroup.toolCalls[
                                   activeGroup.toolCalls.length - 1
                                 ];
-=======
-                                toolCalls.length - 1,
-                              );
-                              const toolCall = toolCalls[clampedIndex];
->>>>>>> origin/main
                               const payload = parseToolPayload(toolCall);
                               const code = payload.code ?? "";
                               const isChoiceTool =
@@ -2623,11 +2628,9 @@ export default function Home() {
                                 result.length > TOOL_RESULT_COLLAPSE_THRESHOLD ||
                                 resultLineCount > TOOL_RESULT_COLLAPSE_LINES;
                               const hasPrevious = clampedIndex > 0;
-<<<<<<< HEAD
                               const hasNext = clampedIndex < groups.length - 1;
-=======
-                              const hasNext = clampedIndex < toolCalls.length - 1;
->>>>>>> origin/main
+                              const hasMultipleGroups = groups.length > 1;
+                              const toolName = formatToolName(toolCall.function.name);
 
                               return (
                                 <div
@@ -2636,76 +2639,50 @@ export default function Home() {
                                 >
                                   <div className="flex items-center justify-between gap-3">
                                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
-<<<<<<< HEAD
                                       {activeGroup.label} ({activeGroup.toolCalls.length}{" "}
                                       {activeGroup.toolCalls.length === 1
                                         ? "call"
                                         : "calls"}
-                                      ) · Group {clampedIndex + 1} of {groups.length}
-=======
-                                      Tool calls {clampedIndex + 1} of {toolCalls.length}
->>>>>>> origin/main
+                                      )
+                                      {hasMultipleGroups
+                                        ? ` · Tool calls ${clampedIndex + 1} of ${groups.length}`
+                                        : ""}
                                     </p>
                                     <div className="flex items-center gap-2">
                                       <button
                                         className="rounded-full border border-zinc-200 px-2 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
                                         type="button"
                                         onClick={() =>
-<<<<<<< HEAD
                                           setToolGroupFocus((prev) => ({
-=======
-                                          setToolCallFocus((prev) => ({
->>>>>>> origin/main
                                             ...prev,
                                             [toolCallKey]: clampedIndex - 1,
                                           }))
                                         }
                                         disabled={!hasPrevious}
-<<<<<<< HEAD
                                         aria-label="Show previous tool group"
                                       >
-                                        ◀︎
-=======
-                                        aria-label="Show previous tool call"
-                                      >
-                                        ←
->>>>>>> origin/main
+                                        ‹
                                       </button>
                                       <button
                                         className="rounded-full border border-zinc-200 px-2 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
                                         type="button"
                                         onClick={() =>
-<<<<<<< HEAD
                                           setToolGroupFocus((prev) => ({
-=======
-                                          setToolCallFocus((prev) => ({
->>>>>>> origin/main
                                             ...prev,
                                             [toolCallKey]: clampedIndex + 1,
                                           }))
                                         }
                                         disabled={!hasNext}
-<<<<<<< HEAD
                                         aria-label="Show next tool group"
                                       >
-                                        ▶︎
-=======
-                                        aria-label="Show next tool call"
-                                      >
-                                        →
->>>>>>> origin/main
+                                        ›
                                       </button>
                                     </div>
                                   </div>
                                   <div className="mt-3 flex items-center justify-between gap-4">
-                                    <div>
-                                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
-                                        Tool run
-                                      </p>
-                                      <p className="text-base font-semibold text-zinc-900 dark:text-white">
-                                        {toolCall.function.name}
-                                      </p>
-                                    </div>
+                                    <p className="text-base font-semibold text-zinc-900 dark:text-white">
+                                      {toolName}
+                                    </p>
                                     <div className="flex items-center gap-2">
                                       {!hasResult ? (
                                         <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
@@ -2724,7 +2701,7 @@ export default function Home() {
                                           onClick={() =>
                                             setActiveToolPreview({
                                               id: toolCall.id,
-                                              name: toolCall.function.name,
+                                              name: toolName,
                                               code,
                                               summary,
                                             })
