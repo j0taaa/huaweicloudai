@@ -345,24 +345,6 @@ const formatToolName = (name: string) => {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 };
 
-const getToolCallGroup = (toolCall: ToolCall) => {
-  const name = toolCall.function.name;
-
-  if (name === "eval_code" || name === "search_rag_docs") {
-    return { key: "analysis", label: "Evaluation & RAG" };
-  }
-
-  if (name === "get_all_apis" || name === "get_api_details") {
-    return { key: "apis", label: "API lookup" };
-  }
-
-  if (name === "ask_multiple_choice") {
-    return { key: "choices", label: "User choices" };
-  }
-
-  return { key: name, label: formatToolName(name) };
-};
-
 export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<
@@ -395,7 +377,7 @@ export default function Home() {
   });
   const [activeToolPreview, setActiveToolPreview] =
     useState<ToolPreview | null>(null);
-  const [toolGroupFocus, setToolGroupFocus] = useState<Record<string, number>>({});
+  const [activeToolCallIndex, setActiveToolCallIndex] = useState<Record<string, number>>({});
   const [pendingChoice, setPendingChoice] = useState<{
     toolCall: ToolCall;
     question: string;
@@ -557,6 +539,18 @@ export default function Home() {
     if (!container || !shouldAutoScrollRef.current) return;
     container.scrollTop = container.scrollHeight;
   }, [messages, isLoading, pendingChoice, hasRunningToolCalls]);
+
+  useEffect(() => {
+    if (!activeConversationId || !textareaRef.current) return;
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    );
+    if (isMobile) return;
+    const timeoutId = setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 50);
+    return () => clearTimeout(timeoutId);
+  }, [activeConversationId]);
 
   useEffect(() => {
     if (!compactMenuOpen) return;
@@ -2522,7 +2516,23 @@ export default function Home() {
             ) : (
               messages
                 .filter((message) => message.role !== "tool")
-                .map((message, index) => (
+                .map((message, index, filteredMessages) => {
+                  // Check if this message is part of a tool call sequence (not the first)
+                  const isPartOfToolSequence = 
+                    message.role === "assistant" &&
+                    message.tool_calls &&
+                    message.tool_calls.length > 0 &&
+                    index > 0 &&
+                    filteredMessages[index - 1].role === "assistant" &&
+                    filteredMessages[index - 1].tool_calls &&
+                    filteredMessages[index - 1].tool_calls!.length > 0;
+                  
+                  // Skip rendering this message entirely if it's part of a tool call sequence
+                  if (isPartOfToolSequence) {
+                    return null;
+                  }
+                  
+                  return (
                   <div
                     key={`${message.role}-${index}`}
                     className={`flex ${
@@ -2536,7 +2546,7 @@ export default function Home() {
                             className={`rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
                               message.role === "user"
                                 ? "bg-gradient-to-br from-zinc-900 via-slate-900 to-zinc-800 text-white shadow-md dark:from-zinc-50 dark:via-white dark:to-zinc-200 dark:text-zinc-900"
-                                : "bg-white/80 text-zinc-900 ring-1 ring-white/70 shadow-md dark:bg-white/10 dark:text-zinc-100 dark:ring-white/10"
+                                : "bg-white/90 text-zinc-900 ring-1 ring-zinc-300/60 shadow-lg dark:bg-white/10 dark:text-zinc-100 dark:ring-white/20"
                             }`}
                           >
                             {message.role === "assistant" ? (
@@ -2553,193 +2563,187 @@ export default function Home() {
                         message.tool_calls.length > 0 ? (
                           <div className="flex flex-col gap-3">
                             {(() => {
-                              const toolCalls = message.tool_calls ?? [];
-                              const toolCallKey = `tool-groups-${index}`;
-                              const groups = toolCalls.reduce<
-                                Array<{
-                                  key: string;
-                                  label: string;
-                                  toolCalls: ToolCall[];
-                                }>
-                              >((acc, call) => {
-                                const group = getToolCallGroup(call);
-                                const existing = acc.find(
-                                  (entry) => entry.key === group.key,
-                                );
-                                if (existing) {
-                                  existing.toolCalls.push(call);
+                              // Collect all consecutive assistant messages with tool_calls
+                              const consecutiveToolCalls: ToolCall[] = [];
+                              let checkIndex = index;
+                              while (checkIndex < filteredMessages.length) {
+                                const checkMessage = filteredMessages[checkIndex];
+                                if (checkMessage.role === "assistant" && 
+                                    checkMessage.tool_calls && 
+                                    checkMessage.tool_calls.length > 0) {
+                                  consecutiveToolCalls.push(...checkMessage.tool_calls);
+                                  checkIndex++;
                                 } else {
-                                  acc.push({
-                                    key: group.key,
-                                    label: group.label,
-                                    toolCalls: [call],
-                                  });
+                                  break;
                                 }
-                                return acc;
-                              }, []);
-                              const defaultIndex = groups.length - 1;
-                              const storedIndex = toolGroupFocus[toolCallKey];
-                              const activeIndex =
-                                storedIndex === undefined ? defaultIndex : storedIndex;
-                              const clampedIndex = Math.min(
-                                Math.max(activeIndex, 0),
-                                groups.length - 1,
-                              );
-                              const activeGroup = groups[clampedIndex];
-                              const toolCall =
-                                activeGroup.toolCalls[
-                                  activeGroup.toolCalls.length - 1
-                                ];
-                              const payload = parseToolPayload(toolCall);
-                              const code = payload.code ?? "";
-                              const isChoiceTool =
-                                toolCall.function.name === "ask_multiple_choice";
-                              const isEvalTool =
-                                toolCall.function.name === "eval_code";
-                              let summary = payload.error
-                                ? "Unable to summarize tool details."
-                                : isChoiceTool
-                                  ? `Asks the user: ${payload.question}`
-                                  : summarizeCode(code);
-
-                              if (toolCall.function.name === "get_all_apis") {
-                                summary = payload.productShort
-                                  ? `Lists all APIs for ${payload.productShort} service.`
-                                  : "Lists all APIs for a service.";
                               }
-
-                              if (toolCall.function.name === "get_api_details") {
-                                summary =
-                                  payload.productShort && payload.action
-                                    ? `Gets details for ${payload.productShort} API: ${payload.action}.`
-                                    : "Gets API details.";
-                              }
-
-                              if (toolCall.function.name === "search_rag_docs") {
-                                summary = payload.query
-                                  ? `Searches Huawei Cloud documentation for “${payload.query}”.`
-                                  : "Searches Huawei Cloud documentation.";
-                              }
-
-                              const hasResult = toolResults.has(toolCall.id);
-                              const result = String(toolResults.get(toolCall.id) ?? "");
-                              const resultLineCount = result.split("\n").length;
-                              const shouldCollapseResult =
-                                result.length > TOOL_RESULT_COLLAPSE_THRESHOLD ||
-                                resultLineCount > TOOL_RESULT_COLLAPSE_LINES;
+                              
+                              const toolCalls = consecutiveToolCalls;
+                              const hasMultipleCalls = toolCalls.length > 1;
+                              
+                              // Get active tool call index (default to last)
+                              const groupKey = `tool-group-${index}`;
+                              const storedIndex = activeToolCallIndex[groupKey];
+                              const defaultIndex = toolCalls.length - 1;
+                              const activeIndex = storedIndex === undefined ? defaultIndex : storedIndex;
+                              const clampedIndex = Math.min(Math.max(activeIndex, 0), toolCalls.length - 1);
+                              const toolCall = toolCalls[clampedIndex];
+                              
                               const hasPrevious = clampedIndex > 0;
-                              const hasNext = clampedIndex < groups.length - 1;
-                              const hasMultipleGroups = groups.length > 1;
-                              const toolName = formatToolName(toolCall.function.name);
+                              const hasNext = clampedIndex < toolCalls.length - 1;
 
                               return (
-                                <div
-                                  key={toolCall.id}
-                                  className="rounded-2xl border border-zinc-200 bg-white px-4 py-4 text-sm text-zinc-700 shadow-sm dark:border-white/10 dark:bg-black dark:text-zinc-200"
-                                >
+                                <div className="rounded-2xl border border-zinc-200 bg-white px-4 py-4 text-sm text-zinc-700 shadow-sm dark:border-white/10 dark:bg-black dark:text-zinc-200">
                                   <div className="flex items-center justify-between gap-3">
                                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
-                                      {activeGroup.label} ({activeGroup.toolCalls.length}{" "}
-                                      {activeGroup.toolCalls.length === 1
-                                        ? "call"
-                                        : "calls"}
-                                      )
-                                      {hasMultipleGroups
-                                        ? ` · Tool calls ${clampedIndex + 1} of ${groups.length}`
-                                        : ""}
+                                      {hasMultipleCalls
+                                        ? `Tool calls ${clampedIndex + 1} of ${toolCalls.length}`
+                                        : `Tool calls (${toolCalls.length} call)`}
                                     </p>
-                                    <div className="flex items-center gap-2">
-                                      <button
-                                        className="rounded-full border border-zinc-200 px-2 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
-                                        type="button"
-                                        onClick={() =>
-                                          setToolGroupFocus((prev) => ({
-                                            ...prev,
-                                            [toolCallKey]: clampedIndex - 1,
-                                          }))
-                                        }
-                                        disabled={!hasPrevious}
-                                        aria-label="Show previous tool group"
-                                      >
-                                        ‹
-                                      </button>
-                                      <button
-                                        className="rounded-full border border-zinc-200 px-2 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
-                                        type="button"
-                                        onClick={() =>
-                                          setToolGroupFocus((prev) => ({
-                                            ...prev,
-                                            [toolCallKey]: clampedIndex + 1,
-                                          }))
-                                        }
-                                        disabled={!hasNext}
-                                        aria-label="Show next tool group"
-                                      >
-                                        ›
-                                      </button>
-                                    </div>
-                                  </div>
-                                  <div className="mt-3 flex items-center justify-between gap-4">
-                                    <p className="text-base font-semibold text-zinc-900 dark:text-white">
-                                      {toolName}
-                                    </p>
-                                    <div className="flex items-center gap-2">
-                                      {!hasResult ? (
-                                        <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600 dark:border-white/20 dark:border-t-white" />
-                                          Running
-                                        </div>
-                                      ) : (
-                                        <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">
-                                          Complete
-                                        </span>
-                                      )}
-                                      {isEvalTool ? (
+                                    {hasMultipleCalls && (
+                                      <div className="flex items-center gap-2">
                                         <button
-                                          className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+                                          className="rounded-full border border-zinc-200 px-2 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
                                           type="button"
                                           onClick={() =>
-                                            setActiveToolPreview({
-                                              id: toolCall.id,
-                                              name: toolName,
-                                              code,
-                                              summary,
-                                            })
+                                            setActiveToolCallIndex((prev) => ({
+                                              ...prev,
+                                              [groupKey]: clampedIndex - 1,
+                                            }))
                                           }
-                                          disabled={Boolean(payload.error)}
+                                          disabled={!hasPrevious}
+                                          aria-label="Show previous tool call"
                                         >
-                                          View code
+                                          ‹
                                         </button>
-                                      ) : null}
-                                    </div>
-                                  </div>
-                                  <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
-                                    {summary}
-                                  </p>
-                                  <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-3 text-xs text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200">
-                                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
-                                      Tool result
-                                    </p>
-                                    {hasResult ? (
-                                      shouldCollapseResult ? (
-                                        <details className="mt-2 w-full max-w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700 dark:border-white/10 dark:bg-black/60 dark:text-zinc-200">
-                                          <summary className="cursor-pointer text-xs font-semibold text-zinc-600 dark:text-zinc-300">
-                                            Show full result ({resultLineCount} lines)
-                                          </summary>
-                                          <pre className="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap break-words text-xs text-zinc-700 dark:text-zinc-200">
-                                            {result}
-                                          </pre>
-                                        </details>
-                                      ) : (
-                                        <pre className="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap break-words text-xs text-zinc-700 dark:text-zinc-200">
-                                          {result}
-                                        </pre>
-                                      )
-                                    ) : (
-                                      <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                                        Awaiting response from the tool...
-                                      </p>
+                                        <button
+                                          className="rounded-full border border-zinc-200 px-2 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+                                          type="button"
+                                          onClick={() =>
+                                            setActiveToolCallIndex((prev) => ({
+                                              ...prev,
+                                              [groupKey]: clampedIndex + 1,
+                                            }))
+                                          }
+                                          disabled={!hasNext}
+                                          aria-label="Show next tool call"
+                                        >
+                                          ›
+                                        </button>
+                                      </div>
                                     )}
+                                  </div>
+                                  <div className="mt-3">
+                                    {(() => {
+                                      const payload = parseToolPayload(toolCall);
+                                      const code = payload.code ?? "";
+                                      const isChoiceTool =
+                                        toolCall.function.name === "ask_multiple_choice";
+                                      const isEvalTool =
+                                        toolCall.function.name === "eval_code";
+                                      let summary = payload.error
+                                        ? "Unable to summarize tool details."
+                                        : isChoiceTool
+                                          ? `Asks the user: ${payload.question}`
+                                          : summarizeCode(code);
+
+                                      if (toolCall.function.name === "get_all_apis") {
+                                        summary = payload.productShort
+                                          ? `Lists all APIs for ${payload.productShort} service.`
+                                          : "Lists all APIs for a service.";
+                                      }
+
+                                      if (toolCall.function.name === "get_api_details") {
+                                        summary =
+                                          payload.productShort && payload.action
+                                            ? `Gets details for ${payload.productShort} API: ${payload.action}.`
+                                            : "Gets API details.";
+                                      }
+
+                                      if (toolCall.function.name === "search_rag_docs") {
+                                        summary = payload.query
+                                          ? `Searches Huawei Cloud documentation for "${payload.query}".`
+                                          : "Searches Huawei Cloud documentation.";
+                                      }
+
+                                      const hasResult = toolResults.has(toolCall.id);
+                                      const result = String(toolResults.get(toolCall.id) ?? "");
+                                      const resultLineCount = result.split("\n").length;
+                                      const shouldCollapseResult =
+                                        result.length > TOOL_RESULT_COLLAPSE_THRESHOLD ||
+                                        resultLineCount > TOOL_RESULT_COLLAPSE_LINES;
+                                      const toolName = formatToolName(toolCall.function.name);
+
+                                      return (
+                                        <div
+                                          key={toolCall.id}
+                                          className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-3 dark:border-white/10 dark:bg-white/5"
+                                        >
+                                          <div className="flex items-center justify-between gap-4">
+                                            <p className="text-sm font-semibold text-zinc-900 dark:text-white">
+                                              {toolName}
+                                            </p>
+                                            <div className="flex items-center gap-2">
+                                              {!hasResult ? (
+                                                <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                                                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600 dark:border-white/20 dark:border-t-white" />
+                                                  Running
+                                                </div>
+                                              ) : (
+                                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">
+                                                  Complete
+                                                </span>
+                                              )}
+                                              {isEvalTool ? (
+                                                <button
+                                                  className="rounded-full border border-zinc-300 px-2 py-0.5 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-white/20 dark:text-zinc-300 dark:hover:border-white/40 dark:hover:text-white"
+                                                  type="button"
+                                                  onClick={() =>
+                                                    setActiveToolPreview({
+                                                      id: toolCall.id,
+                                                      name: toolName,
+                                                      code,
+                                                      summary,
+                                                    })
+                                                  }
+                                                  disabled={Boolean(payload.error)}
+                                                >
+                                                  View code
+                                                </button>
+                                              ) : null}
+                                            </div>
+                                          </div>
+                                          <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
+                                            {summary}
+                                          </p>
+                                          <div className="mt-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700 dark:border-white/10 dark:bg-black/60 dark:text-zinc-200">
+                                            <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-zinc-500 dark:text-zinc-400">
+                                              Result
+                                            </p>
+                                            {hasResult ? (
+                                              shouldCollapseResult ? (
+                                                <details className="mt-2 w-full max-w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-xs text-zinc-700 dark:border-white/10 dark:bg-black/60 dark:text-zinc-200">
+                                                  <summary className="cursor-pointer text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                                                    Show full result ({resultLineCount} lines)
+                                                  </summary>
+                                                  <pre className="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap break-words text-xs text-zinc-700 dark:text-zinc-200">
+                                                    {result}
+                                                  </pre>
+                                                </details>
+                                              ) : (
+                                                <pre className="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap break-words text-xs text-zinc-700 dark:text-zinc-200">
+                                                  {result}
+                                                </pre>
+                                              )
+                                            ) : (
+                                              <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                                                Awaiting response from the tool...
+                                              </p>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                 </div>
                               );
@@ -2749,7 +2753,8 @@ export default function Home() {
                       </div>
                     </div>
                   </div>
-                ))
+                )}
+              )
             )}
             {isLoading ? (
               <div className="flex items-center gap-2 rounded-2xl bg-zinc-100 px-4 py-3 text-sm text-zinc-600 dark:bg-white/10 dark:text-zinc-300">
