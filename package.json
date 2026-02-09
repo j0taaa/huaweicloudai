@@ -24,12 +24,18 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/domhandler": "^2.4.5",
+    "@types/markdown-it": "^14.1.2",
     "@types/node": "^20",
+    "@types/ora": "^3.1.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/turndown": "^5.0.6",
+    "domhandler": "^5.0.3",
     "eslint": "^9",
     "eslint-config-next": "16.1.4",
+    "markdown-it": "^14.1.0",
+    "ora": "^9.3.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
