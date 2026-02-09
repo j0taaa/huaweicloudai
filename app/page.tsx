@@ -71,6 +71,8 @@ type Conversation = {
   compactionMessageCount: number;
 };
 
+type ThemePreference = "system" | "light" | "dark";
+
 const STORAGE_KEY = "huaweicloudai-conversations";
 const ACTIVE_STORAGE_KEY = "huaweicloudai-active-conversation";
 const CREDENTIALS_STORAGE_KEY = "huaweicloudai-credentials";
@@ -78,6 +80,7 @@ const PROJECT_IDS_STORAGE_KEY = "huaweicloudai-project-ids";
 const PENDING_REQUEST_STORAGE_KEY = "huaweicloudai-pending-request";
 const INFERENCE_MODE_STORAGE_KEY = "huaweicloudai-inference-mode";
 const INFERENCE_SETTINGS_STORAGE_KEY = "huaweicloudai-inference-settings";
+const THEME_STORAGE_KEY = "huaweicloudai-theme";
 const TOOL_RESULT_COLLAPSE_THRESHOLD = 900;
 const TOOL_RESULT_COLLAPSE_LINES = 16;
 const INPUT_MIN_HEIGHT = 48;
@@ -384,13 +387,16 @@ export default function Home() {
     options: string[];
   } | null>(null);
   const [compactMenuOpen, setCompactMenuOpen] = useState(false);
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [selectedChoice, setSelectedChoice] = useState("");
   const [customChoice, setCustomChoice] = useState("");
+  const [themePreference, setThemePreference] = useState<ThemePreference>("system");
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const formRef = useRef<HTMLFormElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const compactMenuRef = useRef<HTMLDivElement | null>(null);
+  const themeMenuRef = useRef<HTMLDivElement | null>(null);
   const summaryInFlightRef = useRef<Set<string>>(new Set());
   const compactionInFlightRef = useRef<Set<string>>(new Set());
   const credentialHydratedRef = useRef(false);
@@ -427,6 +433,16 @@ export default function Home() {
   const tokenCountLabel = activeConversation?.compactionSummary
     ? "Tokens used (compacted)"
     : "Tokens used";
+  const themeEmoji: Record<ThemePreference, string> = {
+    system: "🖥️",
+    light: "☀️",
+    dark: "🌙",
+  };
+  const themeOptions: { value: ThemePreference; label: string }[] = [
+    { value: "system", label: "System" },
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark" },
+  ];
 
   const setConversationError = (conversationId: string, message: string | null) => {
     setConversationErrors((prev) => ({ ...prev, [conversationId]: message }));
@@ -504,6 +520,40 @@ export default function Home() {
   }, [messages, toolResults]);
 
   useEffect(() => {
+    const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+    if (storedTheme === "light" || storedTheme === "dark" || storedTheme === "system") {
+      setThemePreference(storedTheme);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(THEME_STORAGE_KEY, themePreference);
+  }, [themePreference]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const applyTheme = () => {
+      const isDark =
+        themePreference === "dark" ||
+        (themePreference === "system" && media.matches);
+      root.classList.toggle("dark", isDark);
+      root.dataset.theme = themePreference;
+    };
+
+    applyTheme();
+
+    const handleChange = () => {
+      if (themePreference === "system") {
+        applyTheme();
+      }
+    };
+
+    media.addEventListener("change", handleChange);
+    return () => media.removeEventListener("change", handleChange);
+  }, [themePreference]);
+
+  useEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
     textarea.style.height = "auto";
@@ -565,6 +615,20 @@ export default function Home() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [compactMenuOpen]);
+
+  useEffect(() => {
+    if (!themeMenuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!themeMenuRef.current) return;
+      if (!themeMenuRef.current.contains(event.target as Node)) {
+        setThemeMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [themeMenuOpen]);
 
   useEffect(() => {
     if (isLoading || hasRunningToolCalls || pendingChoice) {
@@ -2460,6 +2524,45 @@ export default function Home() {
         </header>
         <section className="surface-card relative flex h-full min-h-0 flex-1 flex-col gap-6 px-4 py-5 backdrop-blur sm:px-6 sm:py-6 lg:mx-4 lg:mb-4 lg:mt-4 lg:rounded-3xl">
           <div className="absolute right-4 top-4 flex items-center gap-2">
+            <div className="relative" ref={themeMenuRef}>
+              <button
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/70 bg-white/80 text-sm font-semibold text-zinc-700 shadow-sm backdrop-blur transition hover:text-zinc-900 dark:border-white/10 dark:bg-black/70 dark:text-zinc-200 dark:hover:text-white"
+                onClick={() => setThemeMenuOpen((open) => !open)}
+                aria-label="Theme preference"
+                aria-expanded={themeMenuOpen}
+                aria-haspopup="menu"
+              >
+                {themeEmoji[themePreference]}
+              </button>
+              {themeMenuOpen ? (
+                <div className="absolute right-0 top-full mt-2 w-40 rounded-2xl border border-zinc-200 bg-white p-2 text-sm text-zinc-700 shadow-lg dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-200">
+                  {themeOptions.map((option) => {
+                    const isActive = option.value === themePreference;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium transition ${
+                          isActive
+                            ? "bg-zinc-100 text-zinc-900 dark:bg-white/10 dark:text-white"
+                            : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-white/10"
+                        }`}
+                        onClick={() => {
+                          setThemePreference(option.value);
+                          setThemeMenuOpen(false);
+                        }}
+                        role="menuitemradio"
+                        aria-checked={isActive}
+                      >
+                        <span aria-hidden="true">{themeEmoji[option.value]}</span>
+                        <span>{option.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
             <a
               href="/api/extension-download"
               className="rounded-full border border-white/60 bg-gradient-to-r from-sky-600 via-indigo-600 to-blue-600 px-3 py-1 text-xs font-semibold text-white shadow-md transition hover:from-sky-500 hover:via-indigo-500 hover:to-blue-500 dark:border-white/20"
