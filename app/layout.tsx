@@ -1,22 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import Script from "next/script";
 import "./globals.css";
 
-const themeScript = `
-(() => {
-  const storageKey = "huaweicloudai-theme";
-  const stored = localStorage.getItem(storageKey);
-  const preference =
-    stored === "light" || stored === "dark" || stored === "system"
-      ? stored
-      : "system";
-  const media = window.matchMedia("(prefers-color-scheme: dark)");
-  const isDark = preference === "dark" || (preference === "system" && media.matches);
-  const root = document.documentElement;
-  root.classList.toggle("dark", isDark);
-  root.dataset.theme = preference;
-})();
-`;
 export const metadata: Metadata = {
   title: "Huawei Cloud AI Chat",
   description: "Mobile-friendly Huawei Cloud AI chat workspace.",
@@ -51,11 +35,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        <Script
-          id="theme-init"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{ __html: themeScript }}
-        />
         {children}
       </body>
     </html>
