@@ -966,6 +966,18 @@ if (!existingWidget) {
       return { productShort: payload.productShort, action: payload.action, regionId: payload.regionId };
     }
 
+    if (toolCall.function?.name === "search_rag_docs") {
+      if (!payload.query) {
+        return { error: "Error: query is required for search_rag_docs." };
+      }
+
+      return {
+        query: payload.query,
+        product: payload.product,
+        top_k: payload.top_k,
+      };
+    }
+
     return {
       error: `Error: Unsupported tool payload for ${toolCall.function?.name}.`,
     };
@@ -993,6 +1005,12 @@ if (!existingWidget) {
 
     if (toolCall.function.name === "get_api_details") {
       return payload.productShort && payload.action ? `Gets details for ${payload.productShort} API: ${payload.action}.` : "Gets API details.";
+    }
+
+    if (toolCall.function.name === "search_rag_docs") {
+      return payload.query
+        ? `Searches RAG docs for: ${payload.query}`
+        : "Searches RAG documentation.";
     }
 
     return "Runs a tool with the provided arguments.";
@@ -1480,6 +1498,67 @@ if (!existingWidget) {
     }
   };
 
+  const executeSearchRagTool = async (toolCall, { signal } = {}) => {
+    const payload = parseToolPayload(toolCall);
+    if (payload.error) {
+      return {
+        role: "tool",
+        content: payload.error,
+        tool_call_id: toolCall.id,
+      };
+    }
+
+    try {
+      const data = await requestServer(
+        activeServerUrl,
+        "/api/search-rag",
+        {
+          query: payload.query,
+          product: payload.product,
+          top_k: payload.top_k ?? 3,
+        },
+        { signal },
+      );
+
+      if (data?.error) {
+        return {
+          role: "tool",
+          content: `RAG search failed: ${data.error}`,
+          tool_call_id: toolCall.id,
+        };
+      }
+
+      if (!data?.results || data.results.length === 0) {
+        return {
+          role: "tool",
+          content: `No relevant documents found for query "${payload.query}" (threshold: ${data?.threshold ?? 55}%). Try rephrasing or removing the product filter.`,
+          tool_call_id: toolCall.id,
+        };
+      }
+
+      const formattedResults = data.results
+        .map(
+          (result, index) =>
+            `[${index + 1}] ${result.title} (${result.product}) - Relevance: ${(result.similarity * 100).toFixed(1)}%\nSource: ${result.source}\n${result.snippet.slice(0, 800)}${result.snippet.length > 800 ? "..." : ""}`,
+        )
+        .join("\n\n---\n\n");
+
+      return {
+        role: "tool",
+        content: `Found ${data.results.length} relevant documents from ${data.totalDocs ?? "unknown"} total (query time: ${data.queryTime ?? "unknown"}ms, threshold: ${((data.threshold ?? 0.55) * 100).toFixed(0)}%):\n\n${formattedResults}`,
+        tool_call_id: toolCall.id,
+      };
+    } catch (error) {
+      return {
+        role: "tool",
+        content: `Error searching RAG: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+        tool_call_id: toolCall.id,
+      };
+    }
+  };
+
   const runToolCalls = async (toolCalls, { signal } = {}) => {
     return Promise.all(
       toolCalls.map(async (toolCall) => {
@@ -1493,6 +1572,10 @@ if (!existingWidget) {
 
         if (toolCall.function?.name === "get_api_details") {
           return executeGetApiDetailsTool(toolCall, { signal });
+        }
+
+        if (toolCall.function?.name === "search_rag_docs") {
+          return executeSearchRagTool(toolCall, { signal });
         }
 
         return {
@@ -1698,10 +1781,7 @@ if (!existingWidget) {
       if (reply) {
         updateAssistantBubble(activeBubble, reply);
       } else {
-        finalizeAssistantBubble(
-          activeBubble,
-          "Received tool calls. Review details below.",
-        );
+        activeBubble.remove();
       }
 
       chatHistory.push({
