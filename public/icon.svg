@@ -1,7 +1,17 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="512" height="512" rx="112" fill="#0F172A"/>
-  <path d="M138 168C138 145.909 155.909 128 178 128H334C356.091 128 374 145.909 374 168V292C374 314.091 356.091 332 334 332H242L182 380V332H178C155.909 332 138 314.091 138 292V168Z" fill="#22D3EE"/>
-  <circle cx="208" cy="228" r="18" fill="#0F172A"/>
-  <circle cx="256" cy="228" r="18" fill="#0F172A"/>
-  <circle cx="304" cy="228" r="18" fill="#0F172A"/>
+  <defs>
+    <linearGradient id="bgGradient" x1="64" y1="48" x2="448" y2="464" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C1121F"/>
+      <stop offset="1" stop-color="#8B000F"/>
+    </linearGradient>
+    <linearGradient id="bubbleGradient" x1="140" y1="122" x2="340" y2="350" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#FFECEE"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bgGradient)"/>
+  <path d="M126 170C126 140.177 150.177 116 180 116H332C361.823 116 386 140.177 386 170V292C386 321.823 361.823 346 332 346H241L175 396V346H180C150.177 346 126 321.823 126 292V170Z" fill="url(#bubbleGradient)"/>
+  <circle cx="206" cy="231" r="18" fill="#D90429"/>
+  <circle cx="256" cy="231" r="18" fill="#D90429"/>
+  <circle cx="306" cy="231" r="18" fill="#D90429"/>
 </svg>
