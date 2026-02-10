@@ -1061,177 +1061,191 @@ if (!existingWidget) {
     card.resultPre.textContent = result || "No result returned.";
   };
 
-  const renderToolCalls = (toolCalls) => {
-    if (!toolCalls.length) {
+  const createToolCallCard = (toolCall) => {
+    const card = document.createElement("div");
+    card.className = "hwc-chat-tool-card";
+
+    const headerRow = document.createElement("div");
+    headerRow.className = "hwc-chat-tool-header";
+
+    const headerMeta = document.createElement("div");
+    headerMeta.className = "hwc-chat-tool-meta";
+
+    const name = document.createElement("p");
+    name.className = "hwc-chat-tool-name";
+    name.textContent = formatToolName(toolCall.function?.name || "Tool call");
+
+    headerMeta.append(name);
+
+    const statusBadge = document.createElement("span");
+    statusBadge.className = "hwc-chat-tool-status";
+
+    const spinner = document.createElement("span");
+    spinner.className = "hwc-chat-tool-spinner";
+    spinner.setAttribute("aria-hidden", "true");
+
+    const statusText = document.createElement("span");
+    statusText.className = "hwc-chat-tool-status-text";
+    statusText.textContent = "Running";
+
+    statusBadge.append(spinner, statusText);
+
+    const detailsToggle = document.createElement("button");
+    detailsToggle.type = "button";
+    detailsToggle.className = "hwc-chat-tool-toggle";
+    detailsToggle.setAttribute("aria-expanded", "false");
+    detailsToggle.textContent = "Details";
+
+    headerRow.append(headerMeta, statusBadge, detailsToggle);
+
+    const summary = document.createElement("p");
+    summary.className = "hwc-chat-tool-summary";
+    summary.textContent = summarizeToolCall(toolCall);
+
+    const details = document.createElement("div");
+    details.className = "hwc-chat-tool-details hwc-chat-tool-details-collapsed";
+
+    const detailsLabel = document.createElement("p");
+    detailsLabel.className = "hwc-chat-tool-details-label";
+    detailsLabel.textContent = "Tool arguments";
+
+    const pre = document.createElement("pre");
+    pre.className = "hwc-chat-tool-arguments";
+    const { raw } = parseToolArguments(toolCall);
+    pre.textContent = raw || "No arguments provided.";
+
+    const resultLabel = document.createElement("p");
+    resultLabel.className = "hwc-chat-tool-details-label";
+    resultLabel.textContent = "Tool result";
+
+    const resultPre = document.createElement("pre");
+    resultPre.className = "hwc-chat-tool-result";
+    resultPre.textContent = "Awaiting response from the tool...";
+
+    details.append(summary, detailsLabel, pre, resultLabel, resultPre);
+    card.append(headerRow, details);
+
+    toolCards.set(toolCall.id, {
+      statusBadge,
+      statusText,
+      spinner,
+      details,
+      resultPre,
+    });
+
+    detailsToggle.addEventListener("click", () => {
+      const isCollapsed = details.classList.toggle(
+        "hwc-chat-tool-details-collapsed",
+      );
+      detailsToggle.setAttribute("aria-expanded", `${!isCollapsed}`);
+    });
+
+    if (toolCall.function?.name === "ask_multiple_choice") {
+      updateToolCardStatus(toolCall.id, "waiting");
+    } else {
+      updateToolCardStatus(toolCall.id, "running");
+    }
+
+    return card;
+  };
+
+  const updateToolCallGroupView = (group) => {
+    if (!group.groupLabel || !group.prevButton || !group.nextButton) {
       return;
     }
 
-    const container = document.createElement("div");
-    container.className = "hwc-chat-tool-calls";
+    group.groupLabel.textContent = `Tool calls ${group.activeIndex + 1} of ${group.cards.length}`;
+    group.prevButton.disabled = group.activeIndex === 0;
+    group.nextButton.disabled = group.activeIndex === group.cards.length - 1;
 
-    let activeIndex = toolCalls.length - 1;
-    const cards = [];
+    group.cards.forEach((card, index) => {
+      card.classList.toggle("hwc-chat-tool-card-hidden", index !== group.activeIndex);
+    });
+  };
 
-    let groupLabel = null;
-    let prevButton = null;
-    let nextButton = null;
-
-    if (toolCalls.length > 1) {
-      const groupHeader = document.createElement("div");
-      groupHeader.className = "hwc-chat-tool-group-header";
-
-      groupLabel = document.createElement("p");
-      groupLabel.className = "hwc-chat-tool-group-label";
-
-      const nav = document.createElement("div");
-      nav.className = "hwc-chat-tool-group-nav";
-
-      prevButton = document.createElement("button");
-      prevButton.type = "button";
-      prevButton.className = "hwc-chat-tool-group-button";
-      prevButton.textContent = "‹";
-      prevButton.setAttribute("aria-label", "Show previous tool call");
-
-      nextButton = document.createElement("button");
-      nextButton.type = "button";
-      nextButton.className = "hwc-chat-tool-group-button";
-      nextButton.textContent = "›";
-      nextButton.setAttribute("aria-label", "Show next tool call");
-
-      nav.append(prevButton, nextButton);
-      groupHeader.append(groupLabel, nav);
-      container.append(groupHeader);
+  const renderToolCalls = (toolCalls, existingGroup = null) => {
+    if (!toolCalls.length) {
+      return existingGroup;
     }
 
-    toolCalls.forEach((toolCall, index) => {
-      const card = document.createElement("div");
-      card.className = "hwc-chat-tool-card";
-      if (toolCalls.length > 1) {
-        card.classList.add("hwc-chat-tool-card-grouped");
-      }
+    const group =
+      existingGroup ?? {
+        container: document.createElement("div"),
+        cards: [],
+        activeIndex: 0,
+        groupHeader: null,
+        groupLabel: null,
+        nav: null,
+        prevButton: null,
+        nextButton: null,
+      };
 
-      const headerRow = document.createElement("div");
-      headerRow.className = "hwc-chat-tool-header";
+    if (!existingGroup) {
+      group.container.className = "hwc-chat-tool-calls";
+      messages.append(group.container);
+    }
 
-      const headerMeta = document.createElement("div");
-      headerMeta.className = "hwc-chat-tool-meta";
-
-      const name = document.createElement("p");
-      name.className = "hwc-chat-tool-name";
-      name.textContent = formatToolName(toolCall.function?.name || "Tool call");
-
-      headerMeta.append(name);
-
-      const statusBadge = document.createElement("span");
-      statusBadge.className = "hwc-chat-tool-status";
-
-      const spinner = document.createElement("span");
-      spinner.className = "hwc-chat-tool-spinner";
-      spinner.setAttribute("aria-hidden", "true");
-
-      const statusText = document.createElement("span");
-      statusText.className = "hwc-chat-tool-status-text";
-      statusText.textContent = "Running";
-
-      statusBadge.append(spinner, statusText);
-
-      const detailsToggle = document.createElement("button");
-      detailsToggle.type = "button";
-      detailsToggle.className = "hwc-chat-tool-toggle";
-      detailsToggle.setAttribute("aria-expanded", "false");
-      detailsToggle.textContent = "Details";
-
-      headerRow.append(headerMeta, statusBadge, detailsToggle);
-
-      const summary = document.createElement("p");
-      summary.className = "hwc-chat-tool-summary";
-      summary.textContent = summarizeToolCall(toolCall);
-
-      const details = document.createElement("div");
-      details.className = "hwc-chat-tool-details hwc-chat-tool-details-collapsed";
-
-      const detailsLabel = document.createElement("p");
-      detailsLabel.className = "hwc-chat-tool-details-label";
-      detailsLabel.textContent = "Tool arguments";
-
-      const pre = document.createElement("pre");
-      pre.className = "hwc-chat-tool-arguments";
-      const { raw } = parseToolArguments(toolCall);
-      pre.textContent = raw || "No arguments provided.";
-
-      const resultLabel = document.createElement("p");
-      resultLabel.className = "hwc-chat-tool-details-label";
-      resultLabel.textContent = "Tool result";
-
-      const resultPre = document.createElement("pre");
-      resultPre.className = "hwc-chat-tool-result";
-      resultPre.textContent = "Awaiting response from the tool...";
-
-      details.append(summary, detailsLabel, pre, resultLabel, resultPre);
-      card.append(headerRow, details);
-      container.append(card);
-
-      toolCards.set(toolCall.id, {
-        statusBadge,
-        statusText,
-        spinner,
-        details,
-        resultPre,
-      });
-
-      detailsToggle.addEventListener("click", () => {
-        const isCollapsed = details.classList.toggle(
-          "hwc-chat-tool-details-collapsed",
-        );
-        detailsToggle.setAttribute("aria-expanded", `${!isCollapsed}`);
-      });
-
-      if (toolCall.function?.name === "ask_multiple_choice") {
-        updateToolCardStatus(toolCall.id, "waiting");
-      } else {
-        updateToolCardStatus(toolCall.id, "running");
-      }
-
-      if (toolCalls.length > 1 && index !== activeIndex) {
-        card.classList.add("hwc-chat-tool-card-hidden");
-      }
-
-      cards.push(card);
+    toolCalls.forEach((toolCall) => {
+      const card = createToolCallCard(toolCall);
+      group.cards.push(card);
+      group.container.append(card);
     });
 
-    const updateGroupView = () => {
-      if (!groupLabel || !prevButton || !nextButton) {
-        return;
-      }
-      groupLabel.textContent = `Tool calls ${activeIndex + 1} of ${toolCalls.length}`;
-      prevButton.disabled = activeIndex === 0;
-      nextButton.disabled = activeIndex === toolCalls.length - 1;
+    const hasMultipleCalls = group.cards.length > 1;
 
-      cards.forEach((card, index) => {
-        card.classList.toggle("hwc-chat-tool-card-hidden", index !== activeIndex);
-      });
-    };
+    if (hasMultipleCalls && !group.groupHeader) {
+      group.groupHeader = document.createElement("div");
+      group.groupHeader.className = "hwc-chat-tool-group-header";
 
-    if (toolCalls.length > 1 && prevButton && nextButton) {
-      prevButton.addEventListener("click", () => {
-        if (activeIndex > 0) {
-          activeIndex -= 1;
-          updateGroupView();
+      group.groupLabel = document.createElement("p");
+      group.groupLabel.className = "hwc-chat-tool-group-label";
+
+      group.nav = document.createElement("div");
+      group.nav.className = "hwc-chat-tool-group-nav";
+
+      group.prevButton = document.createElement("button");
+      group.prevButton.type = "button";
+      group.prevButton.className = "hwc-chat-tool-group-button";
+      group.prevButton.textContent = "‹";
+      group.prevButton.setAttribute("aria-label", "Show previous tool call");
+
+      group.nextButton = document.createElement("button");
+      group.nextButton.type = "button";
+      group.nextButton.className = "hwc-chat-tool-group-button";
+      group.nextButton.textContent = "›";
+      group.nextButton.setAttribute("aria-label", "Show next tool call");
+
+      group.prevButton.addEventListener("click", () => {
+        if (group.activeIndex > 0) {
+          group.activeIndex -= 1;
+          updateToolCallGroupView(group);
         }
       });
 
-      nextButton.addEventListener("click", () => {
-        if (activeIndex < toolCalls.length - 1) {
-          activeIndex += 1;
-          updateGroupView();
+      group.nextButton.addEventListener("click", () => {
+        if (group.activeIndex < group.cards.length - 1) {
+          group.activeIndex += 1;
+          updateToolCallGroupView(group);
         }
       });
 
-      updateGroupView();
+      group.nav.append(group.prevButton, group.nextButton);
+      group.groupHeader.append(group.groupLabel, group.nav);
+      group.container.prepend(group.groupHeader);
     }
 
-    messages.append(container);
+    group.activeIndex = group.cards.length - 1;
+    group.cards.forEach((card, index) => {
+      card.classList.toggle("hwc-chat-tool-card-grouped", hasMultipleCalls);
+      card.classList.toggle(
+        "hwc-chat-tool-card-hidden",
+        hasMultipleCalls && index !== group.activeIndex,
+      );
+    });
+
+    updateToolCallGroupView(group);
     scrollToBottomIfNeeded();
+    return group;
   };
 
   const updateAssistantBubble = (bubble, text) => {
@@ -1765,6 +1779,7 @@ if (!existingWidget) {
   const handleResponse = async (response, assistantBubble, requestId) => {
     let currentResponse = response;
     let activeBubble = assistantBubble;
+    let activeToolCallGroup = null;
 
     while (true) {
       if (requestId !== activeRequestId) {
@@ -1794,7 +1809,7 @@ if (!existingWidget) {
         return;
       }
 
-      renderToolCalls(toolCalls);
+      activeToolCallGroup = renderToolCalls(toolCalls, activeToolCallGroup);
 
       const multipleChoiceCall = toolCalls.find(
         (toolCall) => toolCall.function?.name === "ask_multiple_choice",
