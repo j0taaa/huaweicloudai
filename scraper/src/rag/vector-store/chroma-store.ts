@@ -10,10 +10,22 @@ export class ChromaStore {
   private collectionName: string;
 
   constructor(embedder: Embedder) {
-    this.client = new ChromaClient({
-      host: 'localhost',
-      port: 8000,
-    });
+    // Use environment variable if available (Docker), otherwise default to localhost
+    const chromaUrl = process.env.CHROMA_DB_URL;
+    
+    if (chromaUrl) {
+      // URL format: http://hostname:port
+      this.client = new ChromaClient({
+        path: chromaUrl,
+      });
+    } else {
+      // Default to localhost for local development
+      this.client = new ChromaClient({
+        host: 'localhost',
+        port: 8000,
+      });
+    }
+    
     this.embedder = embedder;
     this.collectionName = RAG_CONFIG.COLLECTION_NAME;
   }

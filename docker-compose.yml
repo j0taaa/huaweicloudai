@@ -2,8 +2,7 @@ services:
   web:
     build:
       context: .
-      target: runner
-    command: npm start
+      dockerfile: Dockerfile
     ports:
       - "3000:3000"
     env_file:
@@ -11,3 +10,46 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      CHROMA_DB_URL: http://chromadb:8000
+      NODE_OPTIONS: "--max-old-space-size=2560"
+    # Note: RAG data files are baked into the Docker image at /app/rag_cache
+    # Do not mount a volume here or it will shadow the pre-built RAG data
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+        reservations:
+          memory: 1G
+    depends_on:
+      chromadb:
+        condition: service_started
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  chromadb:
+    image: chromadb/chroma:0.6.0
+    ports:
+      - "8000:8000"
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+      - ANONYMIZED_TELEMETRY=FALSE
+    volumes:
+      - chroma_data:/chroma/chroma
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  chroma_data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
