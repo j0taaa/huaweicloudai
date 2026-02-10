@@ -25,11 +25,13 @@ docker build -t huaweicloudai .
 docker run --rm -p 3000:3000 huaweicloudai
 ```
 
-Or use Docker Compose:
+Or use Docker Compose (this starts the **production** container image, not `next dev`):
 
 ```bash
 ./scripts/compose-up.sh
 ```
+
+If you see the Next.js dev-tools badge, make sure you are not starting the app with `npm run dev` inside the container.
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

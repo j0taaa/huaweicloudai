@@ -1,6 +1,9 @@
 services:
   web:
-    build: .
+    build:
+      context: .
+      target: runner
+    command: npm start
     ports:
       - "3000:3000"
     env_file:
