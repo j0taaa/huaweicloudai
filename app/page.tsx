@@ -46,6 +46,12 @@ type ToolPayload = {
   product?: string;
   top_k?: number;
   task?: string;
+  tasks?: ChecklistTask[];
+};
+
+type ChecklistTask = {
+  name: string;
+  completed: boolean;
 };
 
 type ToolPreview = {
@@ -75,6 +81,7 @@ type Conversation = {
   compactionSummary: string | null;
   compactedAt: number | null;
   compactionMessageCount: number;
+  checklistTasks: ChecklistTask[];
 };
 
 type ThemePreference = "system" | "light" | "dark";
@@ -111,6 +118,7 @@ const createEmptyConversation = (): Conversation => ({
   compactionSummary: null,
   compactedAt: null,
   compactionMessageCount: 0,
+  checklistTasks: [],
 });
 
 const isCompactionMarkerMessage = (message: ChatMessage) =>
@@ -167,6 +175,16 @@ const normalizeConversation = (conversation: Partial<Conversation>): Conversatio
     typeof conversation.compactionMessageCount === "number"
       ? conversation.compactionMessageCount
       : 0,
+  checklistTasks: Array.isArray(conversation.checklistTasks)
+    ? conversation.checklistTasks.filter(
+        (task): task is ChecklistTask =>
+          Boolean(
+            task &&
+              typeof task.name === "string" &&
+              typeof task.completed === "boolean",
+          ),
+      )
+    : [],
 });
 
 
@@ -344,6 +362,7 @@ const formatToolName = (name: string) => {
     get_api_details: "API details",
     ask_multiple_choice: "Ask multiple choice",
     create_sub_agent: "Create sub-agent",
+    set_checklist: "Set checklist",
   };
 
   if (displayNameMap[name]) {
@@ -398,6 +417,7 @@ export default function Home() {
   } | null>(null);
   const [compactMenuOpen, setCompactMenuOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const [checklistCollapsed, setChecklistCollapsed] = useState(false);
   const [selectedChoice, setSelectedChoice] = useState("");
   const [customChoice, setCustomChoice] = useState("");
   const [themePreference, setThemePreference] = useState<ThemePreference>("system");
@@ -429,6 +449,7 @@ export default function Home() {
     ? loadingConversationIds.has(activeConversationId)
     : false;
   const tokenFormatter = useMemo(() => new Intl.NumberFormat(), []);
+  const checklistTasks = activeConversation?.checklistTasks ?? [];
   const isCompacting = activeConversationId
     ? compactionInFlightRef.current.has(activeConversationId)
     : false;
@@ -638,6 +659,10 @@ export default function Home() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [themeMenuOpen]);
+
+  useEffect(() => {
+    setChecklistCollapsed(false);
+  }, [activeConversationId]);
 
   useEffect(() => {
     if (isLoading || hasRunningToolCalls || pendingChoice) {
@@ -930,6 +955,7 @@ export default function Home() {
       product?: string;
       top_k?: number;
       task?: string;
+      tasks?: ChecklistTask[];
     } = {};
 
     try {
@@ -1048,6 +1074,26 @@ export default function Home() {
         top_k: payload.top_k,
       };
     }
+    if (toolCall.function.name === "set_checklist") {
+      if (!Array.isArray(payload.tasks)) {
+        return {
+          error: "Error: tasks must be an array for set_checklist.",
+        };
+      }
+
+      const normalizedTasks = payload.tasks.filter(
+        (task): task is ChecklistTask =>
+          Boolean(
+            task &&
+              typeof task.name === "string" &&
+              task.name.trim().length > 0 &&
+              typeof task.completed === "boolean",
+          ),
+      );
+
+      return { tasks: normalizedTasks };
+    }
+
     return {
       error: `Error: Unsupported tool payload for ${toolCall.function.name}.`,
     };
@@ -1601,7 +1647,36 @@ export default function Home() {
     }
   };
 
-  const runToolCalls = async (toolCalls: ToolCall[]) => {
+  const executeSetChecklistTool = async (
+    conversationId: string,
+    toolCall: ToolCall,
+  ): Promise<ChatMessage> => {
+    const payload = parseToolPayload(toolCall);
+
+    if (payload.error || !payload.tasks) {
+      return {
+        role: "tool",
+        content: payload.error || "Error: tasks are required for set_checklist.",
+        tool_call_id: toolCall.id,
+      };
+    }
+
+    const normalizedTasks = payload.tasks.map((task) => ({
+      name: task.name.trim(),
+      completed: task.completed,
+    }));
+    updateConversationChecklist(conversationId, normalizedTasks);
+
+    return {
+      role: "tool",
+      content: `Checklist updated with ${normalizedTasks.length} task${
+        normalizedTasks.length === 1 ? "" : "s"
+      }.`,
+      tool_call_id: toolCall.id,
+    };
+  };
+
+  const runToolCalls = async (conversationId: string, toolCalls: ToolCall[]) => {
     return Promise.all(
       toolCalls.map(async (toolCall) => {
         if (toolCall.function.name === "create_sub_agent") {
@@ -1639,6 +1714,10 @@ export default function Home() {
         if (toolCall.function.name === "search_rag_docs") {
           return executeSearchRagTool(toolCall);
         }
+
+        if (toolCall.function.name === "set_checklist") {
+          return executeSetChecklistTool(conversationId, toolCall);
+        }
         return {
           role: "tool" as const,
           content: `Unsupported tool: ${toolCall.function.name}`,
@@ -1673,7 +1752,7 @@ export default function Home() {
       );
 
       if (nonChoiceCalls.length > 0) {
-        const toolMessages = await runToolCalls(nonChoiceCalls);
+        const toolMessages = await runToolCalls(conversationId, nonChoiceCalls);
         workingMessages = [...workingMessages, ...toolMessages];
         updateConversationMessages(conversationId, workingMessages);
       }
@@ -1899,6 +1978,23 @@ export default function Home() {
           ? {
               ...conversation,
               messages: nextMessages,
+              updatedAt: Date.now(),
+            }
+          : conversation,
+      ),
+    );
+  };
+
+  const updateConversationChecklist = (
+    conversationId: string,
+    tasks: ChecklistTask[],
+  ) => {
+    setConversations((prev) =>
+      prev.map((conversation) =>
+        conversation.id === conversationId
+          ? {
+              ...conversation,
+              checklistTasks: tasks,
               updatedAt: Date.now(),
             }
           : conversation,
@@ -2677,6 +2773,52 @@ export default function Home() {
               {tokenCountLabel}: {tokenFormatter.format(estimatedTokenCount)}
             </div>
           </div>
+          <aside className="pointer-events-none absolute right-4 top-20 z-20 w-64 sm:right-6">
+            <div className="pointer-events-auto rounded-2xl border border-zinc-200/80 bg-white/95 p-3 shadow-md backdrop-blur dark:border-white/10 dark:bg-black/80">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between text-left"
+                onClick={() => setChecklistCollapsed((prev) => !prev)}
+                aria-expanded={!checklistCollapsed}
+              >
+                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+                  Checklist
+                </span>
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                  {checklistCollapsed ? "Show" : "Hide"}
+                </span>
+              </button>
+              {!checklistCollapsed ? (
+                <div className="mt-2 max-h-56 overflow-y-auto">
+                  {checklistTasks.length === 0 ? (
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                      No checklist yet.
+                    </p>
+                  ) : (
+                    <ul className="space-y-1.5 text-sm">
+                      {checklistTasks.map((task, index) => (
+                        <li
+                          key={`${task.name}-${index}`}
+                          className="flex items-start gap-2 text-zinc-700 dark:text-zinc-200"
+                        >
+                          <span aria-hidden="true">{task.completed ? "✅" : "⬜"}</span>
+                          <span
+                            className={
+                              task.completed
+                                ? "text-zinc-500 line-through dark:text-zinc-400"
+                                : ""
+                            }
+                          >
+                            {task.name}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </aside>
           <div
             className={`flex flex-1 flex-col gap-4 ${
               showEmptyState ? "overflow-hidden" : "overflow-y-auto"

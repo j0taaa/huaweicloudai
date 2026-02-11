@@ -221,6 +221,39 @@ export async function POST(request: Request) {
         {
           type: "function",
           function: {
+            name: "set_checklist",
+            description:
+              "Set the current checklist for the active conversation so the user can see task progress. Replaces the entire checklist each time.",
+            parameters: {
+              type: "object",
+              properties: {
+                tasks: {
+                  type: "array",
+                  description:
+                    "Checklist task items to display in the UI.",
+                  items: {
+                    type: "object",
+                    properties: {
+                      name: {
+                        type: "string",
+                        description: "Task name shown to the user.",
+                      },
+                      completed: {
+                        type: "boolean",
+                        description: "Whether the task has been completed.",
+                      },
+                    },
+                    required: ["name", "completed"],
+                  },
+                },
+              },
+              required: ["tasks"],
+            },
+          },
+        },
+        {
+          type: "function",
+          function: {
             name: "get_all_apis",
             description:
               "Get all available APIs for a Huawei Cloud service. Returns a list of API names and descriptions.",
