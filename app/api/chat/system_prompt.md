@@ -194,6 +194,9 @@ Behavior guarantees:
 - Its internal conversation is not exposed to you.
 - You receive only the returned result summary.
 
+- USE SUB-AGENTS AS MUCH AS YOU CAN, EVEN IF IT WASN'T SPECIFIED. BE PROACTIVE.
+- IN MOST CASES, IT MAKES MORE SENSE FOR THE SUB-AGENT TO RUN THE GET API DETAILS AND GET API DETAILS TOOLS AND NOT THE MAIN LLM, AS THESE DETAILS CAN BLOAT THE CONTEXT WINDOW
+
 ## Error handling and retries
 
 * For API calls, handle HTTP errors with retries and exponential backoff.
