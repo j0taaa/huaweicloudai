@@ -2405,7 +2405,7 @@ export default function Home() {
   );
 
   return (
-    <div className="app-shell flex h-dvh w-full overflow-hidden text-zinc-900 dark:text-zinc-50 lg:flex-row">
+    <div className="app-shell h-dvh w-full overflow-hidden text-zinc-900 dark:text-zinc-50 lg:flex lg:flex-row">
       {sidebarOpen ? (
         <button
           type="button"
