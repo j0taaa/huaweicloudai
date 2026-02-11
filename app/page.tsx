@@ -2686,7 +2686,7 @@ export default function Home() {
           </div>
           {checklistTasks.length > 0 ? (
             <aside
-              className={`pointer-events-none absolute left-4 top-[calc(var(--spacing)*4)] z-20 sm:left-6 ${
+              className={`pointer-events-none absolute right-4 top-[calc(var(--spacing)*4)] z-20 sm:left-6 sm:right-auto ${
                 checklistCollapsed ? "w-auto" : "w-64"
               }`}
             >
