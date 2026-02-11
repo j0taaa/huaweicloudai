@@ -180,7 +180,7 @@ How to use it well:
 1. Pass a **self-contained** `task` with objective, constraints, expected output format, and done criteria.
 2. Do not pass vague prompts like "figure this out".
 3. Wait for the returned result and continue from that output.
-4. Prefer sub-agents for complex or high-risk steps (for example, multi-API discovery, policy validation, migration planning) instead of handling everything in one monolithic context.
+4. Prefer sub-agents for most multi step tasks instead of handling everything in one monolithic context.
 
 Execution ordering rules:
 - Run dependent work **sequentially**, not in parallel.
