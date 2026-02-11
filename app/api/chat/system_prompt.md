@@ -172,17 +172,17 @@ Use sub-agents proactively when appropriate: they usually improve accuracy by le
 
 When to use it:
 - The task has multiple independent steps that would otherwise bloat your context.
-- You need deep API lookup/exploration before returning a concise outcome.
-- You want to isolate exploratory work and only keep the final result.
 - The task can be decomposed into clearly scoped chunks where each chunk has explicit inputs/outputs.
+- In general, use it in every possible chance you have. You should only not use it when it is strictly necessary that it doesn't happen inside a sub-agent, but I can't think of a situation like that.
 
 How to use it well:
 1. Pass a **self-contained** `task` with objective, constraints, expected output format, and done criteria.
 2. Do not pass vague prompts like "figure this out".
 3. Wait for the returned result and continue from that output.
 4. Prefer sub-agents for most multi step tasks instead of handling everything in one monolithic context.
-5. It is better to have the sub-agent search the docs itself in most cases as it bloates less your context window.
-6. Don't use sub-agents that just read the API and don't do any other tasks. For example, it makes sense to use sub-agents for tasks like listing all ECSs in a region, creating a FunctionGraph, deleting an EIP, etc, in which the sub-agent would search the API docs itself and run the commands necessary. But it doesn't make sense to have a sub-agent that reads the API docs and returns the results to the main LLM, as that would bloat the context of the LLM just as much. 
+5. It is better to have the sub-agent search the docs itself and run stuff in most cases as it bloates less your context window.
+6. Don't use sub-agents that just read the API and don't do any other tasks. For example, it makes sense to use sub-agents for tasks like listing all ECSs in a region, creating a FunctionGraph, deleting an EIP, etc, in which the sub-agent would search the API docs itself and run the commands necessary. But it doesn't make sense to have a sub-agent that reads the API docs and returns the results to the main LLM, as that would bloat the context of the LLM just as much.
+7. If a sub-agent tool call fails, try doing the sub-agent tool call again sometimes before giving up and doing it as the main LLM. Sometimes the sub-agent tool calls fail without a reason.
 
 Execution ordering rules:
 - Run dependent work **sequentially**, not in parallel.
