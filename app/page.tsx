@@ -2773,28 +2773,24 @@ export default function Home() {
               {tokenCountLabel}: {tokenFormatter.format(estimatedTokenCount)}
             </div>
           </div>
-          <aside className="pointer-events-none absolute right-4 top-20 z-20 w-64 sm:right-6">
-            <div className="pointer-events-auto rounded-2xl border border-zinc-200/80 bg-white/95 p-3 shadow-md backdrop-blur dark:border-white/10 dark:bg-black/80">
-              <button
-                type="button"
-                className="flex w-full items-center justify-between text-left"
-                onClick={() => setChecklistCollapsed((prev) => !prev)}
-                aria-expanded={!checklistCollapsed}
-              >
-                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
-                  Checklist
-                </span>
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                  {checklistCollapsed ? "Show" : "Hide"}
-                </span>
-              </button>
-              {!checklistCollapsed ? (
-                <div className="mt-2 max-h-56 overflow-y-auto">
-                  {checklistTasks.length === 0 ? (
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                      No checklist yet.
-                    </p>
-                  ) : (
+          {checklistTasks.length > 0 ? (
+            <aside className="pointer-events-none absolute left-4 top-20 z-20 w-64 sm:left-6">
+              <div className="pointer-events-auto rounded-2xl border border-zinc-200/80 bg-white/95 p-3 shadow-md backdrop-blur dark:border-white/10 dark:bg-black/80">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between text-left"
+                  onClick={() => setChecklistCollapsed((prev) => !prev)}
+                  aria-expanded={!checklistCollapsed}
+                >
+                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+                    Checklist
+                  </span>
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {checklistCollapsed ? "Show" : "Hide"}
+                  </span>
+                </button>
+                {!checklistCollapsed ? (
+                  <div className="mt-2 max-h-56 overflow-y-auto">
                     <ul className="space-y-1.5 text-sm">
                       {checklistTasks.map((task, index) => (
                         <li
@@ -2814,11 +2810,11 @@ export default function Home() {
                         </li>
                       ))}
                     </ul>
-                  )}
-                </div>
-              ) : null}
-            </div>
-          </aside>
+                  </div>
+                ) : null}
+              </div>
+            </aside>
+          ) : null}
           <div
             className={`flex flex-1 flex-col gap-4 ${
               showEmptyState ? "overflow-hidden" : "overflow-y-auto"
