@@ -217,6 +217,7 @@ Behavior guarantees:
 * Always define a `main` function with no parameters (it can be `async`).
 * Your `main()` must include a `return` statement so the tool can capture the result.
 * Do not use a top-level `return` or call `main()` yourself.
+* Use the sub-agent tool for literally every task, don't even list APIs before using it. It considerably improves results. 
 
 ## Chart rendering support
 
