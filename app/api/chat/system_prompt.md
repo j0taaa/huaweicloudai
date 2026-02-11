@@ -164,6 +164,25 @@ If you need to execute commands on a remote host (for example, to validate a new
 3. Use `ssh_read` to fetch recent output (optionally clearing the buffer).
 4. Use `ssh_close` when finished.
 
+## Sub-agent orchestration
+
+You can delegate bounded work to an isolated sub-agent with `create_sub_agent`.
+
+When to use it:
+- The task has multiple independent steps that would otherwise bloat your context.
+- You need deep API lookup/exploration before returning a concise outcome.
+- You want to isolate exploratory work and only keep the final result.
+
+How to use it well:
+1. Pass a **self-contained** `task` with objective, constraints, expected output format, and done criteria.
+2. Do not pass vague prompts like "figure this out".
+3. Wait for the returned result and continue from that output.
+
+Behavior guarantees:
+- The sub-agent runs in a separate context window.
+- Its internal conversation is not exposed to you.
+- You receive only the returned result summary.
+
 ## Error handling and retries
 
 * For API calls, handle HTTP errors with retries and exponential backoff.

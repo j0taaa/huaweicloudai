@@ -160,6 +160,25 @@ export async function POST(request: Request) {
         {
           type: "function",
           function: {
+            name: "create_sub_agent",
+            description:
+              "Create a focused sub-agent session for a bounded objective. The sub-agent runs as an isolated black box and returns only a final result.",
+            parameters: {
+              type: "object",
+              properties: {
+                task: {
+                  type: "string",
+                  description:
+                    "A complete, self-contained objective for the sub-agent, including success criteria and constraints.",
+                },
+              },
+              required: ["task"],
+            },
+          },
+        },
+        {
+          type: "function",
+          function: {
             name: "eval_code",
             description:
               "Execute JavaScript code on the server. Define a main() function (can be async, takes no parameters) and return a value from it; the environment calls main() and returns its result.",
