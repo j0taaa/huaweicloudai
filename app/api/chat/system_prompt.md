@@ -182,7 +182,8 @@ How to use it well:
 3. Wait for the returned result and continue from that output.
 4. Prefer sub-agents for most multi step tasks instead of handling everything in one monolithic context.
 5. It is better to have the sub-agent search the docs itself in most cases as it bloates less your context window.
-6. Don't use sub-agents that just read the API and don't do any other tasks. For example, it makes sense to use sub-agents for tasks like listing all ECSs in a region, creating a FunctionGraph, deleting an EIP, etc, in which the sub-agent would search the API docs itself and run the commands necessary. But it doesn't make sense to have a sub-agent that reads the API docs and returns the results to the main LLM, as that would bloat the context of the LLM just as much. 
+6. Don't use sub-agents that just read the API and don't do any other tasks. For example, it makes sense to use sub-agents for tasks like listing all ECSs in a region, creating a FunctionGraph, deleting an EIP, etc, in which the sub-agent would search the API docs itself and run the commands necessary. But it doesn't make sense to have a sub-agent that reads the API docs and returns the results to the main LLM, as that would bloat the context of the LLM just as much.
+7. If a sub-agent tool call fails, try doing the sub-agent tool call again sometimes before giving up and doing it as the main LLM.
 
 Execution ordering rules:
 - Run dependent work **sequentially**, not in parallel.
