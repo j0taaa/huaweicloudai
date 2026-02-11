@@ -436,6 +436,25 @@
   padding-left: 16px;
 }
 
+.hwc-chat-markdown .hwc-chat-task-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.hwc-chat-markdown .hwc-chat-task-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.hwc-chat-markdown .hwc-chat-task-item input[type="checkbox"] {
+  margin: 1px 0 0;
+}
+
+.hwc-chat-markdown .hwc-chat-task-item span {
+  flex: 1;
+}
+
 .hwc-chat-markdown code {
   background: rgba(15, 23, 42, 0.08);
   padding: 2px 4px;

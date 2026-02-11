@@ -719,9 +719,17 @@ if (!existingWidget) {
     const flushList = () => {
       if (!list) return;
       const items = list.items
-        .map((item) => `<li>${renderInlineMarkdown(item)}</li>`)
+        .map((item) => {
+          if (list.type === "task") {
+            const checkedAttribute = item.checked ? " checked" : "";
+            return `<li class="hwc-chat-task-item"><input type="checkbox" disabled${checkedAttribute} /><span>${renderInlineMarkdown(item.text)}</span></li>`;
+          }
+          return `<li>${renderInlineMarkdown(item)}</li>`;
+        })
         .join("");
-      blocks.push(`<${list.type}>${items}</${list.type}>`);
+      const listTag = list.type === "task" ? "ul" : list.type;
+      const listClass = list.type === "task" ? ' class="hwc-chat-task-list"' : "";
+      blocks.push(`<${listTag}${listClass}>${items}</${listTag}>`);
       list = null;
     };
 
@@ -809,6 +817,17 @@ if (!existingWidget) {
         blocks.push(
           `<table><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table>`,
         );
+        continue;
+      }
+
+      const taskMatch = line.match(/^\s*[-*]\s+\[( |x|X)\]\s+(.*)$/);
+      if (taskMatch) {
+        flushParagraph();
+        if (!list || list.type !== "task") {
+          flushList();
+          list = { type: "task", items: [] };
+        }
+        list.items.push({ checked: taskMatch[1].toLowerCase() === "x", text: taskMatch[2] });
         continue;
       }
 
