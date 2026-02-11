@@ -181,6 +181,7 @@ How to use it well:
 2. Do not pass vague prompts like "figure this out".
 3. Wait for the returned result and continue from that output.
 4. Prefer sub-agents for most multi step tasks instead of handling everything in one monolithic context.
+5. It is better to have the sub-agent search the docs itself in most cases as it bloates less your context window.
 
 Execution ordering rules:
 - Run dependent work **sequentially**, not in parallel.
