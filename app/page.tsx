@@ -45,6 +45,7 @@ type ToolPayload = {
   query?: string;
   product?: string;
   top_k?: number;
+  task?: string;
 };
 
 type ToolPreview = {
@@ -337,6 +338,7 @@ const formatToolName = (name: string) => {
     get_all_apis: "List APIs",
     get_api_details: "API details",
     ask_multiple_choice: "Ask multiple choice",
+    create_sub_agent: "Create sub-agent",
   };
 
   if (displayNameMap[name]) {
@@ -919,11 +921,13 @@ export default function Home() {
       query?: string;
       product?: string;
       top_k?: number;
+      task?: string;
     } = {};
 
     try {
       payload = JSON.parse(toolCall.function.arguments || "{}") as {
         code?: string;
+        task?: string;
       };
     } catch (parseError) {
       return {
@@ -951,6 +955,16 @@ export default function Home() {
       }
 
       return { question: payload.question, options: payload.options };
+    }
+
+    if (toolCall.function.name === "create_sub_agent") {
+      if (!payload.task) {
+        return {
+          error: "Error: task is required for create_sub_agent.",
+        };
+      }
+
+      return { task: payload.task };
     }
 
     if (toolCall.function.name === "get_all_apis") {
@@ -1492,9 +1506,76 @@ export default function Home() {
       };
     }
   };
+  const executeCreateSubAgentTool = async (toolCall: ToolCall): Promise<ChatMessage> => {
+    const payload = parseToolPayload(toolCall);
+
+    if (payload.error || !payload.task) {
+      return {
+        role: "tool",
+        content: payload.error || "Error: task is required for create_sub_agent.",
+        tool_call_id: toolCall.id,
+      };
+    }
+
+    try {
+      const response = await fetch("/api/sub-agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          task: payload.task,
+          mainMessages: messages,
+          context: {
+            accessKey: accessKey.trim(),
+            secretKey: secretKey.trim(),
+            projectIds,
+          },
+          inference:
+            inferenceMode === "custom"
+              ? {
+                  mode: "custom",
+                  baseUrl: customInference.baseUrl.trim(),
+                  model: customInference.model.trim(),
+                  apiKey: customInference.apiKey.trim(),
+                }
+              : { mode: "default" },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          role: "tool",
+          content: `Error creating sub-agent: ${errorText || "Unknown error."}`,
+          tool_call_id: toolCall.id,
+        };
+      }
+
+      const data = (await response.json()) as { result?: string; mode?: string; error?: string };
+      const resultText = data.result?.trim() || data.error || "Sub-agent completed with no result.";
+
+      return {
+        role: "tool",
+        content: `Sub-agent result (${data.mode || "unknown"}):\n${resultText}`,
+        tool_call_id: toolCall.id,
+      };
+    } catch (error) {
+      return {
+        role: "tool",
+        content: `Error creating sub-agent: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+        tool_call_id: toolCall.id,
+      };
+    }
+  };
+
   const runToolCalls = async (toolCalls: ToolCall[]) => {
     return Promise.all(
       toolCalls.map(async (toolCall) => {
+        if (toolCall.function.name === "create_sub_agent") {
+          return executeCreateSubAgentTool(toolCall);
+        }
+
         if (toolCall.function.name === "eval_code") {
           return executeEvalTool(toolCall);
         }
@@ -2740,6 +2821,12 @@ export default function Home() {
                                         : isChoiceTool
                                           ? `Asks the user: ${payload.question}`
                                           : summarizeCode(code);
+
+                                      if (toolCall.function.name === "create_sub_agent") {
+                                        summary = payload.task
+                                          ? `Creates a focused sub-agent to complete: ${payload.task.slice(0, 180)}${payload.task.length > 180 ? "..." : ""}`
+                                          : "Creates a focused sub-agent task.";
+                                      }
 
                                       if (toolCall.function.name === "get_all_apis") {
                                         summary = payload.productShort
