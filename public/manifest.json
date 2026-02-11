@@ -2,8 +2,12 @@
   "name": "Huawei Cloud AI Chat",
   "short_name": "Huawei Chat",
   "description": "Mobile-friendly Huawei Cloud AI chat workspace.",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
   "background_color": "#0b0f1a",
   "theme_color": "#0f172a",
   "icons": [
@@ -12,6 +16,13 @@
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon",
+      "purpose": "any"
     }
-  ]
+  ],
+  "categories": ["productivity", "developer"]
 }
