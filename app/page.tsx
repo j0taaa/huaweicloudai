@@ -400,7 +400,6 @@ export default function Home() {
   const summaryInFlightRef = useRef<Set<string>>(new Set());
   const compactionInFlightRef = useRef<Set<string>>(new Set());
   const credentialHydratedRef = useRef(false);
-  const credentialResetSkipRef = useRef(true);
   const pendingResumeRef = useRef(false);
   const inferenceHydratedRef = useRef(false);
   const shouldAutoScrollRef = useRef(true);
@@ -1670,14 +1669,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!credentialHydratedRef.current) return;
-    if (credentialResetSkipRef.current) {
-      credentialResetSkipRef.current = false;
-      return;
-    }
-    setCredentialStatus("idle");
-    setProjectIds([]);
     setProjectIdError(null);
-    localStorage.removeItem(PROJECT_IDS_STORAGE_KEY);
   }, [accessKey, secretKey]);
 
   useEffect(() => {
@@ -1727,7 +1719,6 @@ export default function Home() {
         caughtError instanceof Error
           ? caughtError.message
           : "Unable to fetch project IDs.";
-      setProjectIds([]);
       setCredentialStatus("error");
       setProjectIdError(message);
     }

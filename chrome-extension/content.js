@@ -1952,7 +1952,7 @@ if (!existingWidget) {
       }
       storedProjectIds = Array.isArray(data?.entries) ? data.entries : [];
       await storageSet({
-        [PROJECT_IDS_STORAGE_KEY]: JSON.stringify(storedProjectIds),
+        [PROJECT_IDS_STORAGE_KEY]: storedProjectIds,
       });
 
       if (storedProjectIds.length === 0) {
@@ -1961,8 +1961,6 @@ if (!existingWidget) {
         updateSaveStatus("Saved", true);
       }
     } catch (error) {
-      storedProjectIds = [];
-      await storageSet({ [PROJECT_IDS_STORAGE_KEY]: JSON.stringify([]) });
       updateSaveStatus(
         error instanceof Error
           ? error.message
@@ -2123,7 +2121,9 @@ if (!existingWidget) {
     } else {
       serverUrlInput.value = DEFAULT_SERVER_URL;
     }
-    if (typeof values[PROJECT_IDS_STORAGE_KEY] === "string") {
+    if (Array.isArray(values[PROJECT_IDS_STORAGE_KEY])) {
+      storedProjectIds = values[PROJECT_IDS_STORAGE_KEY];
+    } else if (typeof values[PROJECT_IDS_STORAGE_KEY] === "string") {
       try {
         const parsed = JSON.parse(values[PROJECT_IDS_STORAGE_KEY]);
         if (Array.isArray(parsed)) {
