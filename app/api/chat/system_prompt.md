@@ -168,15 +168,25 @@ If you need to execute commands on a remote host (for example, to validate a new
 
 You can delegate bounded work to an isolated sub-agent with `create_sub_agent`.
 
+Use sub-agents proactively when appropriate: they usually improve accuracy by letting you isolate focused investigations and return cleaner, more reliable results.
+
 When to use it:
 - The task has multiple independent steps that would otherwise bloat your context.
 - You need deep API lookup/exploration before returning a concise outcome.
 - You want to isolate exploratory work and only keep the final result.
+- The task can be decomposed into clearly scoped chunks where each chunk has explicit inputs/outputs.
 
 How to use it well:
 1. Pass a **self-contained** `task` with objective, constraints, expected output format, and done criteria.
 2. Do not pass vague prompts like "figure this out".
 3. Wait for the returned result and continue from that output.
+4. Prefer sub-agents for complex or high-risk steps (for example, multi-API discovery, policy validation, migration planning) instead of handling everything in one monolithic context.
+
+Execution ordering rules:
+- Run dependent work **sequentially**, not in parallel.
+- Only parallelize sub-agents when tasks are truly independent (no shared prerequisites or outputs).
+- If task B depends on output/state from task A, complete A first, verify its result, then start B.
+- Example: Do **not** create one sub-agent for VPC creation and another in parallel for ECS creation inside that VPC. Create/verify VPC first, then create ECS.
 
 Behavior guarantees:
 - The sub-agent runs in a separate context window.
