@@ -20,6 +20,7 @@ type ProjectIdEntry = { region: string; projectId: string; name?: string };
 type SharedContext = { accessKey?: string; secretKey?: string; projectIds?: ProjectIdEntry[] };
 type InferenceConfig = { mode?: "default" | "custom"; baseUrl?: string; model?: string; apiKey?: string };
 type SubAgentRequest = { task?: string; mainMessages?: ChatMessage[]; context?: SharedContext; inference?: InferenceConfig };
+type StepTraceEntry = { type: string; detail: string };
 
 const SYSTEM_PROMPT_PATH = path.join(process.cwd(), "app", "api", "chat", "system_prompt.md");
 const DEFAULT_SYSTEM_PROMPT = fs.readFileSync(SYSTEM_PROMPT_PATH, "utf8");
@@ -158,6 +159,17 @@ const asObject = (value: string) => {
   }
 };
 
+const MAX_STEP_DETAIL_CHARS = 1000;
+const formatStepDetail = (detail: string) => {
+  const normalized = detail.trim();
+  if (normalized.length <= MAX_STEP_DETAIL_CHARS) return normalized;
+  return `${normalized.slice(0, MAX_STEP_DETAIL_CHARS)}... [truncated]`;
+};
+
+const pushStep = (steps: StepTraceEntry[], type: string, detail: string) => {
+  steps.push({ type, detail: formatStepDetail(detail) });
+};
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as SubAgentRequest;
@@ -205,23 +217,30 @@ export async function POST(request: Request) {
     };
 
     const origin = new URL(request.url).origin;
+    const steps: StepTraceEntry[] = [];
     const messages: ChatMessage[] = [
       { role: "system", content: buildSubSystemPrompt(body.context) },
       { role: "user", content: `Delegated task:\n${task}\n\nReturn completion using return_sub_agent_result.` },
     ];
+    pushStep(steps, "task", task);
 
-    for (let i = 0; i < 12; i += 1) {
+    for (;;) {
       const output = await callModel(messages);
+      if (output.reply) {
+        pushStep(steps, "assistant", output.reply);
+      }
       messages.push({ role: "assistant", content: output.reply, tool_calls: output.toolCalls.length ? output.toolCalls : undefined });
 
       if (!output.toolCalls.length) {
-        if (output.reply) return NextResponse.json({ result: output.reply, mode: "assistant_reply" });
+        if (output.reply) return NextResponse.json({ result: output.reply, mode: "assistant_reply", steps });
         break;
       }
 
       for (const call of output.toolCalls) {
+        pushStep(steps, "tool_call", `${call.function.name}(${call.function.arguments || "{}"})`);
         if (!tools.includes(call.function.name as (typeof tools)[number])) {
           messages.push({ role: "tool", tool_call_id: call.id, content: `Unsupported tool: ${call.function.name}` });
+          pushStep(steps, "tool_result", `Unsupported tool: ${call.function.name}`);
           continue;
         }
 
@@ -230,15 +249,18 @@ export async function POST(request: Request) {
           const result = typeof args.result === "string" ? args.result.trim() : "";
           if (!result) {
             messages.push({ role: "tool", tool_call_id: call.id, content: "Error: result is required." });
+            pushStep(steps, "tool_result", "Error: result is required.");
             continue;
           }
-          return NextResponse.json({ result, mode: "tool_return" });
+          pushStep(steps, "final_result", result);
+          return NextResponse.json({ result, mode: "tool_return", steps });
         }
 
         if (call.function.name === "ask_main_agent") {
           const question = typeof args.question === "string" ? args.question.trim() : "";
           const answer = question ? await askMainAgent(question) : "Error: question is required.";
           messages.push({ role: "tool", tool_call_id: call.id, content: answer });
+          pushStep(steps, "tool_result", answer);
           continue;
         }
 
@@ -250,10 +272,11 @@ export async function POST(request: Request) {
         });
         const text = await response.text();
         messages.push({ role: "tool", tool_call_id: call.id, content: text || "{}" });
+        pushStep(steps, "tool_result", text || "{}");
       }
     }
 
-    return NextResponse.json({ error: "Sub-agent reached max iterations." }, { status: 504 });
+    return NextResponse.json({ error: "Sub-agent exited without a result.", steps }, { status: 504 });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Sub-agent failure." }, { status: 500 });
   }
