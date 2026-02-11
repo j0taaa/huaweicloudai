@@ -978,6 +978,14 @@ if (!existingWidget) {
       };
     }
 
+    if (toolCall.function?.name === "create_sub_agent") {
+      if (!payload.task) {
+        return { error: "Error: task is required for create_sub_agent." };
+      }
+
+      return { task: payload.task };
+    }
+
     return {
       error: `Error: Unsupported tool payload for ${toolCall.function?.name}.`,
     };
@@ -1013,6 +1021,12 @@ if (!existingWidget) {
         : "Searches RAG documentation.";
     }
 
+    if (toolCall.function.name === "create_sub_agent") {
+      return payload.task
+        ? `Creates a focused sub-agent to complete: ${payload.task.slice(0, 180)}${payload.task.length > 180 ? "..." : ""}`
+        : "Creates a focused sub-agent task.";
+    }
+
     return "Runs a tool with the provided arguments.";
   };
 
@@ -1023,6 +1037,7 @@ if (!existingWidget) {
       get_all_apis: "List APIs",
       get_api_details: "API details",
       ask_multiple_choice: "Ask multiple choice",
+      create_sub_agent: "Create sub-agent",
     };
 
     if (displayNameMap[name]) {
@@ -1573,6 +1588,60 @@ if (!existingWidget) {
     }
   };
 
+  const executeCreateSubAgentTool = async (toolCall, { signal } = {}) => {
+    const payload = parseToolPayload(toolCall);
+    if (payload.error || !payload.task) {
+      return {
+        role: "tool",
+        content: payload.error || "Error: task is required for create_sub_agent.",
+        tool_call_id: toolCall.id,
+      };
+    }
+
+    try {
+      const data = await requestServer(
+        activeServerUrl,
+        "/api/sub-agent",
+        {
+          task: payload.task,
+          mainMessages: [...chatHistory],
+          context: {
+            accessKey: accessKeyInput.value.trim(),
+            secretKey: secretKeyInput.value.trim(),
+            projectIds: storedProjectIds,
+          },
+          inference:
+            inferenceMode === "custom"
+              ? {
+                  mode: "custom",
+                  baseUrl: inferenceSettings.baseUrl.trim(),
+                  model: inferenceSettings.model.trim(),
+                  apiKey: inferenceSettings.apiKey.trim(),
+                }
+              : { mode: "default" },
+        },
+        { signal },
+      );
+
+      const resultText =
+        data?.result?.trim() || data?.error || "Sub-agent completed with no result.";
+
+      return {
+        role: "tool",
+        content: `Sub-agent result (${data?.mode || "unknown"}):\n${resultText}`,
+        tool_call_id: toolCall.id,
+      };
+    } catch (error) {
+      return {
+        role: "tool",
+        content: `Error creating sub-agent: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+        tool_call_id: toolCall.id,
+      };
+    }
+  };
+
   const runToolCalls = async (toolCalls, { signal } = {}) => {
     return Promise.all(
       toolCalls.map(async (toolCall) => {
@@ -1590,6 +1659,10 @@ if (!existingWidget) {
 
         if (toolCall.function?.name === "search_rag_docs") {
           return executeSearchRagTool(toolCall, { signal });
+        }
+
+        if (toolCall.function?.name === "create_sub_agent") {
+          return executeCreateSubAgentTool(toolCall, { signal });
         }
 
         return {
