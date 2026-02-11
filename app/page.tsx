@@ -55,6 +55,11 @@ type ToolPreview = {
   summary: string;
 };
 
+type SubAgentStepTrace = {
+  type: string;
+  detail: string;
+};
+
 type ProjectIdEntry = {
   region: string;
   projectId: string;
@@ -382,6 +387,9 @@ export default function Home() {
   });
   const [activeToolPreview, setActiveToolPreview] =
     useState<ToolPreview | null>(null);
+  const [subAgentStepsByToolCallId, setSubAgentStepsByToolCallId] = useState<
+    Record<string, SubAgentStepTrace[]>
+  >({});
   const [activeToolCallIndex, setActiveToolCallIndex] = useState<Record<string, number>>({});
   const [pendingChoice, setPendingChoice] = useState<{
     toolCall: ToolCall;
@@ -1543,6 +1551,11 @@ export default function Home() {
 
       if (!response.ok) {
         const errorText = await response.text();
+        setSubAgentStepsByToolCallId((prev) => {
+          const next = { ...prev };
+          delete next[toolCall.id];
+          return next;
+        });
         return {
           role: "tool",
           content: `Error creating sub-agent: ${errorText || "Unknown error."}`,
@@ -1550,7 +1563,21 @@ export default function Home() {
         };
       }
 
-      const data = (await response.json()) as { result?: string; mode?: string; error?: string };
+      const data = (await response.json()) as {
+        result?: string;
+        mode?: string;
+        error?: string;
+        steps?: SubAgentStepTrace[];
+      };
+      setSubAgentStepsByToolCallId((prev) => {
+        const next = { ...prev };
+        if (Array.isArray(data.steps) && data.steps.length > 0) {
+          next[toolCall.id] = data.steps;
+        } else {
+          delete next[toolCall.id];
+        }
+        return next;
+      });
       const resultText = data.result?.trim() || data.error || "Sub-agent completed with no result.";
 
       return {
@@ -1559,6 +1586,11 @@ export default function Home() {
         tool_call_id: toolCall.id,
       };
     } catch (error) {
+      setSubAgentStepsByToolCallId((prev) => {
+        const next = { ...prev };
+        delete next[toolCall.id];
+        return next;
+      });
       return {
         role: "tool",
         content: `Error creating sub-agent: ${
@@ -2854,6 +2886,11 @@ export default function Home() {
                                         result.length > TOOL_RESULT_COLLAPSE_THRESHOLD ||
                                         resultLineCount > TOOL_RESULT_COLLAPSE_LINES;
                                       const toolName = formatToolName(toolCall.function.name);
+                                      const subAgentSteps =
+                                        toolCall.function.name === "create_sub_agent"
+                                          ? subAgentStepsByToolCallId[toolCall.id] ?? []
+                                          : [];
+                                      const hasSubAgentSteps = subAgentSteps.length > 0;
 
                                       return (
                                         <div
@@ -2897,6 +2934,25 @@ export default function Home() {
                                           <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
                                             {summary}
                                           </p>
+                                          {hasSubAgentSteps ? (
+                                            <details className="mt-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700 dark:border-white/10 dark:bg-black/60 dark:text-zinc-200">
+                                              <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.15em] text-zinc-500 dark:text-zinc-400">
+                                                Sub-agent execution steps (user-visible only)
+                                              </summary>
+                                              <ol className="mt-2 list-decimal space-y-2 pl-4">
+                                                {subAgentSteps.map((step, stepIndex) => (
+                                                  <li key={`${toolCall.id}-step-${stepIndex}`}>
+                                                    <p className="font-semibold text-zinc-700 dark:text-zinc-200">
+                                                      {step.type}
+                                                    </p>
+                                                    <pre className="mt-1 whitespace-pre-wrap break-words text-xs text-zinc-600 dark:text-zinc-300">
+                                                      {step.detail}
+                                                    </pre>
+                                                  </li>
+                                                ))}
+                                              </ol>
+                                            </details>
+                                          ) : null}
                                           <div className="mt-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700 dark:border-white/10 dark:bg-black/60 dark:text-zinc-200">
                                             <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-zinc-500 dark:text-zinc-400">
                                               Result
