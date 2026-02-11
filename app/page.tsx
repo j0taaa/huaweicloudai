@@ -2774,18 +2774,28 @@ export default function Home() {
             </div>
           </div>
           {checklistTasks.length > 0 ? (
-            <aside className="pointer-events-none absolute left-4 top-20 z-20 w-64 sm:left-6">
-              <div className="pointer-events-auto rounded-2xl border border-zinc-200/80 bg-white/95 p-3 shadow-md backdrop-blur dark:border-white/10 dark:bg-black/80">
+            <aside
+              className={`pointer-events-none absolute left-4 top-[calc(var(--spacing)*4)] z-20 sm:left-6 ${
+                checklistCollapsed ? "w-auto" : "w-64"
+              }`}
+            >
+              <div
+                className={`pointer-events-auto border border-zinc-200/80 bg-white/95 shadow-md backdrop-blur dark:border-white/10 dark:bg-black/80 ${
+                  checklistCollapsed ? "rounded-full px-3 py-1" : "rounded-2xl p-3"
+                }`}
+              >
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between text-left"
+                  className={`flex items-center text-left ${
+                    checklistCollapsed ? "w-auto gap-2" : "w-full justify-between"
+                  }`}
                   onClick={() => setChecklistCollapsed((prev) => !prev)}
                   aria-expanded={!checklistCollapsed}
                 >
                   <span className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
                     Checklist
                   </span>
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                  <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
                     {checklistCollapsed ? "Show" : "Hide"}
                   </span>
                 </button>
