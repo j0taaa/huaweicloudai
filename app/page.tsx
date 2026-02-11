@@ -1804,7 +1804,7 @@ export default function Home() {
       {
         role: "system",
         content:
-          "Summarize the entire conversation while preserving every detail and all key facts. Produce a structured summary suitable for continuing the conversation without information loss.",
+          "Summarize the entire conversation while preserving every detail and all key facts. Produce a structured summary suitable for continuing the conversation without information loss. Make sure no information is lost, including credentials, informations, API usage details (if they are going to be needed), current status, errors, current plan, etc. This is going to be a summary of the current conversation and is going to be the result of a context compaction so that you can continue to work in this conversation without having to use unecessary tokens. Remember to include every single detail.",
       },
       ...messagesToSummarize,
     ];
