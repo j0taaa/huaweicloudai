@@ -297,6 +297,7 @@ if (!existingWidget) {
     });
 
   const DEFAULT_SERVER_URL = "http://1.178.45.234:3000";
+  const CREDENTIALS_STORAGE_KEY = "huaweicloudai-credentials";
   const PROJECT_IDS_STORAGE_KEY = "projectIds";
   const INFERENCE_MODE_STORAGE_KEY = "inferenceMode";
   const INFERENCE_SETTINGS_STORAGE_KEY = "inferenceSettings";
@@ -592,6 +593,19 @@ if (!existingWidget) {
   const updateSaveStatus = (message, isSuccess = false) => {
     saveStatus.textContent = message;
     saveStatus.dataset.state = isSuccess ? "success" : "neutral";
+  };
+
+  const persistCredentials = async (accessKey, secretKey, projectIds) => {
+    await storageSet({
+      accessKey,
+      secretKey,
+      [PROJECT_IDS_STORAGE_KEY]: projectIds,
+      [CREDENTIALS_STORAGE_KEY]: JSON.stringify({
+        accessKey,
+        secretKey,
+        projectIds,
+      }),
+    });
   };
 
   const setStatus = (message, state = "neutral") => {
@@ -2034,7 +2048,7 @@ if (!existingWidget) {
     saveButton.disabled = true;
     updateSaveStatus("Saving...");
 
-    await storageSet({ accessKey, secretKey });
+    await persistCredentials(accessKey, secretKey, storedProjectIds);
 
     try {
       updateSaveStatus("Fetching project IDs...");
@@ -2043,9 +2057,7 @@ if (!existingWidget) {
         throw new Error(data.error);
       }
       storedProjectIds = Array.isArray(data?.entries) ? data.entries : [];
-      await storageSet({
-        [PROJECT_IDS_STORAGE_KEY]: storedProjectIds,
-      });
+      await persistCredentials(accessKey, secretKey, storedProjectIds);
 
       if (storedProjectIds.length === 0) {
         updateSaveStatus("No project IDs found. Check your AK/SK.");
@@ -2194,6 +2206,7 @@ if (!existingWidget) {
   );
 
   storageGet([
+    CREDENTIALS_STORAGE_KEY,
     "accessKey",
     "secretKey",
     "serverUrl",
@@ -2202,6 +2215,23 @@ if (!existingWidget) {
     INFERENCE_SETTINGS_STORAGE_KEY,
     WIDGET_POSITION_STORAGE_KEY,
   ]).then((values) => {
+    if (typeof values[CREDENTIALS_STORAGE_KEY] === "string") {
+      try {
+        const parsed = JSON.parse(values[CREDENTIALS_STORAGE_KEY]);
+        if (typeof parsed?.accessKey === "string") {
+          accessKeyInput.value = parsed.accessKey;
+        }
+        if (typeof parsed?.secretKey === "string") {
+          secretKeyInput.value = parsed.secretKey;
+        }
+        if (Array.isArray(parsed?.projectIds)) {
+          storedProjectIds = parsed.projectIds;
+        }
+      } catch {
+        // Ignore invalid serialized credentials.
+      }
+    }
+
     if (typeof values.accessKey === "string") {
       accessKeyInput.value = values.accessKey;
     }
