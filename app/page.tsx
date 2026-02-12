@@ -2999,22 +2999,30 @@ export default function Home() {
                                             {summary}
                                           </p>
                                           {hasSubAgentSteps ? (
-                                            <details className="mt-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700 dark:border-white/10 dark:bg-black/60 dark:text-zinc-200">
-                                              <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.15em] text-zinc-500 dark:text-zinc-400">
-                                                Sub-agent execution steps (user-visible only)
+                                            <details className="mt-3 overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-white/10 dark:bg-black/60">
+                                              <summary className="cursor-pointer px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-zinc-500 dark:text-zinc-400">
+                                                Sub-agent execution timeline
                                               </summary>
-                                              <ol className="mt-2 list-decimal space-y-2 pl-4">
+                                              <div className="space-y-2 border-t border-zinc-200 px-3 py-3 dark:border-white/10">
                                                 {subAgentSteps.map((step, stepIndex) => (
-                                                  <li key={`${toolCall.id}-step-${stepIndex}`}>
-                                                    <p className="font-semibold text-zinc-700 dark:text-zinc-200">
-                                                      {step.type}
-                                                    </p>
-                                                    <pre className="mt-1 whitespace-pre-wrap break-words text-xs text-zinc-600 dark:text-zinc-300">
+                                                  <div
+                                                    key={`${toolCall.id}-step-${stepIndex}`}
+                                                    className="rounded-lg border border-zinc-200/80 bg-zinc-50 px-3 py-2 dark:border-white/10 dark:bg-black/40"
+                                                  >
+                                                    <div className="flex items-center gap-2">
+                                                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-100 px-1 text-[10px] font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+                                                        {stepIndex + 1}
+                                                      </span>
+                                                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500 dark:text-zinc-400">
+                                                        {step.type.replace(/_/g, " ")}
+                                                      </p>
+                                                    </div>
+                                                    <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-zinc-700 dark:text-zinc-200">
                                                       {step.detail}
-                                                    </pre>
-                                                  </li>
+                                                    </p>
+                                                  </div>
                                                 ))}
-                                              </ol>
+                                              </div>
                                             </details>
                                           ) : null}
                                           <div className="mt-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700 dark:border-white/10 dark:bg-black/60 dark:text-zinc-200">
