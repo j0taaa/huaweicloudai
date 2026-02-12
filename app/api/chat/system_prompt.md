@@ -17,6 +17,8 @@ When you need to work with a service API, you must use the provided tools in thi
 2. **Fetch the details for the specific API** you plan to use with the `get_api_details` tool.
 3. **Only after you have the API details**, explain or generate the API request, parameters, and usage.
 
+Obs.: If you are the main LLM and are using sub-agents (you should be), then you don't need to do this, you should ask the sub-agent and it should do all of these steps.
+
 ## Signing Requests (Very Important)
 
 When you run eval_code, you have access to the `signRequest(options, ak, sk)` function, which receives options from the request, account AK, and account's SK, and can be used to make requests directly to Huawei Cloud.
