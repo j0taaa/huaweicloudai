@@ -1564,26 +1564,94 @@ export default function Home() {
         };
       }
 
-      const data = (await response.json()) as {
-        result?: string;
-        mode?: string;
-        error?: string;
-        steps?: SubAgentStepTrace[];
-      };
-      setSubAgentStepsByToolCallId((prev) => {
-        const next = { ...prev };
-        if (Array.isArray(data.steps) && data.steps.length > 0) {
-          next[toolCall.id] = data.steps;
-        } else {
-          delete next[toolCall.id];
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let latestSteps: SubAgentStepTrace[] = [];
+      let finalResult = "";
+      let finalMode = "unknown";
+      let streamError = "";
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          for (const rawLine of lines) {
+            const line = rawLine.trim();
+            if (!line) continue;
+
+            try {
+              const event = JSON.parse(line) as
+                | { type: "step"; step: SubAgentStepTrace }
+                | { type: "final"; result?: string; mode?: string; steps?: SubAgentStepTrace[] }
+                | { type: "error"; error?: string; steps?: SubAgentStepTrace[] };
+
+              if (event.type === "step") {
+                latestSteps = [...latestSteps, event.step];
+                setSubAgentStepsByToolCallId((prev) => ({
+                  ...prev,
+                  [toolCall.id]: latestSteps,
+                }));
+                continue;
+              }
+
+              if (event.type === "final") {
+                finalResult = event.result?.trim() || "";
+                finalMode = event.mode || "unknown";
+                if (Array.isArray(event.steps) && event.steps.length > 0) {
+                  latestSteps = event.steps;
+                  setSubAgentStepsByToolCallId((prev) => ({
+                    ...prev,
+                    [toolCall.id]: latestSteps,
+                  }));
+                }
+                continue;
+              }
+
+              streamError = event.error || "Sub-agent failure.";
+              if (Array.isArray(event.steps) && event.steps.length > 0) {
+                latestSteps = event.steps;
+                setSubAgentStepsByToolCallId((prev) => ({
+                  ...prev,
+                  [toolCall.id]: latestSteps,
+                }));
+              }
+            } catch {
+              // Ignore malformed stream chunks.
+            }
+          }
         }
-        return next;
-      });
-      const resultText = data.result?.trim() || data.error || "Sub-agent completed with no result.";
+      } else {
+        const data = (await response.json()) as {
+          result?: string;
+          mode?: string;
+          error?: string;
+          steps?: SubAgentStepTrace[];
+        };
+
+        if (Array.isArray(data.steps) && data.steps.length > 0) {
+          latestSteps = data.steps;
+          setSubAgentStepsByToolCallId((prev) => ({
+            ...prev,
+            [toolCall.id]: latestSteps,
+          }));
+        }
+
+        finalResult = data.result?.trim() || "";
+        finalMode = data.mode || "unknown";
+        streamError = data.error || "";
+      }
+
+      const resultText = finalResult || streamError || "Sub-agent completed with no result.";
 
       return {
         role: "tool",
-        content: `Sub-agent result (${data.mode || "unknown"}):\n${resultText}`,
+        content: `Sub-agent result (${finalMode}):\n${resultText}`,
         tool_call_id: toolCall.id,
       };
     } catch (error) {
@@ -2950,10 +3018,10 @@ export default function Home() {
                                         result.length > TOOL_RESULT_COLLAPSE_THRESHOLD ||
                                         resultLineCount > TOOL_RESULT_COLLAPSE_LINES;
                                       const toolName = formatToolName(toolCall.function.name);
-                                      const subAgentSteps =
-                                        toolCall.function.name === "create_sub_agent"
-                                          ? subAgentStepsByToolCallId[toolCall.id] ?? []
-                                          : [];
+                                      const isSubAgentTool = toolCall.function.name === "create_sub_agent";
+                                      const subAgentSteps = isSubAgentTool
+                                        ? subAgentStepsByToolCallId[toolCall.id] ?? []
+                                        : [];
                                       const hasSubAgentSteps = subAgentSteps.length > 0;
 
                                       return (
@@ -2998,30 +3066,39 @@ export default function Home() {
                                           <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
                                             {summary}
                                           </p>
-                                          {hasSubAgentSteps ? (
-                                            <details className="mt-3 overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-white/10 dark:bg-black/60">
+                                          {isSubAgentTool ? (
+                                            <details
+                                              className="mt-3 overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-white/10 dark:bg-black/60"
+                                              open={!hasResult || hasSubAgentSteps}
+                                            >
                                               <summary className="cursor-pointer px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-zinc-500 dark:text-zinc-400">
-                                                Sub-agent execution timeline
+                                                Sub-agent execution timeline {hasSubAgentSteps ? `(${subAgentSteps.length})` : ""}
                                               </summary>
                                               <div className="space-y-2 border-t border-zinc-200 px-3 py-3 dark:border-white/10">
-                                                {subAgentSteps.map((step, stepIndex) => (
-                                                  <div
-                                                    key={`${toolCall.id}-step-${stepIndex}`}
-                                                    className="rounded-lg border border-zinc-200/80 bg-zinc-50 px-3 py-2 dark:border-white/10 dark:bg-black/40"
-                                                  >
-                                                    <div className="flex items-center gap-2">
-                                                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-100 px-1 text-[10px] font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
-                                                        {stepIndex + 1}
-                                                      </span>
-                                                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500 dark:text-zinc-400">
-                                                        {step.type.replace(/_/g, " ")}
+                                                {hasSubAgentSteps ? (
+                                                  subAgentSteps.map((step, stepIndex) => (
+                                                    <div
+                                                      key={`${toolCall.id}-step-${stepIndex}`}
+                                                      className="rounded-lg border border-zinc-200/80 bg-zinc-50 px-3 py-2 dark:border-white/10 dark:bg-black/40"
+                                                    >
+                                                      <div className="flex items-center gap-2">
+                                                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-100 px-1 text-[10px] font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+                                                          {stepIndex + 1}
+                                                        </span>
+                                                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500 dark:text-zinc-400">
+                                                          {step.type.replace(/_/g, " ")}
+                                                        </p>
+                                                      </div>
+                                                      <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-zinc-700 dark:text-zinc-200">
+                                                        {step.detail}
                                                       </p>
                                                     </div>
-                                                    <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-zinc-700 dark:text-zinc-200">
-                                                      {step.detail}
-                                                    </p>
-                                                  </div>
-                                                ))}
+                                                  ))
+                                                ) : (
+                                                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                                                    Waiting for sub-agent steps to appear...
+                                                  </p>
+                                                )}
                                               </div>
                                             </details>
                                           ) : null}
