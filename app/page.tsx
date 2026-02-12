@@ -3087,7 +3087,7 @@ export default function Home() {
               <p className="mt-2 text-base font-semibold text-zinc-900 dark:text-white">
                 {pendingChoice.question}
               </p>
-              <div className="mt-4 flex flex-col gap-3">
+              <div className="mt-4 flex max-h-64 flex-col gap-3 overflow-y-auto pr-1">
                 {pendingChoice.options.map((option, index) => (
                   <label
                     key={`${option}-${index}`}
