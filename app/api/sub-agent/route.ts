@@ -1,6 +1,5 @@
 import fs from "fs";
 import path from "path";
-import { NextResponse } from "next/server";
 import { ProxyAgent } from "undici";
 
 type ChatMessage = {
@@ -21,6 +20,10 @@ type SharedContext = { accessKey?: string; secretKey?: string; projectIds?: Proj
 type InferenceConfig = { mode?: "default" | "custom"; baseUrl?: string; model?: string; apiKey?: string };
 type SubAgentRequest = { task?: string; mainMessages?: ChatMessage[]; context?: SharedContext; inference?: InferenceConfig };
 type StepTraceEntry = { type: string; detail: string };
+type StreamEvent =
+  | { type: "step"; step: StepTraceEntry }
+  | { type: "final"; result: string; mode: string; steps: StepTraceEntry[] }
+  | { type: "error"; error: string; steps: StepTraceEntry[] };
 
 const SYSTEM_PROMPT_PATH = path.join(process.cwd(), "app", "api", "chat", "system_prompt.md");
 const DEFAULT_SYSTEM_PROMPT = fs.readFileSync(SYSTEM_PROMPT_PATH, "utf8");
@@ -166,15 +169,29 @@ const formatStepDetail = (detail: string) => {
   return `${normalized.slice(0, MAX_STEP_DETAIL_CHARS)}... [truncated]`;
 };
 
-const pushStep = (steps: StepTraceEntry[], type: string, detail: string) => {
-  steps.push({ type, detail: formatStepDetail(detail) });
+const pushStep = (
+  steps: StepTraceEntry[],
+  type: string,
+  detail: string,
+  onStep?: (entry: StepTraceEntry) => void,
+) => {
+  const entry = { type, detail: formatStepDetail(detail) };
+  steps.push(entry);
+  onStep?.(entry);
 };
 
 export async function POST(request: Request) {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
   try {
     const body = (await request.json()) as SubAgentRequest;
     const task = body.task?.trim();
-    if (!task) return NextResponse.json({ error: "task is required." }, { status: 400 });
+    if (!task) {
+      controller.enqueue(encoder.encode(`${JSON.stringify({ type: "error", error: "task is required.", steps: [] })}\n`));
+      controller.close();
+      return;
+    }
 
     const { apiKey, endpoint, model } = parseInference(body.inference);
     const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.https_proxy || process.env.http_proxy;
@@ -218,29 +235,38 @@ export async function POST(request: Request) {
 
     const origin = new URL(request.url).origin;
     const steps: StepTraceEntry[] = [];
+    const emit = (event: StreamEvent) => {
+      controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+    };
     const messages: ChatMessage[] = [
       { role: "system", content: buildSubSystemPrompt(body.context) },
       { role: "user", content: `Delegated task:\n${task}\n\nReturn completion using return_sub_agent_result.` },
     ];
-    pushStep(steps, "task", task);
+    pushStep(steps, "task", task, (step) => emit({ type: "step", step }));
 
     for (;;) {
       const output = await callModel(messages);
       if (output.reply) {
-        pushStep(steps, "assistant", output.reply);
+        pushStep(steps, "assistant", output.reply, (step) => emit({ type: "step", step }));
       }
       messages.push({ role: "assistant", content: output.reply, tool_calls: output.toolCalls.length ? output.toolCalls : undefined });
 
       if (!output.toolCalls.length) {
-        if (output.reply) return NextResponse.json({ result: output.reply, mode: "assistant_reply", steps });
+        if (output.reply) {
+          emit({ type: "final", result: output.reply, mode: "assistant_reply", steps });
+          controller.close();
+          return;
+        }
         break;
       }
 
       for (const call of output.toolCalls) {
-        pushStep(steps, "tool_call", `${call.function.name}(${call.function.arguments || "{}"})`);
+        pushStep(steps, "tool_call", `${call.function.name}(${call.function.arguments || "{}"})`, (step) =>
+          emit({ type: "step", step }),
+        );
         if (!tools.includes(call.function.name as (typeof tools)[number])) {
           messages.push({ role: "tool", tool_call_id: call.id, content: `Unsupported tool: ${call.function.name}` });
-          pushStep(steps, "tool_result", `Unsupported tool: ${call.function.name}`);
+          pushStep(steps, "tool_result", `Unsupported tool: ${call.function.name}`, (step) => emit({ type: "step", step }));
           continue;
         }
 
@@ -249,18 +275,20 @@ export async function POST(request: Request) {
           const result = typeof args.result === "string" ? args.result.trim() : "";
           if (!result) {
             messages.push({ role: "tool", tool_call_id: call.id, content: "Error: result is required." });
-            pushStep(steps, "tool_result", "Error: result is required.");
+            pushStep(steps, "tool_result", "Error: result is required.", (step) => emit({ type: "step", step }));
             continue;
           }
-          pushStep(steps, "final_result", result);
-          return NextResponse.json({ result, mode: "tool_return", steps });
+          pushStep(steps, "final_result", result, (step) => emit({ type: "step", step }));
+          emit({ type: "final", result, mode: "tool_return", steps });
+          controller.close();
+          return;
         }
 
         if (call.function.name === "ask_main_agent") {
           const question = typeof args.question === "string" ? args.question.trim() : "";
           const answer = question ? await askMainAgent(question) : "Error: question is required.";
           messages.push({ role: "tool", tool_call_id: call.id, content: answer });
-          pushStep(steps, "tool_result", answer);
+          pushStep(steps, "tool_result", answer, (step) => emit({ type: "step", step }));
           continue;
         }
 
@@ -272,12 +300,29 @@ export async function POST(request: Request) {
         });
         const text = await response.text();
         messages.push({ role: "tool", tool_call_id: call.id, content: text || "{}" });
-        pushStep(steps, "tool_result", text || "{}");
+        pushStep(steps, "tool_result", text || "{}", (step) => emit({ type: "step", step }));
       }
     }
 
-    return NextResponse.json({ error: "Sub-agent exited without a result.", steps }, { status: 504 });
+    emit({ type: "error", error: "Sub-agent exited without a result.", steps });
+    controller.close();
+    return;
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Sub-agent failure." }, { status: 500 });
+    controller.enqueue(
+      encoder.encode(
+        `${JSON.stringify({ type: "error", error: error instanceof Error ? error.message : "Sub-agent failure.", steps: [] })}\n`,
+      ),
+    );
+    controller.close();
   }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+    },
+  });
 }

@@ -1564,26 +1564,94 @@ export default function Home() {
         };
       }
 
-      const data = (await response.json()) as {
-        result?: string;
-        mode?: string;
-        error?: string;
-        steps?: SubAgentStepTrace[];
-      };
-      setSubAgentStepsByToolCallId((prev) => {
-        const next = { ...prev };
-        if (Array.isArray(data.steps) && data.steps.length > 0) {
-          next[toolCall.id] = data.steps;
-        } else {
-          delete next[toolCall.id];
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let latestSteps: SubAgentStepTrace[] = [];
+      let finalResult = "";
+      let finalMode = "unknown";
+      let streamError = "";
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          for (const rawLine of lines) {
+            const line = rawLine.trim();
+            if (!line) continue;
+
+            try {
+              const event = JSON.parse(line) as
+                | { type: "step"; step: SubAgentStepTrace }
+                | { type: "final"; result?: string; mode?: string; steps?: SubAgentStepTrace[] }
+                | { type: "error"; error?: string; steps?: SubAgentStepTrace[] };
+
+              if (event.type === "step") {
+                latestSteps = [...latestSteps, event.step];
+                setSubAgentStepsByToolCallId((prev) => ({
+                  ...prev,
+                  [toolCall.id]: latestSteps,
+                }));
+                continue;
+              }
+
+              if (event.type === "final") {
+                finalResult = event.result?.trim() || "";
+                finalMode = event.mode || "unknown";
+                if (Array.isArray(event.steps) && event.steps.length > 0) {
+                  latestSteps = event.steps;
+                  setSubAgentStepsByToolCallId((prev) => ({
+                    ...prev,
+                    [toolCall.id]: latestSteps,
+                  }));
+                }
+                continue;
+              }
+
+              streamError = event.error || "Sub-agent failure.";
+              if (Array.isArray(event.steps) && event.steps.length > 0) {
+                latestSteps = event.steps;
+                setSubAgentStepsByToolCallId((prev) => ({
+                  ...prev,
+                  [toolCall.id]: latestSteps,
+                }));
+              }
+            } catch {
+              // Ignore malformed stream chunks.
+            }
+          }
         }
-        return next;
-      });
-      const resultText = data.result?.trim() || data.error || "Sub-agent completed with no result.";
+      } else {
+        const data = (await response.json()) as {
+          result?: string;
+          mode?: string;
+          error?: string;
+          steps?: SubAgentStepTrace[];
+        };
+
+        if (Array.isArray(data.steps) && data.steps.length > 0) {
+          latestSteps = data.steps;
+          setSubAgentStepsByToolCallId((prev) => ({
+            ...prev,
+            [toolCall.id]: latestSteps,
+          }));
+        }
+
+        finalResult = data.result?.trim() || "";
+        finalMode = data.mode || "unknown";
+        streamError = data.error || "";
+      }
+
+      const resultText = finalResult || streamError || "Sub-agent completed with no result.";
 
       return {
         role: "tool",
-        content: `Sub-agent result (${data.mode || "unknown"}):\n${resultText}`,
+        content: `Sub-agent result (${finalMode}):\n${resultText}`,
         tool_call_id: toolCall.id,
       };
     } catch (error) {
