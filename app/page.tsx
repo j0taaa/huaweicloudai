@@ -3018,10 +3018,10 @@ export default function Home() {
                                         result.length > TOOL_RESULT_COLLAPSE_THRESHOLD ||
                                         resultLineCount > TOOL_RESULT_COLLAPSE_LINES;
                                       const toolName = formatToolName(toolCall.function.name);
-                                      const subAgentSteps =
-                                        toolCall.function.name === "create_sub_agent"
-                                          ? subAgentStepsByToolCallId[toolCall.id] ?? []
-                                          : [];
+                                      const isSubAgentTool = toolCall.function.name === "create_sub_agent";
+                                      const subAgentSteps = isSubAgentTool
+                                        ? subAgentStepsByToolCallId[toolCall.id] ?? []
+                                        : [];
                                       const hasSubAgentSteps = subAgentSteps.length > 0;
 
                                       return (
@@ -3066,30 +3066,39 @@ export default function Home() {
                                           <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
                                             {summary}
                                           </p>
-                                          {hasSubAgentSteps ? (
-                                            <details className="mt-3 overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-white/10 dark:bg-black/60">
+                                          {isSubAgentTool ? (
+                                            <details
+                                              className="mt-3 overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-white/10 dark:bg-black/60"
+                                              open={!hasResult || hasSubAgentSteps}
+                                            >
                                               <summary className="cursor-pointer px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-zinc-500 dark:text-zinc-400">
-                                                Sub-agent execution timeline
+                                                Sub-agent execution timeline {hasSubAgentSteps ? `(${subAgentSteps.length})` : ""}
                                               </summary>
                                               <div className="space-y-2 border-t border-zinc-200 px-3 py-3 dark:border-white/10">
-                                                {subAgentSteps.map((step, stepIndex) => (
-                                                  <div
-                                                    key={`${toolCall.id}-step-${stepIndex}`}
-                                                    className="rounded-lg border border-zinc-200/80 bg-zinc-50 px-3 py-2 dark:border-white/10 dark:bg-black/40"
-                                                  >
-                                                    <div className="flex items-center gap-2">
-                                                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-100 px-1 text-[10px] font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
-                                                        {stepIndex + 1}
-                                                      </span>
-                                                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500 dark:text-zinc-400">
-                                                        {step.type.replace(/_/g, " ")}
+                                                {hasSubAgentSteps ? (
+                                                  subAgentSteps.map((step, stepIndex) => (
+                                                    <div
+                                                      key={`${toolCall.id}-step-${stepIndex}`}
+                                                      className="rounded-lg border border-zinc-200/80 bg-zinc-50 px-3 py-2 dark:border-white/10 dark:bg-black/40"
+                                                    >
+                                                      <div className="flex items-center gap-2">
+                                                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-100 px-1 text-[10px] font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+                                                          {stepIndex + 1}
+                                                        </span>
+                                                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500 dark:text-zinc-400">
+                                                          {step.type.replace(/_/g, " ")}
+                                                        </p>
+                                                      </div>
+                                                      <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-zinc-700 dark:text-zinc-200">
+                                                        {step.detail}
                                                       </p>
                                                     </div>
-                                                    <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-zinc-700 dark:text-zinc-200">
-                                                      {step.detail}
-                                                    </p>
-                                                  </div>
-                                                ))}
+                                                  ))
+                                                ) : (
+                                                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                                                    Waiting for sub-agent steps to appear...
+                                                  </p>
+                                                )}
                                               </div>
                                             </details>
                                           ) : null}
