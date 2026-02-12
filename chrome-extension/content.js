@@ -1109,6 +1109,46 @@ if (!existingWidget) {
     card.resultPre.textContent = result || "No result returned.";
   };
 
+  const updateToolCardSubAgentSteps = (toolCallId, steps) => {
+    const card = toolCards.get(toolCallId);
+    if (!card || !card.subAgentStepsContainer || !card.subAgentStepsEmpty) {
+      return;
+    }
+
+    card.subAgentStepsContainer.textContent = "";
+
+    if (!Array.isArray(steps) || steps.length === 0) {
+      card.subAgentStepsEmpty.hidden = false;
+      return;
+    }
+
+    card.subAgentStepsEmpty.hidden = true;
+
+    steps.forEach((step, index) => {
+      const item = document.createElement("article");
+      item.className = "hwc-chat-subagent-step";
+
+      const topRow = document.createElement("div");
+      topRow.className = "hwc-chat-subagent-step-top";
+
+      const indexBadge = document.createElement("span");
+      indexBadge.className = "hwc-chat-subagent-step-index";
+      indexBadge.textContent = `${index + 1}`;
+
+      const type = document.createElement("p");
+      type.className = "hwc-chat-subagent-step-type";
+      type.textContent = String(step?.type || "step").replace(/_/g, " ");
+
+      const detail = document.createElement("p");
+      detail.className = "hwc-chat-subagent-step-detail";
+      detail.textContent = String(step?.detail || "No detail available.");
+
+      topRow.append(indexBadge, type);
+      item.append(topRow, detail);
+      card.subAgentStepsContainer.append(item);
+    });
+  };
+
   const createToolCallCard = (toolCall) => {
     const card = document.createElement("div");
     card.className = "hwc-chat-tool-card";
@@ -1170,7 +1210,29 @@ if (!existingWidget) {
     resultPre.className = "hwc-chat-tool-result";
     resultPre.textContent = "Awaiting response from the tool...";
 
-    details.append(summary, detailsLabel, pre, resultLabel, resultPre);
+    let subAgentStepsContainer = null;
+    let subAgentStepsEmpty = null;
+
+    if (toolCall.function?.name === "create_sub_agent") {
+      const subAgentWrap = document.createElement("div");
+      subAgentWrap.className = "hwc-chat-subagent-steps";
+
+      const subAgentLabel = document.createElement("p");
+      subAgentLabel.className = "hwc-chat-tool-details-label";
+      subAgentLabel.textContent = "Sub-agent timeline";
+
+      subAgentStepsEmpty = document.createElement("p");
+      subAgentStepsEmpty.className = "hwc-chat-subagent-empty";
+      subAgentStepsEmpty.textContent = "The sub-agent has not produced user-visible steps yet.";
+
+      subAgentStepsContainer = document.createElement("div");
+      subAgentStepsContainer.className = "hwc-chat-subagent-step-list";
+
+      subAgentWrap.append(subAgentLabel, subAgentStepsEmpty, subAgentStepsContainer);
+      details.append(summary, detailsLabel, pre, subAgentWrap, resultLabel, resultPre);
+    } else {
+      details.append(summary, detailsLabel, pre, resultLabel, resultPre);
+    }
     card.append(headerRow, details);
 
     toolCards.set(toolCall.id, {
@@ -1179,6 +1241,8 @@ if (!existingWidget) {
       spinner,
       details,
       resultPre,
+      subAgentStepsContainer,
+      subAgentStepsEmpty,
     });
 
     detailsToggle.addEventListener("click", () => {
@@ -1656,6 +1720,9 @@ if (!existingWidget) {
         { signal },
       );
 
+      const subAgentSteps = Array.isArray(data?.steps) ? data.steps : [];
+      updateToolCardSubAgentSteps(toolCall.id, subAgentSteps);
+
       const resultText =
         data?.result?.trim() || data?.error || "Sub-agent completed with no result.";
 
@@ -1665,6 +1732,7 @@ if (!existingWidget) {
         tool_call_id: toolCall.id,
       };
     } catch (error) {
+      updateToolCardSubAgentSteps(toolCall.id, []);
       return {
         role: "tool",
         content: `Error creating sub-agent: ${
