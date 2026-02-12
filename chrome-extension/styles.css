@@ -840,6 +840,9 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  max-height: 256px;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 .hwc-chat-choice-option {
