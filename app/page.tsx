@@ -3069,7 +3069,6 @@ export default function Home() {
                                           {isSubAgentTool ? (
                                             <details
                                               className="mt-3 overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-white/10 dark:bg-black/60"
-                                              open={!hasResult || hasSubAgentSteps}
                                             >
                                               <summary className="cursor-pointer px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-zinc-500 dark:text-zinc-400">
                                                 Sub-agent execution timeline {hasSubAgentSteps ? `(${subAgentSteps.length})` : ""}
