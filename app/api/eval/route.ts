@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import HuaweiCloudSigner from "../../../huawei_signer.js";
+import HuaweiCloudSigner from "@/huawei_signer.js";
 
 type ProjectIdEntry = {
   region: string;
