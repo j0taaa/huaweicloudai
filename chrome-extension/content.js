@@ -1983,6 +1983,12 @@ if (!existingWidget) {
         return;
       }
 
+      // Group only consecutive tool-call responses. If the assistant emits
+      // normal message text, any later tool calls should start a new group.
+      if (reply) {
+        activeToolCallGroup = null;
+      }
+
       activeToolCallGroup = renderToolCalls(toolCalls, activeToolCallGroup);
 
       const multipleChoiceCall = toolCalls.find(

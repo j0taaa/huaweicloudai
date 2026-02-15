@@ -2856,11 +2856,14 @@ export default function Home() {
               messages
                 .filter((message) => message.role !== "tool")
                 .map((message, index, filteredMessages) => {
-                  // Check if this message is part of a tool call sequence (not the first)
-                  const isPartOfToolSequence = 
+                  // Check if this message is part of a consecutive tool-call sequence.
+                  // If the current assistant message contains normal text, it starts
+                  // a new group (matching extension behavior).
+                  const isPartOfToolSequence =
                     message.role === "assistant" &&
                     message.tool_calls &&
                     message.tool_calls.length > 0 &&
+                    !message.content.trim() &&
                     index > 0 &&
                     filteredMessages[index - 1].role === "assistant" &&
                     filteredMessages[index - 1].tool_calls &&
@@ -2902,14 +2905,21 @@ export default function Home() {
                         message.tool_calls.length > 0 ? (
                           <div className="flex flex-col gap-3">
                             {(() => {
-                              // Collect all consecutive assistant messages with tool_calls
+                              // Collect consecutive assistant tool calls. Stop the group
+                              // when a later assistant tool-call message includes text.
                               const consecutiveToolCalls: ToolCall[] = [];
                               let checkIndex = index;
                               while (checkIndex < filteredMessages.length) {
                                 const checkMessage = filteredMessages[checkIndex];
-                                if (checkMessage.role === "assistant" && 
-                                    checkMessage.tool_calls && 
-                                    checkMessage.tool_calls.length > 0) {
+                                const isAssistantToolCallMessage =
+                                  checkMessage.role === "assistant" &&
+                                  checkMessage.tool_calls &&
+                                  checkMessage.tool_calls.length > 0;
+
+                                const startsNewGroup =
+                                  checkIndex > index && checkMessage.content.trim();
+
+                                if (isAssistantToolCallMessage && !startsNewGroup) {
                                   consecutiveToolCalls.push(...checkMessage.tool_calls);
                                   checkIndex++;
                                 } else {
