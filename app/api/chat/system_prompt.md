@@ -124,7 +124,7 @@ async function main() {
     headers: { 'content-type': 'application/octet-stream' },
   };
 
-  const signedHeaders = signRequest(options, AK, SK);
+  const signedHeaders = signRequest(options, \"${AK}\", \"${SK}\");
   const res = await fetch(options.url, {
     method: options.method,
     headers: signedHeaders,
@@ -148,7 +148,7 @@ async function main() {
     headers: { 'content-type': 'application/octet-stream' },
   };
 
-  const signedHeaders = signRequest(options, AK, SK);
+  const signedHeaders = signRequest(options, \"${AK}\", \"${SK}\");
   const res = await fetch(options.url, {
     method: options.method,
     headers: signedHeaders,
