@@ -147,6 +147,13 @@ class HuaweiCloudSigner {
         const path = url.pathname;
         const host = url.host;
         
+        // Check if this is an OBS request (OBS uses obs.<region>.myhuaweicloud.com)
+        const isOBS = host.includes('.obs.') || host.startsWith('obs.');
+        
+        if (isOBS) {
+            return this.signOBSRequest(options, ak, sk);
+        }
+        
         // Build headers to sign
         const headersToSign = {
             'host': host,
@@ -202,6 +209,49 @@ class HuaweiCloudSigner {
         // Return all headers
         return {
             ...headersToSign,
+            'Authorization': authHeader
+        };
+    }
+    
+    // Sign an OBS request (OBS uses different signing method)
+    static signOBSRequest(options, ak, sk) {
+        const method = options.method || 'GET';
+        const url = new URL(options.url);
+        const path = url.pathname;
+        const host = url.host;
+        
+        const contentType = options.headers['content-type'] || 'application/octet-stream';
+        
+        // Get date in OBS format (RFC 7231)
+        const now = new Date();
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const dateStr = `${days[now.getUTCDay()]}, ${String(now.getUTCDate()).padStart(2, '0')} ${months[now.getUTCMonth()]} ${now.getUTCFullYear()} ${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}:${String(now.getUTCSeconds()).padStart(2, '0')} GMT`;
+        
+        // Build canonical resource (for OBS, it's just the path)
+        const canonicalResource = path.endsWith('/') ? path : path + '/';
+        
+        // Build string to sign for OBS
+        // StringToSign = HTTP-Verb + "\n" + Content-MD5 + "\n" + Content-Type + "\n" + Date + "\n" + CanonicalizedResource
+        const stringToSign = `${method}\n\n${contentType}\n${dateStr}\n${canonicalResource}`;
+        
+        console.log('OBS String to Sign:', JSON.stringify(stringToSign));
+        
+        // Calculate HMAC-SHA1 signature (OBS uses SHA1, not SHA256)
+        const signature = crypto.createHmac('sha1', sk).update(stringToSign).digest('base64');
+        
+        console.log('OBS Signature:', signature);
+        
+        // Build authorization header (OBS format)
+        const authHeader = `OBS ${ak}:${signature}`;
+        
+        console.log('OBS Authorization:', authHeader);
+        
+        // Return headers
+        return {
+            'Host': host,
+            'Content-Type': contentType,
+            'Date': dateStr,
             'Authorization': authHeader
         };
     }

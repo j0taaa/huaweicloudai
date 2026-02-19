@@ -144,6 +144,14 @@ const signRequest = async (
   const method = options.method ?? "GET";
   const url = new URL(options.url);
   const host = url.host;
+  
+  // Check if this is an OBS request
+  const isOBS = host.includes('.obs.') || host.startsWith('obs.');
+  
+  if (isOBS) {
+    return signOBSRequest(options, ak, sk);
+  }
+  
   const headersToSign: Record<string, string> = {
     host,
     "content-type": options.headers?.["content-type"] ?? "application/json",
@@ -192,6 +200,76 @@ const signRequest = async (
     ...headersToSign,
     Authorization: authHeader,
   };
+};
+
+// OBS uses a different signing method
+const signOBSRequest = async (
+  options: {
+    method?: string;
+    url: string;
+    headers?: Record<string, string>;
+    params?: Record<string, string | string[]>;
+    data?: string;
+  },
+  ak: string,
+  sk: string,
+) => {
+  const method = options.method ?? "GET";
+  const url = new URL(options.url);
+  const path = url.pathname;
+  const host = url.host;
+  
+  const contentType = options.headers?.["content-type"] ?? "application/octet-stream";
+  
+  // Get date in RFC 7231 format
+  const now = new Date();
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const dateStr = `${days[now.getUTCDay()]}, ${String(now.getUTCDate()).padStart(2, '0')} ${months[now.getUTCMonth()]} ${now.getUTCFullYear()} ${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}:${String(now.getUTCSeconds()).padStart(2, '0')} GMT`;
+  
+  // Build canonical resource
+  const canonicalResource = path.endsWith('/') ? path : path + '/';
+  
+  // Build string to sign for OBS
+  const stringToSign = `${method}\n\n${contentType}\n${dateStr}\n${canonicalResource}`;
+  
+  // Calculate HMAC-SHA1 signature (OBS uses SHA1)
+  const signature = await hmacSHA1(sk, stringToSign);
+  
+  // OBS format: OBS AccessKeyID:Signature
+  const authHeader = `OBS ${ak}:${signature}`;
+  
+  return {
+    'Host': host,
+    'Content-Type': contentType,
+    'Date': dateStr,
+    'Authorization': authHeader,
+  };
+};
+
+// HMAC-SHA1 implementation using Web Crypto API
+const hmacSHA1 = async (key: string, message: string): Promise<string> => {
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(key);
+  const messageData = encoder.encode(message);
+  
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    keyData,
+    { name: "HMAC", hash: "SHA-1" },
+    false,
+    ["sign"]
+  );
+  
+  const signature = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
+  
+  // Convert to base64
+  const bytes = new Uint8Array(signature);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 };
 
 export async function POST(request: Request) {

@@ -104,6 +104,66 @@ async function main() {
   return await res.json();
 }
 ```
+
+## OBS Signing (Important Difference)
+
+OBS uses a **different signing method** compared to other Huawei Cloud services. The `signRequest` function automatically detects OBS endpoints and applies the correct signing, but you should be aware of the differences:
+
+**OBS Endpoint format:** `https://obs.<region>.myhuaweicloud.com`
+
+**Example: List buckets in a region**
+```
+async function main() {
+  const region = 'sa-brazil-1';
+
+  const options = {
+    method: 'GET',
+    url: `https://obs.${region}.myhuaweicloud.com/`,
+    params: {},
+    data: '',
+    headers: { 'content-type': 'application/octet-stream' },
+  };
+
+  const signedHeaders = signRequest(options, AK, SK);
+  const res = await fetch(options.url, {
+    method: options.method,
+    headers: signedHeaders,
+  });
+
+  return await res.json();
+}
+```
+
+**Example: List objects in a bucket**
+```
+async function main() {
+  const region = 'sa-brazil-1';
+  const bucket = 'my-bucket';
+
+  const options = {
+    method: 'GET',
+    url: `https://obs.${region}.myhuaweicloud.com/${bucket}/`,
+    params: { 'max-keys': 100 },
+    data: '',
+    headers: { 'content-type': 'application/octet-stream' },
+  };
+
+  const signedHeaders = signRequest(options, AK, SK);
+  const res = await fetch(options.url, {
+    method: options.method,
+    headers: signedHeaders,
+  });
+
+  return await res.json();
+}
+```
+
+**Key differences from standard Huawei Cloud signing:**
+- OBS uses **HMAC-SHA1** (not SHA256)
+- Authorization header format: `OBS <accesskey>:<signature>` (not `SDK-HMAC-SHA256`)
+- No project ID required in the URL
+- The `signRequest` function automatically handles OBS detection based on the endpoint (detects `.obs.` in the URL)
+
 **IMPORTANT**
  - The APIs can use different measurements for each thing, so be sure of what is being used before using. For example, storage normally is measured in GBs, but sometimes is in MBs. 
  - When getting you need a specific information from an API that return lots of information, don't just call the API (unless it is necessary). For example, if I need you search for an ECS flavor that has exactly 1vcpu and 1GB ram, there is no need to add 21000 lines of flavors to the context. You can just take a look at the format of the response of the API and make a code that filters for the results that have 1vcpu and 1GB of ram (might be written as 1024MB).
