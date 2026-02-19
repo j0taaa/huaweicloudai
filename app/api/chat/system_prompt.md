@@ -130,7 +130,11 @@ async function main() {
     headers: signedHeaders,
   });
 
-  return await res.json();
+  const text = await res.text();
+  return {
+    status: res.status, headers: Object.fromEntries(res.headers), text: text };
+  }
+ })
 }
 ```
 
