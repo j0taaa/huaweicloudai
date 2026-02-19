@@ -99,6 +99,7 @@ const TOOL_RESULT_COLLAPSE_LINES = 16;
 const INPUT_MIN_HEIGHT = 48;
 const INPUT_MAX_HEIGHT = 220;
 const SCROLL_BOTTOM_THRESHOLD = 48;
+const ASSISTANT_CONTENT_CACHE_LIMIT = 400;
 const COMPACTION_MARKER_PREFIX = "Conversation compacted";
 const estimateTokens = (value: string) => {
   const trimmed = value.trim();
@@ -273,6 +274,13 @@ const ChartBlock = ({ data }: { data: ChartDatum[] }) => {
 };
 
 const renderAssistantMessageContent = (content: string): ReactNode[] => {
+  const cached = assistantContentCache.get(content);
+  if (cached) {
+    assistantContentCache.delete(content);
+    assistantContentCache.set(content, cached);
+    return cached;
+  }
+
   const chartBlockPattern = /```chart\s*([\s\S]*?)```/g;
   const blocks: ReactNode[] = [];
   let lastIndex = 0;
@@ -326,8 +334,20 @@ ${rawChartData}
     );
   }
 
-  return blocks.length > 0 ? blocks : [content];
+  const renderedBlocks = blocks.length > 0 ? blocks : [content];
+
+  assistantContentCache.set(content, renderedBlocks);
+  if (assistantContentCache.size > ASSISTANT_CONTENT_CACHE_LIMIT) {
+    const oldestKey = assistantContentCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      assistantContentCache.delete(oldestKey);
+    }
+  }
+
+  return renderedBlocks;
 };
+
+const assistantContentCache = new Map<string, ReactNode[]>();
 
 const fetchProjectIds = async (ak: string, sk: string) => {
   const response = await fetch("/api/project-ids", {
@@ -442,6 +462,10 @@ export default function Home() {
     );
   }, [activeConversationId, conversations]);
   const messages = activeConversation?.messages ?? [];
+  const visibleMessages = useMemo(
+    () => messages.filter((message) => message.role !== "tool"),
+    [messages],
+  );
   const input = activeConversationId ? drafts[activeConversationId] ?? "" : "";
   const error =
     activeConversationId ? conversationErrors[activeConversationId] ?? null : null;
@@ -2336,7 +2360,7 @@ export default function Home() {
       });
   }, [activeConversation, estimatedTokenCount, isLoading, pendingChoice]);
 
-  const showEmptyState = messages.length === 0;
+  const showEmptyState = visibleMessages.length === 0;
 
   const chatInput = (
     <form
@@ -2941,9 +2965,7 @@ export default function Home() {
                 <div className="mt-auto w-full max-w-2xl sm:mt-0">{chatInput}</div>
               </div>
             ) : (
-              messages
-                .filter((message) => message.role !== "tool")
-                .map((message, index, filteredMessages) => {
+              visibleMessages.map((message, index, filteredMessages) => {
                   // Check if this message is part of a tool call sequence (not the first)
                   const isPartOfToolSequence = 
                     message.role === "assistant" &&
@@ -2962,6 +2984,7 @@ export default function Home() {
                   return (
                   <div
                     key={`${message.role}-${index}`}
+                    style={{ contentVisibility: "auto", containIntrinsicSize: "1px 180px" }}
                     className={`flex ${
                       message.role === "user" ? "justify-end" : "justify-start"
                     } ${index === 0 ? "mt-10" : ""}`}
