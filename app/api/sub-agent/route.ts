@@ -81,7 +81,6 @@ const tools = [
   "ssh_connect",
   "ssh_send",
   "ssh_read",
-  "ssh_wait",
   "ssh_close",
   "search_rag_docs",
   "wait",
@@ -166,22 +165,6 @@ const toolDefs = [
           sessionId: { type: "string", description: "SSH sessionId returned by ssh_connect." },
           maxChars: { type: "number", description: "Maximum number of characters to return (default 4000)." },
           clear: { type: "boolean", description: "Whether to clear the buffer after reading." },
-        },
-        required: ["sessionId"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "ssh_wait",
-      description: "Wait for a marker string to appear in SSH output (default: Done).",
-      parameters: {
-        type: "object",
-        properties: {
-          sessionId: { type: "string", description: "SSH sessionId returned by ssh_connect." },
-          text: { type: "string", description: "Text to wait for in the SSH terminal output. Defaults to 'Done'." },
-          timeoutSeconds: { type: "number", description: "How long to wait before timing out. Defaults to 600 seconds." },
         },
         required: ["sessionId"],
       },
@@ -314,7 +297,6 @@ export async function POST(request: Request) {
       ssh_connect: "/api/ssh/connect",
       ssh_send: "/api/ssh/send",
       ssh_read: "/api/ssh/read",
-      ssh_wait: "/api/ssh/wait",
       ssh_close: "/api/ssh/close",
       search_rag_docs: "/api/search-rag",
       wait: "/api/wait",
