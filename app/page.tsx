@@ -442,6 +442,9 @@ export default function Home() {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [checklistCollapsed, setChecklistCollapsed] = useState(false);
   const [isDevMode, setIsDevMode] = useState(false);
+  const [editingMessageIndex, setEditingMessageIndex] = useState<number | null>(null);
+  const [editingMessageDraft, setEditingMessageDraft] = useState("");
+  const [copiedMessageKey, setCopiedMessageKey] = useState<string | null>(null);
   const [selectedChoice, setSelectedChoice] = useState("");
   const [customChoice, setCustomChoice] = useState("");
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
@@ -466,7 +469,10 @@ export default function Home() {
   }, [activeConversationId, conversations]);
   const messages = activeConversation?.messages ?? [];
   const visibleMessages = useMemo(
-    () => messages.filter((message) => message.role !== "tool"),
+    () =>
+      messages
+        .map((message, index) => ({ message, index }))
+        .filter((entry) => entry.message.role !== "tool"),
     [messages],
   );
   const input = activeConversationId ? drafts[activeConversationId] ?? "" : "";
@@ -697,6 +703,11 @@ export default function Home() {
 
   useEffect(() => {
     setChecklistCollapsed(false);
+  }, [activeConversationId]);
+
+  useEffect(() => {
+    setEditingMessageIndex(null);
+    setEditingMessageDraft("");
   }, [activeConversationId]);
 
   useEffect(() => {
@@ -2011,6 +2022,68 @@ export default function Home() {
     clearPendingRequestForConversation(activeConversationId);
   };
 
+  const truncateConversationFrom = (
+    startIndex: number,
+    replacementMessage?: ChatMessage,
+  ) => {
+    if (!activeConversationId) return;
+
+    const nextMessages = replacementMessage
+      ? [...messages.slice(0, startIndex), replacementMessage]
+      : messages.slice(0, startIndex);
+
+    const controller = abortControllersRef.current.get(activeConversationId);
+    if (controller) {
+      controller.abort();
+      abortControllersRef.current.delete(activeConversationId);
+    }
+
+    clearConversationLoading(activeConversationId);
+    clearPendingRequestForConversation(activeConversationId);
+    setPendingChoice(null);
+    setSelectedChoice("");
+    setCustomChoice("");
+    setConversationError(activeConversationId, null);
+    updateConversationMessages(activeConversationId, nextMessages);
+  };
+
+  const handleCopyMessage = async (messageKey: string, content: string) => {
+    if (!content.trim()) return;
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedMessageKey(messageKey);
+      window.setTimeout(() => {
+        setCopiedMessageKey((current) => (current === messageKey ? null : current));
+      }, 1500);
+    } catch {
+      // Ignore clipboard failures.
+    }
+  };
+
+  const handleStartEditMessage = (messageIndex: number, content: string) => {
+    setEditingMessageIndex(messageIndex);
+    setEditingMessageDraft(content);
+  };
+
+  const handleConfirmEditMessage = () => {
+    if (editingMessageIndex === null) return;
+    const nextContent = editingMessageDraft.trim();
+    if (!nextContent) return;
+
+    truncateConversationFrom(editingMessageIndex, {
+      role: "user",
+      content: nextContent,
+    });
+    setEditingMessageIndex(null);
+    setEditingMessageDraft("");
+  };
+
+  const handleDeleteMessage = (messageIndex: number) => {
+    truncateConversationFrom(messageIndex);
+    setEditingMessageIndex(null);
+    setEditingMessageDraft("");
+  };
+
   useEffect(() => {
     if (!credentialHydratedRef.current) return;
     setProjectIdError(null);
@@ -3021,16 +3094,17 @@ export default function Home() {
                 <div className="mt-auto w-full max-w-2xl sm:mt-0">{chatInput}</div>
               </div>
             ) : (
-              visibleMessages.map((message, index, filteredMessages) => {
+              visibleMessages.map((entry, index, filteredMessages) => {
+                  const { message, index: messageIndex } = entry;
                   // Check if this message is part of a tool call sequence (not the first)
                   const isPartOfToolSequence = 
                     message.role === "assistant" &&
                     message.tool_calls &&
                     message.tool_calls.length > 0 &&
                     index > 0 &&
-                    filteredMessages[index - 1].role === "assistant" &&
-                    filteredMessages[index - 1].tool_calls &&
-                    filteredMessages[index - 1].tool_calls!.length > 0;
+                    filteredMessages[index - 1].message.role === "assistant" &&
+                    filteredMessages[index - 1].message.tool_calls &&
+                    filteredMessages[index - 1].message.tool_calls!.length > 0;
                   
                   // Skip rendering this message entirely if it's part of a tool call sequence
                   if (isPartOfToolSequence) {
@@ -3039,30 +3113,123 @@ export default function Home() {
                   
                   return (
                   <div
-                    key={`${message.role}-${index}`}
+                    key={`${message.role}-${messageIndex}`}
                     style={{ contentVisibility: "auto", containIntrinsicSize: "1px 180px" }}
                     className={`flex ${
                       message.role === "user" ? "justify-end" : "justify-start"
                     } ${index === 0 ? "mt-10" : ""}`}
                   >
                     <div className="max-w-[80%]">
-                      <div className="flex flex-col gap-3">
-                        {message.content.trim() ? (
+                      <div
+                        className={`group flex items-center gap-2 ${
+                          message.role === "user" ? "flex-row-reverse" : "flex-row"
+                        }`}
+                      >
+                        {editingMessageIndex !== messageIndex ? (
                           <div
-                            className={`rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
-                              message.role === "user"
-                                ? "bg-gradient-to-br from-zinc-900 via-slate-900 to-zinc-800 text-white shadow-md dark:from-zinc-50 dark:via-white dark:to-zinc-200 dark:text-zinc-900"
-                                : "bg-white/90 text-zinc-900 ring-1 ring-zinc-300/60 shadow-lg dark:bg-white/10 dark:text-zinc-100 dark:ring-white/20"
+                            className={`flex gap-1 opacity-0 transition group-hover:opacity-100 ${
+                              message.role === "user" ? "order-2" : "order-1"
                             }`}
                           >
-                            {message.role === "assistant" ? (
-                              <div className="markdown-content">
-                                {renderAssistantMessageContent(message.content)}
-                              </div>
-                            ) : (
-                              message.content
-                            )}
+                            <button
+                              type="button"
+                              title="Copy message"
+                              aria-label="Copy message"
+                              onClick={() =>
+                                handleCopyMessage(`${message.role}-${messageIndex}`, message.content)
+                              }
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200 bg-white/90 text-zinc-600 shadow-sm transition hover:border-zinc-400 hover:text-zinc-900 dark:border-white/15 dark:bg-zinc-900/90 dark:text-zinc-300 dark:hover:border-white/40 dark:hover:text-white"
+                            >
+                              {copiedMessageKey === `${message.role}-${messageIndex}` ? (
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4" aria-hidden="true">
+                                  <path d="M20 6 9 17l-5-5" />
+                                </svg>
+                              ) : (
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4" aria-hidden="true">
+                                  <rect x="9" y="9" width="11" height="11" rx="2" />
+                                  <path d="M5 15V6a2 2 0 0 1 2-2h9" />
+                                </svg>
+                              )}
+                            </button>
+                            {message.role === "user" ? (
+                              <>
+                                <button
+                                  type="button"
+                                  title="Edit message"
+                                  aria-label="Edit message"
+                                  onClick={() =>
+                                    handleStartEditMessage(messageIndex, message.content)
+                                  }
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200 bg-white/90 text-zinc-600 shadow-sm transition hover:border-zinc-400 hover:text-zinc-900 dark:border-white/15 dark:bg-zinc-900/90 dark:text-zinc-300 dark:hover:border-white/40 dark:hover:text-white"
+                                >
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4" aria-hidden="true">
+                                    <path d="M12 20h9" />
+                                    <path d="m16.5 3.5 4 4L7 21H3v-4z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  type="button"
+                                  title="Delete message"
+                                  aria-label="Delete message"
+                                  onClick={() => handleDeleteMessage(messageIndex)}
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-200 bg-white/90 text-red-600 shadow-sm transition hover:border-red-400 hover:text-red-700 dark:border-red-400/30 dark:bg-zinc-900/90 dark:text-red-300 dark:hover:border-red-300/60 dark:hover:text-red-200"
+                                >
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4" aria-hidden="true">
+                                    <path d="M3 6h18" />
+                                    <path d="M8 6V4h8v2" />
+                                    <path d="M19 6l-1 14H6L5 6" />
+                                  </svg>
+                                </button>
+                              </>
+                            ) : null}
                           </div>
+                        ) : null}
+                        {message.content.trim() ? (
+                          editingMessageIndex === messageIndex ? (
+                            <div className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-zinc-950/80">
+                              <textarea
+                                value={editingMessageDraft}
+                                onChange={(event) => setEditingMessageDraft(event.target.value)}
+                                className="min-h-24 w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400 dark:border-white/10 dark:bg-black/50 dark:text-zinc-100 dark:focus:border-white/30"
+                              />
+                              <div className="mt-2 flex justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingMessageIndex(null);
+                                    setEditingMessageDraft("");
+                                  }}
+                                  className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleConfirmEditMessage}
+                                  disabled={!editingMessageDraft.trim()}
+                                  className="rounded-full bg-zinc-900 px-3 py-1 text-xs font-semibold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                                >
+                                  Save
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div
+                              className={`rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+                                message.role === "user"
+                                  ? "bg-gradient-to-br from-zinc-900 via-slate-900 to-zinc-800 text-white shadow-md dark:from-zinc-50 dark:via-white dark:to-zinc-200 dark:text-zinc-900"
+                                  : "bg-white/90 text-zinc-900 ring-1 ring-zinc-300/60 shadow-lg dark:bg-white/10 dark:text-zinc-100 dark:ring-white/20"
+                              }`}
+                            >
+                              {message.role === "assistant" ? (
+                                <div className="markdown-content">
+                                  {renderAssistantMessageContent(message.content)}
+                                </div>
+                              ) : (
+                                message.content
+                              )}
+                            </div>
+                          )
                         ) : null}
                         {message.role === "assistant" &&
                         message.tool_calls &&
@@ -3073,7 +3240,7 @@ export default function Home() {
                               const consecutiveToolCalls: ToolCall[] = [];
                               let checkIndex = index;
                               while (checkIndex < filteredMessages.length) {
-                                const checkMessage = filteredMessages[checkIndex];
+                                const checkMessage = filteredMessages[checkIndex].message;
                                 if (checkMessage.role === "assistant" && 
                                     checkMessage.tool_calls && 
                                     checkMessage.tool_calls.length > 0) {
