@@ -146,8 +146,8 @@ async function main() {
 
   const options = {
     method: 'GET',
-    url: `https://obs.${region}.myhuaweicloud.com/${bucket}/`,
-    params: { 'max-keys': 100 },
+    url: `https://${bucket}.obs.${region}.myhuaweicloud.com/`,
+    params: { 'max-keys': 1000 },
     data: '',
     headers: { 'content-type': 'application/octet-stream' },
   };
@@ -158,7 +158,13 @@ async function main() {
     headers: signedHeaders,
   });
 
-  return await res.json();
+  const text = await res.text();
+  return {
+    status: res.status,
+    statusText: res.statusText,
+    headers: Object.fromEntries(res.headers),
+    body: text
+  };
 }
 ```
 
