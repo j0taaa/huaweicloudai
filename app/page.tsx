@@ -2025,8 +2025,8 @@ export default function Home() {
   const truncateConversationFrom = (
     startIndex: number,
     replacementMessage?: ChatMessage,
-  ) => {
-    if (!activeConversationId) return;
+  ): { conversationId: string; nextMessages: ChatMessage[] } | null => {
+    if (!activeConversationId) return null;
 
     const nextMessages = replacementMessage
       ? [...messages.slice(0, startIndex), replacementMessage]
@@ -2045,18 +2045,39 @@ export default function Home() {
     setCustomChoice("");
     setConversationError(activeConversationId, null);
     updateConversationMessages(activeConversationId, nextMessages);
+    return { conversationId: activeConversationId, nextMessages };
+  };
+
+  const markMessageCopied = (messageKey: string) => {
+    setCopiedMessageKey(messageKey);
+    window.setTimeout(() => {
+      setCopiedMessageKey((current) => (current === messageKey ? null : current));
+    }, 1500);
   };
 
   const handleCopyMessage = async (messageKey: string, content: string) => {
     if (!content.trim()) return;
+
     try {
-      await navigator.clipboard.writeText(content);
-      setCopiedMessageKey(messageKey);
-      window.setTimeout(() => {
-        setCopiedMessageKey((current) => (current === messageKey ? null : current));
-      }, 1500);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(content);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = content;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        const copied = document.execCommand("copy");
+        document.body.removeChild(textarea);
+        if (!copied) {
+          throw new Error("Copy command failed.");
+        }
+      }
+      markMessageCopied(messageKey);
     } catch {
-      // Ignore clipboard failures.
+      // Keep silent if clipboard is unavailable/blocked.
     }
   };
 
@@ -2065,17 +2086,45 @@ export default function Home() {
     setEditingMessageDraft(content);
   };
 
-  const handleConfirmEditMessage = () => {
+  const handleConfirmEditMessage = async () => {
     if (editingMessageIndex === null) return;
+    if (isLoading || pendingChoice) return;
+
     const nextContent = editingMessageDraft.trim();
     if (!nextContent) return;
 
-    truncateConversationFrom(editingMessageIndex, {
+    const truncated = truncateConversationFrom(editingMessageIndex, {
       role: "user",
       content: nextContent,
     });
+
     setEditingMessageIndex(null);
     setEditingMessageDraft("");
+
+    if (!truncated) return;
+
+    const { conversationId, nextMessages } = truncated;
+    markConversationLoading(conversationId);
+    localStorage.setItem(
+      PENDING_REQUEST_STORAGE_KEY,
+      JSON.stringify({
+        conversationId,
+        messages: nextMessages,
+      }),
+    );
+
+    try {
+      const workingMessages = [...nextMessages];
+      const response = await sendMessages(conversationId, workingMessages);
+      await continueConversation(conversationId, workingMessages, response);
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error ? caughtError.message : "Something went wrong.";
+      setConversationError(conversationId, message);
+    } finally {
+      clearConversationLoading(conversationId);
+      clearPendingRequestForConversation(conversationId);
+    }
   };
 
   const handleDeleteMessage = (messageIndex: number) => {
@@ -3140,16 +3189,37 @@ export default function Home() {
                               }
                               className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200 bg-white/90 text-zinc-600 shadow-sm transition hover:border-zinc-400 hover:text-zinc-900 dark:border-white/15 dark:bg-zinc-900/90 dark:text-zinc-300 dark:hover:border-white/40 dark:hover:text-white"
                             >
-                              {copiedMessageKey === `${message.role}-${messageIndex}` ? (
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4" aria-hidden="true">
-                                  <path d="M20 6 9 17l-5-5" />
-                                </svg>
-                              ) : (
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4" aria-hidden="true">
+                              <span className="relative h-4 w-4">
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  className={`absolute inset-0 h-4 w-4 transition-all duration-200 ${
+                                    copiedMessageKey === `${message.role}-${messageIndex}`
+                                      ? "scale-75 opacity-0"
+                                      : "scale-100 opacity-100"
+                                  }`}
+                                  aria-hidden="true"
+                                >
                                   <rect x="9" y="9" width="11" height="11" rx="2" />
                                   <path d="M5 15V6a2 2 0 0 1 2-2h9" />
                                 </svg>
-                              )}
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  className={`absolute inset-0 h-4 w-4 text-emerald-600 transition-all duration-200 dark:text-emerald-400 ${
+                                    copiedMessageKey === `${message.role}-${messageIndex}`
+                                      ? "scale-100 opacity-100"
+                                      : "scale-75 opacity-0"
+                                  }`}
+                                  aria-hidden="true"
+                                >
+                                  <path d="M20 6 9 17l-5-5" />
+                                </svg>
+                              </span>
                             </button>
                             {message.role === "user" ? (
                               <>
