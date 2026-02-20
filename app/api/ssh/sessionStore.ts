@@ -6,6 +6,8 @@ type SshSession = {
   client: Client;
   stream: ClientChannel;
   buffer: string;
+  bufferStart: number;
+  nextReadIndex: number;
   createdAt: number;
   lastActivity: number;
 };
@@ -24,7 +26,10 @@ const appendBuffer = (session: SshSession, chunk: string) => {
   session.buffer += chunk;
   session.lastActivity = Date.now();
   if (session.buffer.length > MAX_BUFFER_CHARS) {
+    const trimmedChars = session.buffer.length - MAX_BUFFER_CHARS;
     session.buffer = session.buffer.slice(-MAX_BUFFER_CHARS);
+    session.bufferStart += trimmedChars;
+    session.nextReadIndex = Math.max(session.nextReadIndex, session.bufferStart);
   }
 };
 
@@ -55,6 +60,8 @@ export const createSession = async (input: SshConnectInput) => {
             client,
             stream,
             buffer: "",
+            bufferStart: 0,
+            nextReadIndex: 0,
             createdAt: Date.now(),
             lastActivity: Date.now(),
           };
@@ -125,13 +132,15 @@ export const readBuffer = (sessionId: string, maxChars: number, clear: boolean) 
     throw new Error("SSH session not found.");
   }
 
-  const output =
-    session.buffer.length > maxChars
-      ? session.buffer.slice(-maxChars)
-      : session.buffer;
+  const unreadStartOffset = Math.max(session.nextReadIndex - session.bufferStart, 0);
+  const unreadOutput = session.buffer.slice(unreadStartOffset);
+  const output = unreadOutput.length > maxChars ? unreadOutput.slice(0, maxChars) : unreadOutput;
+
+  session.nextReadIndex += output.length;
 
   if (clear) {
     session.buffer = "";
+    session.bufferStart = session.nextReadIndex;
   }
 
   return output;
