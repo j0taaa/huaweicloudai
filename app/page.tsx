@@ -2385,7 +2385,7 @@ export default function Home() {
                 formRef.current?.requestSubmit();
               }
             }}
-            disabled={isLoading || Boolean(pendingChoice)}
+            disabled={Boolean(pendingChoice)}
             rows={1}
           />
           <div
