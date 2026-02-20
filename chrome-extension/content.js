@@ -1051,6 +1051,14 @@ if (!existingWidget) {
       return { title: normalizedTitle, task: payload.task };
     }
 
+    if (toolCall.function?.name === "wait") {
+      if (typeof payload.seconds !== "number" || !Number.isFinite(payload.seconds)) {
+        return { error: "Error: seconds must be a finite number for wait." };
+      }
+
+      return { title: normalizedTitle, seconds: payload.seconds };
+    }
+
     return {
       error: `Error: Unsupported tool payload for ${toolCall.function?.name}.`,
     };
@@ -1096,6 +1104,12 @@ if (!existingWidget) {
         : "Creates a focused sub-agent task.";
     }
 
+    if (toolCall.function.name === "wait") {
+      return typeof payload.seconds === "number"
+        ? `Waits for ${payload.seconds} second${payload.seconds === 1 ? "" : "s"}.`
+        : "Waits before continuing.";
+    }
+
     return "Runs a tool with the provided arguments.";
   };
 
@@ -1107,6 +1121,7 @@ if (!existingWidget) {
       get_api_details: "API details",
       ask_multiple_choice: "Ask multiple choice",
       create_sub_agent: "Create sub-agent",
+      wait: "Wait",
     };
 
     if (displayNameMap[name]) {
@@ -1779,6 +1794,39 @@ if (!existingWidget) {
     }
   };
 
+  const executeWaitTool = async (toolCall, { signal } = {}) => {
+    const payload = parseToolPayload(toolCall);
+    if (payload.error || typeof payload.seconds !== "number") {
+      return {
+        role: "tool",
+        content: payload.error || "Error: seconds is required for wait.",
+        tool_call_id: toolCall.id,
+      };
+    }
+
+    try {
+      const data = await requestServer(
+        activeServerUrl,
+        "/api/wait",
+        { seconds: payload.seconds },
+        { signal },
+      );
+      return {
+        role: "tool",
+        content: data?.error ?? data?.result ?? "Wait completed.",
+        tool_call_id: toolCall.id,
+      };
+    } catch (error) {
+      return {
+        role: "tool",
+        content: `Error executing wait: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+        tool_call_id: toolCall.id,
+      };
+    }
+  };
+
   const runToolCalls = async (toolCalls, { signal } = {}) => {
     return Promise.all(
       toolCalls.map(async (toolCall) => {
@@ -1800,6 +1848,10 @@ if (!existingWidget) {
 
         if (toolCall.function?.name === "create_sub_agent") {
           return executeCreateSubAgentTool(toolCall, { signal });
+        }
+
+        if (toolCall.function?.name === "wait") {
+          return executeWaitTool(toolCall, { signal });
         }
 
         return {
