@@ -122,10 +122,85 @@ const toolDefs = [
       },
     },
   },
-  ...["ssh_connect", "ssh_send", "ssh_read", "ssh_wait", "ssh_close"].map((name) => ({
-    type: "function" as const,
-    function: { name, description: `${name} tool.`, parameters: { type: "object", properties: {}, required: [] } },
-  })),
+  {
+    type: "function",
+    function: {
+      name: "ssh_connect",
+      description: "Open a password-based SSH session and return a sessionId for subsequent commands.",
+      parameters: {
+        type: "object",
+        properties: {
+          host: { type: "string", description: "SSH host or IP address." },
+          port: { type: "number", description: "SSH port (defaults to 22)." },
+          username: { type: "string", description: "SSH username." },
+          password: { type: "string", description: "SSH password." },
+        },
+        required: ["host", "username", "password"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "ssh_send",
+      description: "Send a command to an existing SSH session.",
+      parameters: {
+        type: "object",
+        properties: {
+          sessionId: { type: "string", description: "SSH sessionId returned by ssh_connect." },
+          command: { type: "string", description: "Command to send to the remote shell." },
+          appendNewline: { type: "boolean", description: "Append a newline to the command (default true)." },
+        },
+        required: ["sessionId", "command"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "ssh_read",
+      description: "Read recent output from an SSH session buffer.",
+      parameters: {
+        type: "object",
+        properties: {
+          sessionId: { type: "string", description: "SSH sessionId returned by ssh_connect." },
+          maxChars: { type: "number", description: "Maximum number of characters to return (default 4000)." },
+          clear: { type: "boolean", description: "Whether to clear the buffer after reading." },
+        },
+        required: ["sessionId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "ssh_wait",
+      description: "Wait for a marker string to appear in SSH output (default: Done).",
+      parameters: {
+        type: "object",
+        properties: {
+          sessionId: { type: "string", description: "SSH sessionId returned by ssh_connect." },
+          text: { type: "string", description: "Text to wait for in the SSH terminal output. Defaults to 'Done'." },
+          timeoutSeconds: { type: "number", description: "How long to wait before timing out. Defaults to 600 seconds." },
+        },
+        required: ["sessionId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "ssh_close",
+      description: "Close an SSH session and release its resources.",
+      parameters: {
+        type: "object",
+        properties: {
+          sessionId: { type: "string", description: "SSH sessionId returned by ssh_connect." },
+        },
+        required: ["sessionId"],
+      },
+    },
+  },
   {
     type: "function",
     function: {
