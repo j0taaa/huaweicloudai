@@ -95,6 +95,7 @@ const PENDING_REQUEST_STORAGE_KEY = "huaweicloudai-pending-request";
 const INFERENCE_MODE_STORAGE_KEY = "huaweicloudai-inference-mode";
 const INFERENCE_SETTINGS_STORAGE_KEY = "huaweicloudai-inference-settings";
 const THEME_STORAGE_KEY = "huaweicloudai-theme";
+const DEV_MODE_STORAGE_KEY = "huaweicloudai-dev-mode";
 const TOOL_RESULT_COLLAPSE_THRESHOLD = 900;
 const TOOL_RESULT_COLLAPSE_LINES = 16;
 const INPUT_MIN_HEIGHT = 48;
@@ -440,6 +441,7 @@ export default function Home() {
   const [compactMenuOpen, setCompactMenuOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [checklistCollapsed, setChecklistCollapsed] = useState(false);
+  const [isDevMode, setIsDevMode] = useState(false);
   const [selectedChoice, setSelectedChoice] = useState("");
   const [customChoice, setCustomChoice] = useState("");
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
@@ -579,6 +581,11 @@ export default function Home() {
     if (storedTheme === "light" || storedTheme === "dark" || storedTheme === "system") {
       setThemePreference(storedTheme);
     }
+
+    const storedDevMode = localStorage.getItem(DEV_MODE_STORAGE_KEY);
+    if (storedDevMode === "true") {
+      setIsDevMode(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -606,6 +613,10 @@ export default function Home() {
   useEffect(() => {
     localStorage.setItem(THEME_STORAGE_KEY, themePreference);
   }, [themePreference]);
+
+  useEffect(() => {
+    localStorage.setItem(DEV_MODE_STORAGE_KEY, isDevMode ? "true" : "false");
+  }, [isDevMode]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -1931,6 +1942,14 @@ export default function Home() {
     if (!trimmedInput || isLoading || pendingChoice || !activeConversationId) {
       return;
     }
+
+    if (trimmedInput.toLowerCase() === "dev") {
+      setIsDevMode(true);
+      clearDraft(activeConversationId);
+      setConversationError(activeConversationId, null);
+      return;
+    }
+
     const conversationId = activeConversationId;
 
     const nextMessages: ChatMessage[] = [
@@ -3067,6 +3086,38 @@ export default function Home() {
                               
                               const toolCalls = consecutiveToolCalls;
                               const hasMultipleCalls = toolCalls.length > 1;
+
+                              if (!isDevMode) {
+                                const latestToolCall = toolCalls[toolCalls.length - 1];
+                                const latestPayload = parseToolPayload(latestToolCall);
+                                const latestToolName =
+                                  latestPayload.title ??
+                                  formatToolName(latestToolCall.function.name);
+                                const latestToolComplete = toolResults.has(latestToolCall.id);
+
+                                return (
+                                  <div className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 shadow-sm dark:border-white/10 dark:bg-black dark:text-zinc-200">
+                                    <div className="flex items-center gap-3">
+                                      <span
+                                        className={`h-4 w-4 rounded-full border-2 ${
+                                          latestToolComplete
+                                            ? "border-emerald-500 border-t-emerald-500"
+                                            : "animate-spin border-zinc-300 border-t-zinc-600 dark:border-white/20 dark:border-t-white"
+                                        }`}
+                                        aria-hidden="true"
+                                      />
+                                      <div className="min-w-0">
+                                        <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">
+                                          {latestToolName}
+                                        </p>
+                                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                                          {latestToolComplete ? "Tool call complete" : "Running tool call..."}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              }
                               
                               // Get active tool call index (default to last)
                               const groupKey = `tool-group-${index}`;
