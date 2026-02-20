@@ -416,6 +416,33 @@ export async function POST(request: Request) {
         {
           type: "function",
           function: {
+            name: "ssh_wait",
+            description:
+              "Wait for a marker string to appear in SSH output (default: Done). Useful after long-running commands.",
+            parameters: {
+              type: "object",
+              properties: {
+                title: TOOL_TITLE_PROPERTY,
+                sessionId: {
+                  type: "string",
+                  description: "SSH sessionId returned by ssh_connect.",
+                },
+                text: {
+                  type: "string",
+                  description: "Text to wait for in the SSH terminal output. Defaults to 'Done'.",
+                },
+                timeoutSeconds: {
+                  type: "number",
+                  description: "How long to wait before timing out. Defaults to 600 seconds.",
+                },
+              },
+              required: ["sessionId"],
+            },
+          },
+        },
+        {
+          type: "function",
+          function: {
             name: "ssh_close",
             description: "Close an SSH session and release its resources.",
             parameters: {
