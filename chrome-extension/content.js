@@ -61,8 +61,25 @@ if (!existingWidget) {
   status.className = "hwc-chat-status";
   status.textContent = "Ready to connect";
 
+  const modeToggle = document.createElement("div");
+  modeToggle.className = "hwc-chat-mode-toggle";
+
+  const minimalModeButton = document.createElement("button");
+  minimalModeButton.type = "button";
+  minimalModeButton.className = "hwc-chat-toggle-option";
+  minimalModeButton.dataset.mode = "minimal";
+  minimalModeButton.textContent = "Minimal";
+
+  const devModeButton = document.createElement("button");
+  devModeButton.type = "button";
+  devModeButton.className = "hwc-chat-toggle-option";
+  devModeButton.dataset.mode = "dev";
+  devModeButton.textContent = "Dev";
+
+  modeToggle.append(minimalModeButton, devModeButton);
+
   headerTop.append(title, newChatButton);
-  header.append(headerTop, status);
+  header.append(headerTop, status, modeToggle);
 
   const credentials = document.createElement("div");
   credentials.className = "hwc-chat-credentials hwc-chat-credentials-collapsed";
@@ -302,6 +319,7 @@ if (!existingWidget) {
   const INFERENCE_MODE_STORAGE_KEY = "inferenceMode";
   const INFERENCE_SETTINGS_STORAGE_KEY = "inferenceSettings";
   const WIDGET_POSITION_STORAGE_KEY = "widgetPosition";
+  const DEV_MODE_STORAGE_KEY = "huaweicloudai-dev-mode";
   const chatHistory = [];
   let isSending = false;
   let hasRunningToolCalls = false;
@@ -310,6 +328,7 @@ if (!existingWidget) {
   let activeServerUrl = DEFAULT_SERVER_URL;
   let storedProjectIds = [];
   let inferenceMode = "default";
+  let isDevMode = false;
   let inferenceSettings = {
     baseUrl: "",
     model: "",
@@ -611,6 +630,13 @@ if (!existingWidget) {
   const setStatus = (message, state = "neutral") => {
     status.textContent = message;
     status.dataset.state = state;
+  };
+
+  const setDevMode = (enabled) => {
+    isDevMode = enabled;
+    minimalModeButton.classList.toggle("hwc-chat-toggle-option-active", !enabled);
+    devModeButton.classList.toggle("hwc-chat-toggle-option-active", enabled);
+    storageSet({ [DEV_MODE_STORAGE_KEY]: enabled ? "true" : "false" });
   };
 
   const escapeHtml = (value) =>
@@ -1979,7 +2005,7 @@ if (!existingWidget) {
 
       if (reply) {
         updateAssistantBubble(activeBubble, reply);
-      } else {
+      } else if (toolCalls.length === 0 || isDevMode) {
         activeBubble.remove();
       }
 
@@ -1993,7 +2019,9 @@ if (!existingWidget) {
         return;
       }
 
-      activeToolCallGroup = renderToolCalls(toolCalls, activeToolCallGroup);
+      if (isDevMode) {
+        activeToolCallGroup = renderToolCalls(toolCalls, activeToolCallGroup);
+      }
 
       const multipleChoiceCall = toolCalls.find(
         (toolCall) => toolCall.function?.name === "ask_multiple_choice",
@@ -2191,6 +2219,18 @@ if (!existingWidget) {
       return;
     }
 
+    if (value.toLowerCase() === "dev") {
+      setDevMode(!isDevMode);
+      renderBubble(
+        "assistant",
+        `Switched to ${isDevMode ? "Dev" : "Minimal"} mode.`,
+      );
+      input.value = "";
+      resizeInput();
+      input.focus();
+      return;
+    }
+
     const userMessage = { role: "user", content: value };
     chatHistory.push(userMessage);
     renderBubble("user", value);
@@ -2273,6 +2313,14 @@ if (!existingWidget) {
     setInferenceMode("default");
   });
 
+  minimalModeButton.addEventListener("click", () => {
+    setDevMode(false);
+  });
+
+  devModeButton.addEventListener("click", () => {
+    setDevMode(true);
+  });
+
   inferenceCustomButton.addEventListener("click", () => {
     setInferenceMode("custom");
   });
@@ -2292,6 +2340,7 @@ if (!existingWidget) {
     INFERENCE_MODE_STORAGE_KEY,
     INFERENCE_SETTINGS_STORAGE_KEY,
     WIDGET_POSITION_STORAGE_KEY,
+    DEV_MODE_STORAGE_KEY,
   ]).then((values) => {
     if (typeof values[CREDENTIALS_STORAGE_KEY] === "string") {
       try {
@@ -2348,6 +2397,10 @@ if (!existingWidget) {
         inferenceSettings = { baseUrl: "", model: "", apiKey: "" };
       }
     }
+
+    if (values[DEV_MODE_STORAGE_KEY] === "true") {
+      isDevMode = true;
+    }
     let restoredWidgetPosition = false;
     if (typeof values[WIDGET_POSITION_STORAGE_KEY] === "string") {
       try {
@@ -2370,6 +2423,7 @@ if (!existingWidget) {
     inferenceModelInput.value = inferenceSettings.model;
     inferenceApiKeyInput.value = inferenceSettings.apiKey;
     setInferenceMode(inferenceMode);
+    setDevMode(isDevMode);
     activeServerUrl = serverUrlInput.value;
     updateSaveButton();
     ensureWidgetOnScreen();

@@ -167,6 +167,15 @@
   color: #dc2626;
 }
 
+.hwc-chat-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(226, 232, 240, 0.8);
+  border-radius: 999px;
+  padding: 4px;
+}
+
 .hwc-chat-new {
   border: none;
   border-radius: 999px;
