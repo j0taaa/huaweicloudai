@@ -387,7 +387,6 @@ const formatToolName = (name: string) => {
     create_sub_agent: "Create sub-agent",
     set_checklist: "Set checklist",
     wait: "Wait",
-    ssh_wait: "SSH wait",
   };
 
   if (displayNameMap[name]) {
@@ -1141,21 +1140,6 @@ export default function Home() {
       };
     }
 
-    if (toolCall.function.name === "ssh_wait") {
-      if (!payload.sessionId) {
-        return {
-          error: "Error: sessionId is required for ssh_wait.",
-        };
-      }
-
-      return {
-        title: normalizedTitle,
-        sessionId: payload.sessionId,
-        text: payload.text,
-        timeoutSeconds: payload.timeoutSeconds,
-      };
-    }
-
     if (toolCall.function.name === "ssh_close") {
       if (!payload.sessionId) {
         return {
@@ -1546,50 +1530,6 @@ export default function Home() {
     }
   };
 
-  const executeSshWaitTool = async (toolCall: ToolCall): Promise<ChatMessage> => {
-    const payload = parseToolPayload(toolCall);
-
-    if (payload.error) {
-      return {
-        role: "tool",
-        content: payload.error,
-        tool_call_id: toolCall.id,
-      };
-    }
-
-    try {
-      const response = await fetch("/api/ssh/wait", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: payload.sessionId,
-          text: payload.text,
-          timeoutSeconds: payload.timeoutSeconds,
-        }),
-      });
-
-      const data = (await response.json()) as { result?: string; output?: string; error?: string };
-      const baseMessage = data.error ?? data.result ?? "No result returned from server.";
-      const content = data.output ? `${baseMessage}
-
-${data.output}` : baseMessage;
-
-      return {
-        role: "tool",
-        content,
-        tool_call_id: toolCall.id,
-      };
-    } catch (error) {
-      return {
-        role: "tool",
-        content: `Error executing ssh_wait: ${
-          error instanceof Error ? error.message : "Unknown error."
-        }`,
-        tool_call_id: toolCall.id,
-      };
-    }
-  };
-
   const executeSshCloseTool = async (toolCall: ToolCall): Promise<ChatMessage> => {
     const payload = parseToolPayload(toolCall);
 
@@ -1968,10 +1908,6 @@ ${data.output}` : baseMessage;
 
         if (toolCall.function.name === "ssh_read") {
           return executeSshReadTool(toolCall);
-        }
-
-        if (toolCall.function.name === "ssh_wait") {
-          return executeSshWaitTool(toolCall);
         }
 
         if (toolCall.function.name === "ssh_close") {
@@ -3562,12 +3498,6 @@ ${data.output}` : baseMessage;
                                         summary = payload.query
                                           ? `Searches Huawei Cloud documentation for "${payload.query}".`
                                           : "Searches Huawei Cloud documentation.";
-                                      }
-
-                                      if (toolCall.function.name === "ssh_wait") {
-                                        summary = payload.text
-                                          ? `Waits until SSH output contains "${payload.text}".`
-                                          : "Waits until SSH output contains \"Done\".";
                                       }
 
                                       if (toolCall.function.name === "wait") {
