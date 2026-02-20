@@ -1944,7 +1944,7 @@ export default function Home() {
     }
 
     if (trimmedInput.toLowerCase() === "dev") {
-      setIsDevMode(true);
+      setIsDevMode((previousValue) => !previousValue);
       clearDraft(activeConversationId);
       setConversationError(activeConversationId, null);
       return;
