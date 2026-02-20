@@ -3184,6 +3184,7 @@ export default function Home() {
                             ) : null}
                           </div>
                         ) : null}
+                        <div className="min-w-0">
                         {message.content.trim() ? (
                           editingMessageIndex === messageIndex ? (
                             <div className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-zinc-950/80">
@@ -3234,7 +3235,7 @@ export default function Home() {
                         {message.role === "assistant" &&
                         message.tool_calls &&
                         message.tool_calls.length > 0 ? (
-                          <div className="flex flex-col gap-3">
+                          <div className="mt-3 flex flex-col gap-3">
                             {(() => {
                               // Collect all consecutive assistant messages with tool_calls
                               const consecutiveToolCalls: ToolCall[] = [];
@@ -3504,6 +3505,7 @@ export default function Home() {
                             })()}
                           </div>
                         ) : null}
+                        </div>
                       </div>
                     </div>
                   </div>
