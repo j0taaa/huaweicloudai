@@ -233,8 +233,10 @@ If you need to execute commands on a remote host (for example, to validate a new
 
 1. Use `ssh_connect` with host, username, and password to open a session.
 2. Use `ssh_send` to run commands.
-3. Use `ssh_read` to fetch recent output (optionally clearing the buffer).
-4. Use `ssh_close` when finished.
+3. For long-running commands, make the remote command print a completion marker by appending `&& echo "Done"` (or another unique marker).
+4. Use `ssh_wait` to block until the marker appears in terminal output (defaults to waiting for `Done`).
+5. Use `ssh_read` to inspect output when needed.
+6. Use `ssh_close` when finished.
 
 ## Sub-agent orchestration
 
