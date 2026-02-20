@@ -3088,30 +3088,29 @@ export default function Home() {
                               const hasMultipleCalls = toolCalls.length > 1;
 
                               if (!isDevMode) {
-                                const latestToolCall = toolCalls[toolCalls.length - 1];
-                                const latestPayload = parseToolPayload(latestToolCall);
-                                const latestToolName =
-                                  latestPayload.title ??
-                                  formatToolName(latestToolCall.function.name);
-                                const latestToolComplete = toolResults.has(latestToolCall.id);
+                                const runningToolCall = [...toolCalls]
+                                  .reverse()
+                                  .find((call) => !toolResults.has(call.id));
+
+                                if (!isLoading || !runningToolCall) {
+                                  return null;
+                                }
+
+                                const runningPayload = parseToolPayload(runningToolCall);
+                                const runningToolName =
+                                  runningPayload.title ??
+                                  formatToolName(runningToolCall.function.name);
 
                                 return (
                                   <div className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 shadow-sm dark:border-white/10 dark:bg-black dark:text-zinc-200">
                                     <div className="flex items-center gap-3">
                                       <span
-                                        className={`h-4 w-4 rounded-full border-2 ${
-                                          latestToolComplete
-                                            ? "border-emerald-500 border-t-emerald-500"
-                                            : "animate-spin border-zinc-300 border-t-zinc-600 dark:border-white/20 dark:border-t-white"
-                                        }`}
+                                        className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600 dark:border-white/20 dark:border-t-white"
                                         aria-hidden="true"
                                       />
                                       <div className="min-w-0">
                                         <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">
-                                          {latestToolName}
-                                        </p>
-                                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                                          {latestToolComplete ? "Tool call complete" : "Running tool call..."}
+                                          {runningToolName}
                                         </p>
                                       </div>
                                     </div>
@@ -3344,15 +3343,17 @@ export default function Home() {
                 )}
               )
             )}
-            {isLoading ? (
-              <div className="flex items-center gap-2 rounded-2xl bg-zinc-100 px-4 py-3 text-sm text-zinc-600 dark:bg-white/10 dark:text-zinc-300">
+            {isLoading && (isDevMode || !hasRunningToolCalls) ? (
+              <div className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 shadow-sm dark:border-white/10 dark:bg-black dark:text-zinc-200">
+                <div className="flex items-center gap-3">
                 <span
                   className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600 dark:border-white/20 dark:border-t-white"
                   aria-hidden="true"
                 />
-                <span className="thinking-text">
-                  {isCompacting ? "Compacting" : "Thinking"}
-                </span>
+                  <span className="thinking-text text-sm font-semibold text-zinc-900 dark:text-white">
+                    {isCompacting ? "Compacting..." : "Thinking..."}
+                  </span>
+                </div>
               </div>
             ) : null}
           </div>
