@@ -43,6 +43,12 @@ const SYSTEM_PROMPT_PATH = path.join(
 const DEFAULT_SYSTEM_PROMPT = fs.readFileSync(SYSTEM_PROMPT_PATH, "utf8");
 const SYSTEM_PROMPT_PLACEHOLDER = "{{CREDENTIALS_BLOCK}}";
 
+const TOOL_TITLE_PROPERTY = {
+  type: "string",
+  description:
+    "Optional user-visible action title in present participle form (e.g., 'Getting ECS API information...', 'Creating FunctionGraph in Santiago...', 'Reading the Huawei Cloud documentation...'). Describe the action only; do not mention internal implementation details.",
+};
+
 const buildSystemPrompt = (context: ChatRequest["context"] = {}) => {
   const hasCredentials = context.accessKey?.trim() && context.secretKey?.trim();
   const hasProjectIds = context.projectIds && context.projectIds.length > 0;
@@ -166,6 +172,7 @@ export async function POST(request: Request) {
             parameters: {
               type: "object",
               properties: {
+                title: TOOL_TITLE_PROPERTY,
                 task: {
                   type: "string",
                   description:
@@ -185,6 +192,7 @@ export async function POST(request: Request) {
             parameters: {
               type: "object",
               properties: {
+                title: TOOL_TITLE_PROPERTY,
                 code: {
                   type: "string",
                   description: "JavaScript source to execute on the server.",
@@ -203,6 +211,7 @@ export async function POST(request: Request) {
             parameters: {
               type: "object",
               properties: {
+                title: TOOL_TITLE_PROPERTY,
                 question: {
                   type: "string",
                   description: "The question to present to the user.",
@@ -227,6 +236,7 @@ export async function POST(request: Request) {
             parameters: {
               type: "object",
               properties: {
+                title: TOOL_TITLE_PROPERTY,
                 tasks: {
                   type: "array",
                   description:
@@ -260,6 +270,7 @@ export async function POST(request: Request) {
             parameters: {
               type: "object",
               properties: {
+                title: TOOL_TITLE_PROPERTY,
                 productShort: {
                   type: "string",
                   description: "The short name of the Huawei Cloud service (e.g., 'ECS', 'OBS', 'VPC').",
@@ -282,6 +293,7 @@ export async function POST(request: Request) {
             parameters: {
               type: "object",
               properties: {
+                title: TOOL_TITLE_PROPERTY,
                 productShort: {
                   type: "string",
                   description: "The short name of the Huawei Cloud service (e.g., 'ECS', 'OBS', 'VPC').",
@@ -308,6 +320,7 @@ export async function POST(request: Request) {
             parameters: {
               type: "object",
               properties: {
+                title: TOOL_TITLE_PROPERTY,
                 host: {
                   type: "string",
                   description: "SSH host or IP address.",
@@ -337,6 +350,7 @@ export async function POST(request: Request) {
             parameters: {
               type: "object",
               properties: {
+                title: TOOL_TITLE_PROPERTY,
                 sessionId: {
                   type: "string",
                   description: "SSH sessionId returned by ssh_connect.",
@@ -362,6 +376,7 @@ export async function POST(request: Request) {
             parameters: {
               type: "object",
               properties: {
+                title: TOOL_TITLE_PROPERTY,
                 sessionId: {
                   type: "string",
                   description: "SSH sessionId returned by ssh_connect.",
@@ -387,6 +402,7 @@ export async function POST(request: Request) {
             parameters: {
               type: "object",
               properties: {
+                title: TOOL_TITLE_PROPERTY,
                 sessionId: {
                   type: "string",
                   description: "SSH sessionId returned by ssh_connect.",
@@ -405,6 +421,7 @@ export async function POST(request: Request) {
             parameters: {
               type: "object",
               properties: {
+                title: TOOL_TITLE_PROPERTY,
                 query: {
                   type: "string",
                   description:
