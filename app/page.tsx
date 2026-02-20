@@ -48,6 +48,7 @@ type ToolPayload = {
   top_k?: number;
   task?: string;
   tasks?: ChecklistTask[];
+  seconds?: number;
 };
 
 type ChecklistTask = {
@@ -385,6 +386,7 @@ const formatToolName = (name: string) => {
     ask_multiple_choice: "Ask multiple choice",
     create_sub_agent: "Create sub-agent",
     set_checklist: "Set checklist",
+    wait: "Wait",
   };
 
   if (displayNameMap[name]) {
@@ -1008,6 +1010,7 @@ export default function Home() {
       top_k?: number;
       task?: string;
       tasks?: ChecklistTask[];
+      seconds?: number;
     } = {};
 
     try {
@@ -1161,6 +1164,16 @@ export default function Home() {
         top_k: payload.top_k,
       };
     }
+    if (toolCall.function.name === "wait") {
+      if (typeof payload.seconds !== "number" || !Number.isFinite(payload.seconds)) {
+        return {
+          error: "Error: seconds must be a finite number for wait.",
+        };
+      }
+
+      return { title: normalizedTitle, seconds: payload.seconds };
+    }
+
     if (toolCall.function.name === "set_checklist") {
       if (!Array.isArray(payload.tasks)) {
         return {
@@ -1831,6 +1844,41 @@ export default function Home() {
     };
   };
 
+  const executeWaitTool = async (toolCall: ToolCall): Promise<ChatMessage> => {
+    const payload = parseToolPayload(toolCall);
+
+    if (payload.error || typeof payload.seconds !== "number") {
+      return {
+        role: "tool",
+        content: payload.error || "Error: seconds is required for wait.",
+        tool_call_id: toolCall.id,
+      };
+    }
+
+    try {
+      const response = await fetch("/api/wait", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seconds: payload.seconds }),
+      });
+
+      const data = (await response.json()) as { result?: string; error?: string };
+      return {
+        role: "tool",
+        content: data.error ?? data.result ?? "Wait completed.",
+        tool_call_id: toolCall.id,
+      };
+    } catch (error) {
+      return {
+        role: "tool",
+        content: `Error executing wait: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+        tool_call_id: toolCall.id,
+      };
+    }
+  };
+
   const runToolCalls = async (conversationId: string, toolCalls: ToolCall[]) => {
     return Promise.all(
       toolCalls.map(async (toolCall) => {
@@ -1873,6 +1921,11 @@ export default function Home() {
         if (toolCall.function.name === "set_checklist") {
           return executeSetChecklistTool(conversationId, toolCall);
         }
+
+        if (toolCall.function.name === "wait") {
+          return executeWaitTool(toolCall);
+        }
+
         return {
           role: "tool" as const,
           content: `Unsupported tool: ${toolCall.function.name}`,
@@ -3445,6 +3498,12 @@ export default function Home() {
                                         summary = payload.query
                                           ? `Searches Huawei Cloud documentation for "${payload.query}".`
                                           : "Searches Huawei Cloud documentation.";
+                                      }
+
+                                      if (toolCall.function.name === "wait") {
+                                        summary = typeof payload.seconds === "number"
+                                          ? `Waits for ${payload.seconds} second${payload.seconds === 1 ? "" : "s"}.`
+                                          : "Waits before continuing.";
                                       }
 
                                       if (payload.title) {

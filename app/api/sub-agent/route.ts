@@ -83,6 +83,7 @@ const tools = [
   "ssh_read",
   "ssh_close",
   "search_rag_docs",
+  "wait",
   "ask_main_agent",
   "return_sub_agent_result",
 ] as const;
@@ -134,6 +135,14 @@ const toolDefs = [
         properties: { query: { type: "string" }, product: { type: "string" }, top_k: { type: "number" } },
         required: ["query"],
       },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "wait",
+      description: "Pause for a number of seconds before continuing.",
+      parameters: { type: "object", properties: { seconds: { type: "number" } }, required: ["seconds"] },
     },
   },
   {
@@ -231,6 +240,7 @@ export async function POST(request: Request) {
       ssh_read: "/api/ssh/read",
       ssh_close: "/api/ssh/close",
       search_rag_docs: "/api/search-rag",
+      wait: "/api/wait",
     };
 
     const origin = new URL(request.url).origin;

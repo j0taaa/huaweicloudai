@@ -264,6 +264,25 @@ export async function POST(request: Request) {
         {
           type: "function",
           function: {
+            name: "wait",
+            description:
+              "Pause execution for a number of seconds, then continue with the next step.",
+            parameters: {
+              type: "object",
+              properties: {
+                title: TOOL_TITLE_PROPERTY,
+                seconds: {
+                  type: "number",
+                  description: "Seconds to wait before continuing (0-120).",
+                },
+              },
+              required: ["seconds"],
+            },
+          },
+        },
+        {
+          type: "function",
+          function: {
             name: "get_all_apis",
             description:
               "Get all available APIs for a Huawei Cloud service. Returns a list of API names and descriptions.",
