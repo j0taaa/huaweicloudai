@@ -26,6 +26,7 @@ type ChatResponse = {
 };
 
 type ToolPayload = {
+  title?: string;
   code?: string;
   question?: string;
   options?: string[];
@@ -964,6 +965,7 @@ export default function Home() {
 
   const parseToolPayload = (toolCall: ToolCall): ToolPayload => {
     let payload: {
+      title?: string;
       code?: string;
       question?: string;
       options?: string[];
@@ -999,6 +1001,11 @@ export default function Home() {
       };
     }
 
+    const normalizedTitle =
+      typeof payload.title === "string" && payload.title.trim().length > 0
+        ? payload.title.trim()
+        : undefined;
+
     if (toolCall.function.name === "eval_code") {
       if (!payload.code) {
         return {
@@ -1006,7 +1013,7 @@ export default function Home() {
         };
       }
 
-      return { code: payload.code };
+      return { title: normalizedTitle, code: payload.code };
     }
 
     if (toolCall.function.name === "ask_multiple_choice") {
@@ -1016,7 +1023,11 @@ export default function Home() {
         };
       }
 
-      return { question: payload.question, options: payload.options };
+      return {
+        title: normalizedTitle,
+        question: payload.question,
+        options: payload.options,
+      };
     }
 
     if (toolCall.function.name === "create_sub_agent") {
@@ -1026,7 +1037,7 @@ export default function Home() {
         };
       }
 
-      return { task: payload.task };
+      return { title: normalizedTitle, task: payload.task };
     }
 
     if (toolCall.function.name === "get_all_apis") {
@@ -1036,7 +1047,11 @@ export default function Home() {
         };
       }
 
-      return { productShort: payload.productShort, regionId: payload.regionId };
+      return {
+        title: normalizedTitle,
+        productShort: payload.productShort,
+        regionId: payload.regionId,
+      };
     }
 
     if (toolCall.function.name === "get_api_details") {
@@ -1046,7 +1061,12 @@ export default function Home() {
         };
       }
 
-      return { productShort: payload.productShort, action: payload.action, regionId: payload.regionId };
+      return {
+        title: normalizedTitle,
+        productShort: payload.productShort,
+        action: payload.action,
+        regionId: payload.regionId,
+      };
     }
 
     if (toolCall.function.name === "ssh_connect") {
@@ -1056,7 +1076,13 @@ export default function Home() {
         };
       }
 
-      return { host: payload.host, port: payload.port, username: payload.username, password: payload.password };
+      return {
+        title: normalizedTitle,
+        host: payload.host,
+        port: payload.port,
+        username: payload.username,
+        password: payload.password,
+      };
     }
 
     if (toolCall.function.name === "ssh_send") {
@@ -1066,7 +1092,12 @@ export default function Home() {
         };
       }
 
-      return { sessionId: payload.sessionId, command: payload.command, appendNewline: payload.appendNewline };
+      return {
+        title: normalizedTitle,
+        sessionId: payload.sessionId,
+        command: payload.command,
+        appendNewline: payload.appendNewline,
+      };
     }
 
     if (toolCall.function.name === "ssh_read") {
@@ -1076,7 +1107,12 @@ export default function Home() {
         };
       }
 
-      return { sessionId: payload.sessionId, maxChars: payload.maxChars, clear: payload.clear };
+      return {
+        title: normalizedTitle,
+        sessionId: payload.sessionId,
+        maxChars: payload.maxChars,
+        clear: payload.clear,
+      };
     }
 
     if (toolCall.function.name === "ssh_close") {
@@ -1086,7 +1122,7 @@ export default function Home() {
         };
       }
 
-      return { sessionId: payload.sessionId };
+      return { title: normalizedTitle, sessionId: payload.sessionId };
     }
 
     if (toolCall.function.name === "search_rag_docs") {
@@ -1097,6 +1133,7 @@ export default function Home() {
       }
 
       return {
+        title: normalizedTitle,
         query: payload.query,
         product: payload.product,
         top_k: payload.top_k,
@@ -1119,7 +1156,7 @@ export default function Home() {
           ),
       );
 
-      return { tasks: normalizedTasks };
+      return { title: normalizedTitle, tasks: normalizedTasks };
     }
 
     return {
@@ -3122,13 +3159,17 @@ export default function Home() {
                                           : "Searches Huawei Cloud documentation.";
                                       }
 
+                                      if (payload.title) {
+                                        summary = payload.title;
+                                      }
+
                                       const hasResult = toolResults.has(toolCall.id);
                                       const result = String(toolResults.get(toolCall.id) ?? "");
                                       const resultLineCount = result.split("\n").length;
                                       const shouldCollapseResult =
                                         result.length > TOOL_RESULT_COLLAPSE_THRESHOLD ||
                                         resultLineCount > TOOL_RESULT_COLLAPSE_LINES;
-                                      const toolName = formatToolName(toolCall.function.name);
+                                      const toolName = payload.title ?? formatToolName(toolCall.function.name);
                                       const isSubAgentTool = toolCall.function.name === "create_sub_agent";
                                       const subAgentSteps = isSubAgentTool
                                         ? subAgentStepsByToolCallId[toolCall.id] ?? []

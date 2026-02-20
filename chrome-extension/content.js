@@ -971,32 +971,37 @@ if (!existingWidget) {
       };
     }
 
+    const normalizedTitle =
+      typeof payload.title === "string" && payload.title.trim().length > 0
+        ? payload.title.trim()
+        : undefined;
+
     if (toolCall.function?.name === "eval_code") {
       if (!payload.code) {
         return { error: "Error: No code provided for eval_code." };
       }
-      return { code: payload.code };
+      return { title: normalizedTitle, code: payload.code };
     }
 
     if (toolCall.function?.name === "ask_multiple_choice") {
       if (!payload.question || !Array.isArray(payload.options)) {
         return { error: "Error: Invalid payload for ask_multiple_choice." };
       }
-      return { question: payload.question, options: payload.options };
+      return { title: normalizedTitle, question: payload.question, options: payload.options };
     }
 
     if (toolCall.function?.name === "get_all_apis") {
       if (!payload.productShort) {
         return { error: "Error: productShort is required for get_all_apis." };
       }
-      return { productShort: payload.productShort, regionId: payload.regionId };
+      return { title: normalizedTitle, productShort: payload.productShort, regionId: payload.regionId };
     }
 
     if (toolCall.function?.name === "get_api_details") {
       if (!payload.productShort || !payload.action) {
         return { error: "Error: productShort and action are required for get_api_details." };
       }
-      return { productShort: payload.productShort, action: payload.action, regionId: payload.regionId };
+      return { title: normalizedTitle, productShort: payload.productShort, action: payload.action, regionId: payload.regionId };
     }
 
     if (toolCall.function?.name === "search_rag_docs") {
@@ -1005,6 +1010,7 @@ if (!existingWidget) {
       }
 
       return {
+        title: normalizedTitle,
         query: payload.query,
         product: payload.product,
         top_k: payload.top_k,
@@ -1016,7 +1022,7 @@ if (!existingWidget) {
         return { error: "Error: task is required for create_sub_agent." };
       }
 
-      return { task: payload.task };
+      return { title: normalizedTitle, task: payload.task };
     }
 
     return {
@@ -1028,6 +1034,10 @@ if (!existingWidget) {
     const payload = parseToolPayload(toolCall);
     if (payload.error) {
       return "Unable to summarize tool details.";
+    }
+
+    if (payload.title) {
+      return payload.title;
     }
 
     if (toolCall.function.name === "ask_multiple_choice") {
@@ -1161,7 +1171,7 @@ if (!existingWidget) {
 
     const name = document.createElement("p");
     name.className = "hwc-chat-tool-name";
-    name.textContent = formatToolName(toolCall.function?.name || "Tool call");
+    name.textContent = parseToolPayload(toolCall).title || formatToolName(toolCall.function?.name || "Tool call");
 
     headerMeta.append(name);
 
