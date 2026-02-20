@@ -42,6 +42,10 @@ type ToolPayload = {
   appendNewline?: boolean;
   maxChars?: number;
   clear?: boolean;
+  doneText?: string;
+  timeoutMs?: number;
+  pollIntervalMs?: number;
+  seconds?: number;
   error?: string;
   query?: string;
   product?: string;
@@ -992,6 +996,10 @@ export default function Home() {
       appendNewline?: boolean;
       maxChars?: number;
       clear?: boolean;
+      doneText?: string;
+      timeoutMs?: number;
+      pollIntervalMs?: number;
+      seconds?: number;
       query?: string;
       product?: string;
       top_k?: number;
@@ -1126,6 +1134,22 @@ export default function Home() {
       };
     }
 
+    if (toolCall.function.name === "ssh_wait") {
+      if (!payload.sessionId) {
+        return {
+          error: "Error: sessionId is required for ssh_wait.",
+        };
+      }
+
+      return {
+        title: normalizedTitle,
+        sessionId: payload.sessionId,
+        doneText: payload.doneText,
+        timeoutMs: payload.timeoutMs,
+        pollIntervalMs: payload.pollIntervalMs,
+      };
+    }
+
     if (toolCall.function.name === "ssh_close") {
       if (!payload.sessionId) {
         return {
@@ -1134,6 +1158,16 @@ export default function Home() {
       }
 
       return { title: normalizedTitle, sessionId: payload.sessionId };
+    }
+
+    if (toolCall.function.name === "wait") {
+      if (typeof payload.seconds !== "number") {
+        return {
+          error: "Error: seconds is required for wait.",
+        };
+      }
+
+      return { title: normalizedTitle, seconds: payload.seconds };
     }
 
     if (toolCall.function.name === "search_rag_docs") {
@@ -1552,6 +1586,115 @@ export default function Home() {
     }
   };
 
+  const executeSshWaitTool = async (toolCall: ToolCall): Promise<ChatMessage> => {
+    const payload = parseToolPayload(toolCall);
+
+    if (payload.error) {
+      return {
+        role: "tool",
+        content: payload.error,
+        tool_call_id: toolCall.id,
+      };
+    }
+
+    try {
+      const response = await fetch("/api/ssh/wait", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: payload.sessionId,
+          doneText: payload.doneText,
+          timeoutMs: payload.timeoutMs,
+          pollIntervalMs: payload.pollIntervalMs,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          role: "tool",
+          content: errorText || "Error waiting for SSH output.",
+          tool_call_id: toolCall.id,
+        };
+      }
+
+      const data = (await response.json()) as {
+        done?: boolean;
+        lastLine?: string;
+        error?: string;
+      };
+      const contentValue = data.error ?? data;
+      const content =
+        typeof contentValue === "string"
+          ? contentValue
+          : JSON.stringify(contentValue, null, 2);
+
+      return {
+        role: "tool",
+        content,
+        tool_call_id: toolCall.id,
+      };
+    } catch (error) {
+      return {
+        role: "tool",
+        content: `Error executing ssh_wait: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+        tool_call_id: toolCall.id,
+      };
+    }
+  };
+
+  const executeWaitTool = async (toolCall: ToolCall): Promise<ChatMessage> => {
+    const payload = parseToolPayload(toolCall);
+
+    if (payload.error) {
+      return {
+        role: "tool",
+        content: payload.error,
+        tool_call_id: toolCall.id,
+      };
+    }
+
+    try {
+      const response = await fetch("/api/wait", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seconds: payload.seconds }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          role: "tool",
+          content: errorText || "Error waiting.",
+          tool_call_id: toolCall.id,
+        };
+      }
+
+      const data = (await response.json()) as { waitedSeconds?: number; error?: string };
+      const contentValue = data.error ?? data;
+      const content =
+        typeof contentValue === "string"
+          ? contentValue
+          : JSON.stringify(contentValue, null, 2);
+
+      return {
+        role: "tool",
+        content,
+        tool_call_id: toolCall.id,
+      };
+    } catch (error) {
+      return {
+        role: "tool",
+        content: `Error executing wait: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+        tool_call_id: toolCall.id,
+      };
+    }
+  };
+
   const executeSearchRagTool = async (toolCall: ToolCall): Promise<ChatMessage> => {
     const payload = parseToolPayload(toolCall);
 
@@ -1851,8 +1994,16 @@ export default function Home() {
           return executeSshReadTool(toolCall);
         }
 
+        if (toolCall.function.name === "ssh_wait") {
+          return executeSshWaitTool(toolCall);
+        }
+
         if (toolCall.function.name === "ssh_close") {
           return executeSshCloseTool(toolCall);
+        }
+
+        if (toolCall.function.name === "wait") {
+          return executeWaitTool(toolCall);
         }
 
         if (toolCall.function.name === "search_rag_docs") {

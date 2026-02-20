@@ -81,7 +81,9 @@ const tools = [
   "ssh_connect",
   "ssh_send",
   "ssh_read",
+  "ssh_wait",
   "ssh_close",
+  "wait",
   "search_rag_docs",
   "ask_main_agent",
   "return_sub_agent_result",
@@ -120,7 +122,7 @@ const toolDefs = [
       },
     },
   },
-  ...["ssh_connect", "ssh_send", "ssh_read", "ssh_close"].map((name) => ({
+  ...["ssh_connect", "ssh_send", "ssh_read", "ssh_wait", "ssh_close", "wait"].map((name) => ({
     type: "function" as const,
     function: { name, description: `${name} tool.`, parameters: { type: "object", properties: {}, required: [] } },
   })),
@@ -229,7 +231,9 @@ export async function POST(request: Request) {
       ssh_connect: "/api/ssh/connect",
       ssh_send: "/api/ssh/send",
       ssh_read: "/api/ssh/read",
+      ssh_wait: "/api/ssh/wait",
       ssh_close: "/api/ssh/close",
+      wait: "/api/wait",
       search_rag_docs: "/api/search-rag",
     };
 

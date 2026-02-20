@@ -6,6 +6,7 @@ type SshSession = {
   client: Client;
   stream: ClientChannel;
   buffer: string;
+  readCursor: number;
   createdAt: number;
   lastActivity: number;
 };
@@ -24,7 +25,9 @@ const appendBuffer = (session: SshSession, chunk: string) => {
   session.buffer += chunk;
   session.lastActivity = Date.now();
   if (session.buffer.length > MAX_BUFFER_CHARS) {
-    session.buffer = session.buffer.slice(-MAX_BUFFER_CHARS);
+    const overflow = session.buffer.length - MAX_BUFFER_CHARS;
+    session.buffer = session.buffer.slice(overflow);
+    session.readCursor = Math.max(0, session.readCursor - overflow);
   }
 };
 
@@ -55,6 +58,7 @@ export const createSession = async (input: SshConnectInput) => {
             client,
             stream,
             buffer: "",
+            readCursor: 0,
             createdAt: Date.now(),
             lastActivity: Date.now(),
           };
@@ -116,6 +120,7 @@ export const sendCommand = (sessionId: string, command: string, appendNewline: b
   }
 
   session.stream.write(appendNewline ? `${command}\n` : command);
+  session.readCursor = session.buffer.length;
   session.lastActivity = Date.now();
 };
 
@@ -125,16 +130,66 @@ export const readBuffer = (sessionId: string, maxChars: number, clear: boolean) 
     throw new Error("SSH session not found.");
   }
 
+  const unreadOutput = session.buffer.slice(session.readCursor);
   const output =
-    session.buffer.length > maxChars
-      ? session.buffer.slice(-maxChars)
-      : session.buffer;
+    unreadOutput.length > maxChars
+      ? unreadOutput.slice(-maxChars)
+      : unreadOutput;
+
+  session.readCursor = session.buffer.length;
 
   if (clear) {
     session.buffer = "";
+    session.readCursor = 0;
   }
 
   return output;
+};
+
+const normalizeLine = (line: string) => line.replace(/\u001b\[[0-9;]*m/g, "").trim();
+
+const getLastNonEmptyLine = (value: string) => {
+  const lines = value
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => normalizeLine(line))
+    .filter((line) => line.length > 0);
+  return lines.length ? lines[lines.length - 1] : "";
+};
+
+type WaitForDoneInput = {
+  sessionId: string;
+  doneText?: string;
+  timeoutMs?: number;
+  pollIntervalMs?: number;
+};
+
+export const waitForDone = async ({
+  sessionId,
+  doneText = "Done",
+  timeoutMs = 120000,
+  pollIntervalMs = 1000,
+}: WaitForDoneInput) => {
+  const session = sessions.get(sessionId);
+  if (!session) {
+    throw new Error("SSH session not found.");
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() <= deadline) {
+    const lastLine = getLastNonEmptyLine(session.buffer);
+    if (lastLine === doneText) {
+      return { done: true, lastLine };
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+
+  return {
+    done: false,
+    lastLine: getLastNonEmptyLine(session.buffer),
+    error: `Timed out waiting for \"${doneText}\" after ${timeoutMs}ms.`,
+  };
 };
 
 export const closeSession = (sessionId: string) => {

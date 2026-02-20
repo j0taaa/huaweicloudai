@@ -233,8 +233,11 @@ If you need to execute commands on a remote host (for example, to validate a new
 
 1. Use `ssh_connect` with host, username, and password to open a session.
 2. Use `ssh_send` to run commands.
-3. Use `ssh_read` to fetch recent output (optionally clearing the buffer).
-4. Use `ssh_close` when finished.
+3. Use `ssh_read` to fetch only the new output produced since the previous `ssh_send` or `ssh_read` call.
+4. Use `ssh_wait` to block until the latest SSH output line matches a target text (default: `Done`).
+5. Use `ssh_close` when finished.
+
+You can also use `wait` to pause for a few seconds when needed.
 
 ## Sub-agent orchestration
 

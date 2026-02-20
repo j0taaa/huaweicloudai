@@ -372,7 +372,7 @@ export async function POST(request: Request) {
           type: "function",
           function: {
             name: "ssh_read",
-            description: "Read recent output from an SSH session buffer.",
+            description: "Read only the output produced since the last ssh_send or ssh_read call.",
             parameters: {
               type: "object",
               properties: {
@@ -397,6 +397,37 @@ export async function POST(request: Request) {
         {
           type: "function",
           function: {
+            name: "ssh_wait",
+            description:
+              "Wait until the SSH session's latest output line exactly matches a target text (default: Done).",
+            parameters: {
+              type: "object",
+              properties: {
+                title: TOOL_TITLE_PROPERTY,
+                sessionId: {
+                  type: "string",
+                  description: "SSH sessionId returned by ssh_connect.",
+                },
+                doneText: {
+                  type: "string",
+                  description: "Target final output line to wait for (default: Done).",
+                },
+                timeoutMs: {
+                  type: "number",
+                  description: "Maximum time to wait in milliseconds (default 120000).",
+                },
+                pollIntervalMs: {
+                  type: "number",
+                  description: "Polling interval in milliseconds (default 1000).",
+                },
+              },
+              required: ["sessionId"],
+            },
+          },
+        },
+        {
+          type: "function",
+          function: {
             name: "ssh_close",
             description: "Close an SSH session and release its resources.",
             parameters: {
@@ -409,6 +440,24 @@ export async function POST(request: Request) {
                 },
               },
               required: ["sessionId"],
+            },
+          },
+        },
+        {
+          type: "function",
+          function: {
+            name: "wait",
+            description: "Pause execution for a number of seconds.",
+            parameters: {
+              type: "object",
+              properties: {
+                title: TOOL_TITLE_PROPERTY,
+                seconds: {
+                  type: "number",
+                  description: "Seconds to wait. Must be non-negative.",
+                },
+              },
+              required: ["seconds"],
             },
           },
         },
