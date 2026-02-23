@@ -61,25 +61,8 @@ if (!existingWidget) {
   status.className = "hwc-chat-status";
   status.textContent = "Ready to connect";
 
-  const modeToggle = document.createElement("div");
-  modeToggle.className = "hwc-chat-mode-toggle";
-
-  const minimalModeButton = document.createElement("button");
-  minimalModeButton.type = "button";
-  minimalModeButton.className = "hwc-chat-toggle-option";
-  minimalModeButton.dataset.mode = "minimal";
-  minimalModeButton.textContent = "Minimal";
-
-  const devModeButton = document.createElement("button");
-  devModeButton.type = "button";
-  devModeButton.className = "hwc-chat-toggle-option";
-  devModeButton.dataset.mode = "dev";
-  devModeButton.textContent = "Dev";
-
-  modeToggle.append(minimalModeButton, devModeButton);
-
   headerTop.append(title, newChatButton);
-  header.append(headerTop, status, modeToggle);
+  header.append(headerTop, status);
 
   const credentials = document.createElement("div");
   credentials.className = "hwc-chat-credentials hwc-chat-credentials-collapsed";
@@ -634,8 +617,6 @@ if (!existingWidget) {
 
   const setDevMode = (enabled) => {
     isDevMode = enabled;
-    minimalModeButton.classList.toggle("hwc-chat-toggle-option-active", !enabled);
-    devModeButton.classList.toggle("hwc-chat-toggle-option-active", enabled);
     storageSet({ [DEV_MODE_STORAGE_KEY]: enabled ? "true" : "false" });
   };
 
@@ -2273,10 +2254,6 @@ if (!existingWidget) {
 
     if (value.toLowerCase() === "dev") {
       setDevMode(!isDevMode);
-      renderBubble(
-        "assistant",
-        `Switched to ${isDevMode ? "Dev" : "Minimal"} mode.`,
-      );
       input.value = "";
       resizeInput();
       input.focus();
@@ -2363,14 +2340,6 @@ if (!existingWidget) {
 
   inferenceDefaultButton.addEventListener("click", () => {
     setInferenceMode("default");
-  });
-
-  minimalModeButton.addEventListener("click", () => {
-    setDevMode(false);
-  });
-
-  devModeButton.addEventListener("click", () => {
-    setDevMode(true);
   });
 
   inferenceCustomButton.addEventListener("click", () => {
