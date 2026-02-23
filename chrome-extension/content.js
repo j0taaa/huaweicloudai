@@ -1441,6 +1441,40 @@ if (!existingWidget) {
     }
   };
 
+  const parseNdjsonResponse = (text) => {
+    const events = text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+
+    if (events.length === 0) {
+      return {};
+    }
+
+    const finalEvent = [...events].reverse().find((event) => event?.type === "final");
+    if (finalEvent) {
+      return finalEvent;
+    }
+
+    const errorEvent = [...events].reverse().find((event) => event?.type === "error");
+    if (errorEvent) {
+      return errorEvent;
+    }
+
+    return events[events.length - 1];
+  };
+
+  const parseServerResponse = async (response) => {
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/x-ndjson")) {
+      const text = await response.text();
+      return parseNdjsonResponse(text);
+    }
+
+    return response.json();
+  };
+
   const requestServer = async (serverUrl, endpoint, payload, { signal } = {}) => {
     if (
       typeof chrome !== "undefined" &&
@@ -1508,7 +1542,7 @@ if (!existingWidget) {
       throw new Error(errorText || "Server error.");
     }
 
-    return response.json();
+    return parseServerResponse(response);
   };
 
   const sendMessages = async (
