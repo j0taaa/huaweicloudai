@@ -934,17 +934,35 @@ if (!existingWidget) {
     return bubble;
   };
 
-  const renderThinkingBubble = () => {
+  const renderThinkingBubble = (label = "Thinking...") => {
     const bubble = document.createElement("div");
     bubble.className =
       "hwc-chat-bubble hwc-chat-bubble-assistant hwc-chat-bubble-thinking";
     bubble.innerHTML = `
       <span class="hwc-chat-thinking-spinner" aria-hidden="true"></span>
-      <span>Thinking...</span>
+      <span>${escapeHtml(label)}</span>
     `;
     messages.append(bubble);
     scrollToBottomIfNeeded();
     return bubble;
+  };
+
+  const updateThinkingBubble = (bubble, label) => {
+    if (!bubble) {
+      return;
+    }
+
+    bubble.classList.add("hwc-chat-bubble-thinking");
+    bubble.textContent = "";
+
+    const spinner = document.createElement("span");
+    spinner.className = "hwc-chat-thinking-spinner";
+    spinner.setAttribute("aria-hidden", "true");
+
+    const text = document.createElement("span");
+    text.textContent = label;
+
+    bubble.append(spinner, text);
   };
 
   const finalizeAssistantBubble = (bubble, text) => {
@@ -960,7 +978,7 @@ if (!existingWidget) {
 
     try {
       return { parsed: JSON.parse(rawArgs), raw: rawArgs };
-    } catch (error) {
+    } catch {
       return { parsed: null, raw: rawArgs };
     }
   };
@@ -1112,6 +1130,15 @@ if (!existingWidget) {
     return name
       .replace(/_/g, " ")
       .replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
+  const getToolCallTitle = (toolCall) => {
+    const payload = parseToolPayload(toolCall);
+    if (payload && typeof payload.title === "string" && payload.title.trim()) {
+      return payload.title.trim();
+    }
+
+    return formatToolName(toolCall.function?.name || "Tool call");
   };
 
   const updateToolCardStatus = (toolCallId, status) => {
@@ -1409,7 +1436,7 @@ if (!existingWidget) {
     try {
       const url = new URL(withProtocol || DEFAULT_SERVER_URL);
       return `${url.protocol}//${url.host}`;
-    } catch (error) {
+    } catch {
       return DEFAULT_SERVER_URL;
     }
   };
@@ -2063,6 +2090,11 @@ if (!existingWidget) {
         (toolCall) => toolCall.function?.name !== "ask_multiple_choice",
       );
 
+      if (!isDevMode && toolCalls.length > 0) {
+        const latestToolCall = toolCalls[toolCalls.length - 1];
+        updateThinkingBubble(activeBubble, getToolCallTitle(latestToolCall));
+      }
+
       if (nonChoiceCalls.length > 0) {
         hasRunningToolCalls = true;
         updateFormState();
@@ -2099,12 +2131,19 @@ if (!existingWidget) {
           updateToolCardResult(multipleChoiceCall.id, payload.error);
           updateToolCardStatus(multipleChoiceCall.id, "error");
         } else {
+          if (!reply && activeBubble) {
+            activeBubble.remove();
+          }
           renderMultipleChoice(multipleChoiceCall, payload);
           return;
         }
       }
 
-      activeBubble = renderThinkingBubble();
+      if (!activeBubble || !activeBubble.isConnected) {
+        activeBubble = renderThinkingBubble();
+      } else {
+        updateThinkingBubble(activeBubble, "Thinking...");
+      }
       const { data } = await sendMessages(chatHistory, {
         allowFallback: false,
         signal: activeAbortController?.signal,
