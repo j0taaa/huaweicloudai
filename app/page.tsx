@@ -3050,8 +3050,8 @@ export default function Home() {
           </button>
         </header>
         <section className="surface-card relative flex h-full min-h-0 flex-1 flex-col gap-6 px-4 py-5 backdrop-blur sm:px-6 sm:py-6 lg:mx-4 lg:mb-4 lg:mt-4 lg:rounded-3xl">
-          <div className="absolute right-4 top-4 hidden items-center gap-2 sm:flex">
-            <div className="relative" ref={themeMenuRef}>
+          <div className="absolute right-4 top-4 z-30 hidden items-center gap-2 sm:flex">
+            <div className="relative z-40" ref={themeMenuRef}>
               <button
                 type="button"
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-white/70 bg-white/80 text-sm font-semibold text-zinc-700 shadow-sm backdrop-blur transition hover:text-zinc-900 dark:border-white/10 dark:bg-black/70 dark:text-zinc-200 dark:hover:text-white"
@@ -3063,7 +3063,7 @@ export default function Home() {
                 {themeEmoji[themePreference]}
               </button>
               {themeMenuOpen ? (
-                <div className="absolute right-0 top-full mt-2 w-40 rounded-2xl border border-zinc-200 bg-white p-2 text-sm text-zinc-700 shadow-lg dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-200">
+                <div className="absolute right-0 top-full z-50 mt-2 w-40 rounded-2xl border border-zinc-200 bg-white p-2 text-sm text-zinc-700 shadow-lg dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-200">
                   {themeOptions.map((option) => {
                     const isActive = option.value === themePreference;
                     return (
