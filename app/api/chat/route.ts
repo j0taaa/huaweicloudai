@@ -49,6 +49,42 @@ const TOOL_TITLE_PROPERTY = {
     "Optional user-visible action title in present participle form (e.g., 'Getting ECS API information...', 'Creating FunctionGraph in Santiago...', 'Reading the Huawei Cloud documentation...'). Describe the action only; do not mention internal implementation details.",
 };
 
+const RETRYABLE_FETCH_ERROR_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EPIPE",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_SOCKET",
+]);
+
+const CHAT_COMPLETION_TIMEOUT_MS = 120_000;
+const CHAT_COMPLETION_MAX_RETRIES = 2;
+
+const isRetryableFetchError = (error: unknown) => {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const errorWithCode = error as Error & { code?: string; cause?: unknown };
+  const directCode = errorWithCode.code;
+  if (directCode && RETRYABLE_FETCH_ERROR_CODES.has(directCode)) {
+    return true;
+  }
+
+  const cause = errorWithCode.cause;
+  if (!cause || typeof cause !== "object") {
+    return false;
+  }
+
+  const causeCode = (cause as { code?: string }).code;
+  return Boolean(causeCode && RETRYABLE_FETCH_ERROR_CODES.has(causeCode));
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const buildSystemPrompt = (context: ChatRequest["context"] = {}) => {
   const hasCredentials = context.accessKey?.trim() && context.secretKey?.trim();
   const hasProjectIds = context.projectIds && context.projectIds.length > 0;
@@ -467,7 +503,50 @@ export async function POST(request: Request) {
     dispatcher,
   } satisfies RequestInit & { dispatcher?: unknown };
 
-  const response = await fetch(endpoint, fetchOptions);
+  let response: Response | null = null;
+
+  try {
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt <= CHAT_COMPLETION_MAX_RETRIES; attempt += 1) {
+      try {
+        response = await fetch(endpoint, {
+          ...fetchOptions,
+          signal: AbortSignal.timeout(CHAT_COMPLETION_TIMEOUT_MS),
+        });
+
+        if (response.status >= 500 && attempt < CHAT_COMPLETION_MAX_RETRIES) {
+          await sleep(300 * (attempt + 1));
+          continue;
+        }
+
+        break;
+      } catch (error) {
+        if (!isRetryableFetchError(error) || attempt >= CHAT_COMPLETION_MAX_RETRIES) {
+          throw error;
+        }
+
+        lastError = error instanceof Error ? error : new Error(String(error));
+        await sleep(300 * (attempt + 1));
+      }
+    }
+
+    if (!response) {
+      throw lastError ?? new Error("Failed to fetch completion after retries.");
+    }
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown network failure while contacting model endpoint.";
+
+    return NextResponse.json(
+      {
+        error:
+          "Unable to reach the inference endpoint. Please retry. If the issue persists, verify network/proxy settings and endpoint availability.",
+        details: message,
+      },
+      { status: 502 },
+    );
+  }
 
   if (!response.ok) {
     const errorText = await response.text();
