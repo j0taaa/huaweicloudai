@@ -547,7 +547,7 @@ if (!existingWidget) {
   const updateFormState = () => {
     const isBusy = isSending || hasRunningToolCalls;
     const hasText = Boolean(input.value.trim());
-    input.disabled = isBusy || Boolean(pendingChoice);
+    input.disabled = Boolean(pendingChoice);
     sendButton.disabled = (!isBusy && !hasText) || Boolean(pendingChoice);
     sendButton.type = isBusy ? "button" : "submit";
     sendButton.setAttribute(
