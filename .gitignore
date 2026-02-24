@@ -47,3 +47,7 @@ next-env.d.ts
 /rag_cache/clean_docs/
 /rag_cache/raw_html/
 /rag_cache/*.backup
+
+/dist
+/rag-cpp-server/build
+/launcher/build

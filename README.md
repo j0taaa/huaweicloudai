@@ -1,44 +1,73 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This project is a Next.js app (TS server) plus a separate C++ RAG backend.
 
-## Getting Started
+## Architecture
 
-First, run the development server:
+- TS server (Next.js) handles API/UI orchestration.
+- C++ server handles RAG retrieval against `rag_cache/documents.json(.gz)`.
+- `/api/search-rag` in TS proxies to C++ server via `RAG_SERVER_URL`.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-## Docker
-
-Build and run the production image:
+## Local development
 
 ```bash
-docker build -t huaweicloudai .
-docker run --rm -p 3000:3000 huaweicloudai
+bun install
+cmake -S rag-cpp-server -B rag-cpp-server/build
+cmake --build rag-cpp-server/build -j
+RAG_SERVER_PORT=8088 ./rag-cpp-server/build/rag-cpp-server
 ```
 
-Or use Docker Compose:
+In another terminal:
 
 ```bash
-./scripts/compose-up.sh
+RAG_SERVER_URL=http://127.0.0.1:8088 bun run dev
 ```
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Build executables
 
-## Learn More
+Build the TS executable (Bun compile path), C++ RAG executable, and launcher executable:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+bun run build:release
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Artifacts are written to `dist/`:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `dist/ts-server`
+- `dist/rag-cpp-server`
+- `dist/huaweicloudai` (multi-file launcher that starts both)
+- `dist/huaweicloudai-single` (monolithic single-file binary)
+
+Run combined launcher (multi-file):
+
+```bash
+cd dist
+./huaweicloudai
+```
+
+Run monolithic single-file binary from anywhere:
+
+```bash
+cp dist/huaweicloudai-single /tmp/huaweicloudai-single
+chmod +x /tmp/huaweicloudai-single
+PORT=3000 /tmp/huaweicloudai-single
+```
+
+## Tests
+
+End-to-end dual-service smoke test:
+
+```bash
+bun run test:e2e
+```
+
+RAG relevance check over representative Huawei Cloud queries:
+
+```bash
+bun run test:rag
+```
+
+
+Monolithic single-file executable smoke test:
+
+```bash
+bun run test:launcher
+```
