@@ -1,6 +1,8 @@
 import fs from "fs";
 import path from "path";
 import { ProxyAgent } from "undici";
+import { getAppConfig } from "@/lib/app-config";
+import { requireApprovedUser } from "@/lib/user-auth";
 
 type ChatMessage = {
   role: "user" | "assistant" | "system" | "tool";
@@ -64,11 +66,14 @@ const buildSubSystemPrompt = (context: SharedContext = {}) => {
   return `${basePrompt}\n\n# Sub-agent contract\nYou are a delegated sub-agent.\n- Focus only on the delegated task.\n- Use ask_main_agent for clarification (never ask the user directly).\n- Return final output via return_sub_agent_result.\n- Keep responses concise and outcome-oriented.`;
 };
 
-const parseInference = (inference?: InferenceConfig) => {
+const parseInference = (inference: InferenceConfig | undefined, config: ReturnType<typeof getAppConfig>) => {
   const mode = inference?.mode === "custom" ? "custom" : "default";
-  const apiKey = mode === "custom" ? inference?.apiKey?.trim() : process.env.ZAI_APIKEY;
-  const baseUrl = mode === "custom" ? inference?.baseUrl?.trim() : process.env.ZAI_URL;
-  const model = mode === "custom" ? inference?.model?.trim() : "glm-4.7";
+  if (mode === "default" && !config.builtInInferenceEnabled) {
+    throw new Error("Built-in inference is disabled by admin.");
+  }
+  const apiKey = mode === "custom" ? inference?.apiKey?.trim() : config.builtInInference.apiKey;
+  const baseUrl = mode === "custom" ? inference?.baseUrl?.trim() : config.builtInInference.baseUrl;
+  const model = mode === "custom" ? inference?.model?.trim() : config.builtInInference.model;
   if (!apiKey || !baseUrl || !model) throw new Error("Missing inference configuration.");
   const endpoint = new URL("chat/completions", baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`).toString();
   return { apiKey, endpoint, model };
@@ -261,7 +266,16 @@ export async function POST(request: Request) {
       return;
     }
 
-    const { apiKey, endpoint, model } = parseInference(body.inference);
+    const access = await requireApprovedUser();
+    if (!access.ok) {
+      controller.enqueue(encoder.encode(`${JSON.stringify({ type: "error", error: "Authentication required.", steps: [] })}
+`));
+      controller.close();
+      return;
+    }
+
+    const config = getAppConfig();
+    const { apiKey, endpoint, model } = parseInference(body.inference, config);
     const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.https_proxy || process.env.http_proxy;
     const dispatcher = proxyUrl ? new ProxyAgent(proxyUrl) : undefined;
 

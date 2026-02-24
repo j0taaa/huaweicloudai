@@ -2,6 +2,8 @@ import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
 import { ProxyAgent } from "undici";
+import { getAppConfig } from "@/lib/app-config";
+import { requireApprovedUser } from "@/lib/user-auth";
 
 type ChatMessage = {
   role: "user" | "assistant" | "system" | "tool";
@@ -139,10 +141,20 @@ export async function POST(request: Request) {
     );
   }
 
+  const access = await requireApprovedUser();
+  if (!access.ok) {
+    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+  }
+
+  const config = getAppConfig();
   const inferenceMode = inference?.mode === "custom" ? "custom" : "default";
   const customBaseUrl = inference?.baseUrl?.trim();
   const customModel = inference?.model?.trim();
   const customApiKey = inference?.apiKey?.trim();
+
+  if (inferenceMode === "default" && !config.builtInInferenceEnabled) {
+    return NextResponse.json({ error: "Built-in inference is disabled by admin." }, { status: 400 });
+  }
 
   if (inferenceMode === "custom") {
     if (!customBaseUrl || !customModel || !customApiKey) {
@@ -155,21 +167,18 @@ export async function POST(request: Request) {
       );
     }
   } else {
-    const apiKey = process.env.ZAI_APIKEY;
-    const baseUrl = process.env.ZAI_URL;
-
-    if (!apiKey || !baseUrl) {
+    if (!config.builtInInference.apiKey || !config.builtInInference.baseUrl) {
       return NextResponse.json(
-        { error: "Missing ZAI_APIKEY or ZAI_URL environment variables." },
+        { error: "Built-in inference is not configured." },
         { status: 500 },
       );
     }
   }
 
   const apiKey =
-    inferenceMode === "custom" ? customApiKey : process.env.ZAI_APIKEY;
+    inferenceMode === "custom" ? customApiKey : config.builtInInference.apiKey;
   const baseUrl =
-    inferenceMode === "custom" ? customBaseUrl : process.env.ZAI_URL;
+    inferenceMode === "custom" ? customBaseUrl : config.builtInInference.baseUrl;
 
   if (!apiKey || !baseUrl) {
     return NextResponse.json(
@@ -193,7 +202,7 @@ export async function POST(request: Request) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: inferenceMode === "custom" ? customModel : "glm-4.7",
+      model: inferenceMode === "custom" ? customModel : config.builtInInference.model,
       messages: [
         { role: "system", content: buildSystemPrompt(context) },
         ...messages.filter((message) => message.role !== "system"),
