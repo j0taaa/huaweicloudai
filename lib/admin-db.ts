@@ -56,6 +56,13 @@ export const getOptions = () => {
     .all();
 };
 
+export const getOptionValue = (key: string) => {
+  const row = db
+    .query<{ value: string }>("SELECT value FROM admin_options WHERE key = ? LIMIT 1")
+    .get(key);
+  return row?.value;
+};
+
 export const upsertOption = (key: string, value: string) => {
   db.query(
     `INSERT INTO admin_options (key, value, updated_at)
