@@ -20,7 +20,6 @@ cp -r .next "$DIST_DIR/.next"
 cp -r public "$DIST_DIR/public"
 cp package.json "$DIST_DIR/package.json"
 cp -r node_modules "$DIST_DIR/node_modules"
-cp -r app "$DIST_DIR/app"
 cp -r chrome-extension "$DIST_DIR/chrome-extension"
 cp -r rag_cache "$DIST_DIR/rag_cache"
 
