@@ -38,17 +38,18 @@ cmake --build monolith/build -j
 
 export PAYLOAD_TAR="$(mktemp /tmp/huaweicloudai-payload-XXXXXX.tar.gz)"
 tar -C "$DIST_DIR" -czf "$PAYLOAD_TAR" .
-python - <<'PY'
-from pathlib import Path
-import struct
-import os
+bun -e '
+const fs = require("fs");
 
-stub = Path('monolith/build/huaweicloudai-monolith').read_bytes()
-payload = Path(os.environ['PAYLOAD_TAR']).read_bytes()
-footer = struct.pack('<Q8s', len(payload), b'HCAIMONO')
-out = Path('dist/huaweicloudai-single')
-out.write_bytes(stub + payload + footer)
-PY
+const stub = fs.readFileSync("monolith/build/huaweicloudai-monolith");
+const payload = fs.readFileSync(process.env.PAYLOAD_TAR);
+const footer = Buffer.alloc(16);
+footer.writeBigUInt64LE(BigInt(payload.length), 0);
+footer.write("HCAIMONO", 8, "ascii");
+
+const out = Buffer.concat([stub, payload, footer]);
+fs.writeFileSync("dist/huaweicloudai-single", out);
+'
 rm -f "$PAYLOAD_TAR"
 
 chmod +x "$DIST_DIR/ts-server" "$DIST_DIR/rag-cpp-server" "$DIST_DIR/huaweicloudai" "$DIST_DIR/huaweicloudai-single"
