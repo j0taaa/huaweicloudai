@@ -3,6 +3,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 type ChatMessage = {
   role: "user" | "assistant" | "tool" | "system";
@@ -399,6 +400,7 @@ const formatToolName = (name: string) => {
 };
 
 export default function Home() {
+  const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<
     string | null
@@ -428,9 +430,6 @@ export default function Home() {
   const [authReady, setAuthReady] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authUsername, setAuthUsername] = useState<string | null>(null);
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
-  const [authForm, setAuthForm] = useState({ username: "", password: "" });
-  const [authStatus, setAuthStatus] = useState<string | null>(null);
   const [builtInInferenceEnabled, setBuiltInInferenceEnabled] = useState(true);
   const [customInference, setCustomInference] = useState({
     baseUrl: "",
@@ -2769,47 +2768,22 @@ export default function Home() {
     </form>
   );
 
-  const submitAuth = async () => {
-    const endpoint = authMode === "login" ? "/api/auth/login" : "/api/auth/register";
-    setAuthStatus(null);
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: authForm.username, password: authForm.password }),
-    });
-    const payload = (await response.json()) as { error?: string; message?: string; username?: string };
-    if (!response.ok) {
-      setAuthStatus(payload.error ?? "Authentication failed.");
-      return;
-    }
-    if (authMode === "register") {
-      setAuthStatus(payload.message ?? "Registered. Awaiting admin approval.");
-      setAuthMode("login");
-      return;
-    }
-    setIsAuthenticated(true);
-    setAuthUsername(payload.username ?? authForm.username);
-    setAuthForm({ username: "", password: "" });
-  };
-
   const logoutUser = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     setIsAuthenticated(false);
     setAuthUsername(null);
   };
 
+  useEffect(() => {
+    if (authReady && loginEnabled && !isAuthenticated) {
+      router.replace("/login");
+    }
+  }, [authReady, isAuthenticated, loginEnabled, router]);
+
   if (authReady && loginEnabled && !isAuthenticated) {
     return (
-      <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center gap-4 p-6">
-        <h1 className="text-2xl font-bold">Huawei Cloud AI Chat</h1>
-        <p className="text-sm text-zinc-600 dark:text-zinc-300">Login is enabled by the admin. Register first, then wait for approval.</p>
-        <input className="rounded border px-3 py-2" placeholder="Username" value={authForm.username} onChange={(event) => setAuthForm((prev) => ({ ...prev, username: event.target.value }))} />
-        <input className="rounded border px-3 py-2" placeholder="Password" type="password" value={authForm.password} onChange={(event) => setAuthForm((prev) => ({ ...prev, password: event.target.value }))} />
-        {authStatus ? <p className="text-sm text-red-600">{authStatus}</p> : null}
-        <button className="rounded bg-black px-4 py-2 text-white" type="button" onClick={submitAuth}>{authMode === "login" ? "Login" : "Register"}</button>
-        <button className="text-sm underline" type="button" onClick={() => { setAuthStatus(null); setAuthMode((prev) => (prev === "login" ? "register" : "login")); }}>
-          {authMode === "login" ? "Need an account? Register" : "Already have an account? Login"}
-        </button>
+      <main className="app-shell flex min-h-dvh items-center justify-center px-6">
+        <p className="text-sm text-zinc-600 dark:text-zinc-300">Redirecting to login...</p>
       </main>
     );
   }
