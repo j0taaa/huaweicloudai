@@ -26,6 +26,7 @@ for _ in {1..120}; do
 done
 
 bun -e '
+import { pipeline } from "@xenova/transformers";
 const port = process.env.RAG_SERVER_PORT ?? "8091";
 const cases = [
   ["how to create an ECS instance", "ECS"],
@@ -34,12 +35,15 @@ const cases = [
   ["RDS MySQL backup and restore", "RDS"],
   ["CreateServer API vpc parameters", "VPC"],
 ];
+const pipe = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2", { quantized: true });
 let pass = 0;
 for (const [query, expected] of cases) {
+  const out = await pipe([query.slice(0, 2000)], { pooling: "mean", normalize: true });
+  const embedding = Array.from(out[0].data);
   const res = await fetch(`http://127.0.0.1:${port}/search`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ query, top_k: 3 }),
+    body: JSON.stringify({ query, top_k: 3, embedding }),
   });
   if (!res.ok) throw new Error(`search failed for ${query}: HTTP ${res.status}`);
   const payload = await res.json();

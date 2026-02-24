@@ -7,27 +7,24 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
-#include <cstring>
 #include <fstream>
 #include <iostream>
-#include <map>
-#include <set>
 #include <nlohmann/json.hpp>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
 
 using json = nlohmann::json;
 
-
 static const std::vector<std::string> SERVICE_NAMES = {
-  "EVS","OBS","ECS","VPC","RDS","CCE","ELB","IAM","APM","CSS","DWS","DLI","DDS",
-  "DMS","KAFKA","SMN","SMS","CSE","DCS","DDM","DRS","GES","GAUSSDB","MRS","SFS",
-  "SWR","FUNCTIONGRAPH","MODELARTS","DIS","CLOUDTABLE","CODEARTS","AOM","CES","LTS","BMS",
-  "AS","CAE","CCI","CSBS","VBS","SDRS","CBR","DES","HIVEL","FLINK","CLICKHOUSE","CDN",
-  "DNS","VOD","RTC","APIG","ROMA","WAF","HSS","DBSS","SEMASTER","IDENTITYCENTER","STS",
-  "PROJECTMAN","CLOUDPHONE","IEF","IMS","EIP","NAT","VPN","DEH","FPGA","GPU","OMS"
+  "EVS", "OBS", "ECS", "VPC", "RDS", "CCE", "ELB", "IAM", "APM", "CSS", "DWS", "DLI", "DDS",
+  "DMS", "KAFKA", "SMN", "SMS", "CSE", "DCS", "DDM", "DRS", "GES", "GAUSSDB", "MRS", "SFS",
+  "SWR", "FUNCTIONGRAPH", "MODELARTS", "DIS", "CLOUDTABLE", "CODEARTS", "AOM", "CES", "LTS", "BMS",
+  "AS", "CAE", "CCI", "CSBS", "VBS", "SDRS", "CBR", "DES", "FLINK", "CLICKHOUSE", "CDN", "DNS",
+  "VOD", "RTC", "APIG", "ROMA", "WAF", "HSS", "DBSS", "STS", "IEF", "IMS", "EIP", "NAT", "VPN"
 };
 
 struct Doc {
@@ -40,9 +37,10 @@ struct Doc {
 };
 
 struct AppState {
-  std::vector<Doc> docs;
   bool ready = false;
   std::string cacheDir;
+  std::vector<Doc> docs;
+  std::vector<std::vector<float>> embeddings;
   std::set<std::string> knownProducts;
 };
 
@@ -71,11 +69,37 @@ static std::string readGzip(const std::string& path) {
   std::string out;
   char buffer[8192];
   int bytes = 0;
-  while ((bytes = gzread(gz, buffer, sizeof(buffer))) > 0) {
-    out.append(buffer, bytes);
-  }
+  while ((bytes = gzread(gz, buffer, sizeof(buffer))) > 0) out.append(buffer, bytes);
   gzclose(gz);
   return out;
+}
+
+static std::vector<unsigned char> readBinary(const std::string& path) {
+  std::ifstream f(path, std::ios::binary);
+  if (!f) throw std::runtime_error("Cannot open binary file: " + path);
+  return std::vector<unsigned char>(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+}
+
+static std::vector<unsigned char> readBinaryGzip(const std::string& path) {
+  const std::string payload = readGzip(path);
+  return std::vector<unsigned char>(payload.begin(), payload.end());
+}
+
+static uint32_t readU32LE(const std::vector<unsigned char>& b, std::size_t& off) {
+  if (off + 4 > b.size()) throw std::runtime_error("Invalid embeddings buffer (u32)");
+  uint32_t v = static_cast<uint32_t>(b[off])
+    | (static_cast<uint32_t>(b[off + 1]) << 8)
+    | (static_cast<uint32_t>(b[off + 2]) << 16)
+    | (static_cast<uint32_t>(b[off + 3]) << 24);
+  off += 4;
+  return v;
+}
+
+static float readF32LE(const std::vector<unsigned char>& b, std::size_t& off) {
+  uint32_t u = readU32LE(b, off);
+  float f;
+  std::memcpy(&f, &u, sizeof(float));
+  return f;
 }
 
 static std::string toLower(std::string s) {
@@ -83,130 +107,96 @@ static std::string toLower(std::string s) {
   return s;
 }
 
-static std::vector<std::string> splitWords(const std::string& q) {
-  std::istringstream iss(toLower(q));
-  std::vector<std::string> words;
-  std::string w;
-  static const std::set<std::string> stopWords = {
-    "a", "an", "the", "to", "of", "for", "in", "on", "and", "or", "with", "by",
-    "is", "are", "be", "how", "what", "when", "where", "which", "can", "could", "should"
-  };
-  while (iss >> w) {
-    w.erase(std::remove_if(w.begin(), w.end(), [](unsigned char c) {
-      return !std::isalnum(c) && c != '-' && c != '_';
-    }), w.end());
-    if (w.size() >= 2 && stopWords.find(w) == stopWords.end()) words.push_back(w);
-  }
-  return words;
-}
-
 static std::vector<std::string> extractServiceNames(const std::string& query) {
+  std::string upper = query;
+  std::transform(upper.begin(), upper.end(), upper.begin(), [](unsigned char c) { return std::toupper(c); });
   std::vector<std::string> found;
-  const std::string upper = [&]() {
-    std::string t = query;
-    std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c){ return std::toupper(c); });
-    return t;
-  }();
-
   for (const auto& service : SERVICE_NAMES) {
-    if (upper.find(service) != std::string::npos) {
-      found.push_back(service);
-    }
+    if (upper.find(service) != std::string::npos) found.push_back(service);
   }
   return found;
 }
 
-static std::set<std::string> findMentionedProducts(const AppState& state, const std::string& queryLower) {
-  std::set<std::string> mentioned;
-  for (const auto& productLower : state.knownProducts) {
-    if (!productLower.empty() && queryLower.find(productLower) != std::string::npos) {
-      mentioned.insert(productLower);
-    }
+static double cosineSimilarity(const std::vector<float>& a, const std::vector<float>& b) {
+  if (a.empty() || a.size() != b.size()) return 0.0;
+  double dot = 0.0, normA = 0.0, normB = 0.0;
+  for (std::size_t i = 0; i < a.size(); ++i) {
+    dot += static_cast<double>(a[i]) * b[i];
+    normA += static_cast<double>(a[i]) * a[i];
+    normB += static_cast<double>(b[i]) * b[i];
   }
-  return mentioned;
+  if (normA == 0.0 || normB == 0.0) return 0.0;
+  return dot / (std::sqrt(normA) * std::sqrt(normB));
 }
 
-static double scoreDoc(
-  const Doc& d,
-  const std::vector<std::string>& terms,
-  const std::set<std::string>& mentionedProducts,
+static double calculateRelevanceScore(
+  double semanticScore,
+  const Doc& doc,
   const std::vector<std::string>& extractedServices,
   const std::string& query
 ) {
-  if (terms.empty()) return 0.0;
-  const std::string title = toLower(d.title);
-  const std::string product = toLower(d.product);
-  const std::string category = toLower(d.category);
-  const std::string body = toLower(d.content);
-
-  double semanticScore = 0.0;
-  for (const auto& t : terms) {
-    if (title.find(t) != std::string::npos) semanticScore += 2.2;
-    else if (product.find(t) != std::string::npos) semanticScore += 2.0;
-    else if (category.find(t) != std::string::npos) semanticScore += 1.6;
-    else if (body.find(t) != std::string::npos) semanticScore += 1.0;
-  }
-
-  semanticScore /= static_cast<double>(terms.size());
-  // normalize to [0,1] approximate semantic score
-  semanticScore = std::min(1.0, semanticScore / 2.2);
-
   double score = semanticScore;
 
-  if (!mentionedProducts.empty() && mentionedProducts.find(product) != mentionedProducts.end()) {
-    score *= 1.5;
-  }
-
   if (!extractedServices.empty()) {
-    std::string docProductUpper = d.product;
-    std::transform(docProductUpper.begin(), docProductUpper.end(), docProductUpper.begin(), [](unsigned char c){ return std::toupper(c); });
-
+    std::string docProduct = doc.product;
+    std::transform(docProduct.begin(), docProduct.end(), docProduct.begin(), [](unsigned char c) { return std::toupper(c); });
     for (const auto& svc : extractedServices) {
-      if (docProductUpper == svc) { score *= 1.5; break; }
+      if (docProduct == svc) {
+        score *= 1.5;
+        break;
+      }
     }
 
-    std::string titleUpper = d.title;
-    std::transform(titleUpper.begin(), titleUpper.end(), titleUpper.begin(), [](unsigned char c){ return std::toupper(c); });
+    std::string titleUpper = doc.title;
+    std::transform(titleUpper.begin(), titleUpper.end(), titleUpper.begin(), [](unsigned char c) { return std::toupper(c); });
     for (const auto& svc : extractedServices) {
-      if (titleUpper.find(svc) != std::string::npos) { score *= 1.2; break; }
+      if (titleUpper.find(svc) != std::string::npos) {
+        score *= 1.2;
+        break;
+      }
     }
   }
 
-  std::vector<std::string> qwords;
+  std::vector<std::string> queryWords;
   {
     std::istringstream iss(toLower(query));
     std::string w;
-    while (iss >> w) if (w.size() > 3) qwords.push_back(w);
+    while (iss >> w) if (w.size() > 3) queryWords.push_back(w);
   }
-  int matches = 0;
-  for (const auto& w : qwords) if (body.find(w) != std::string::npos) matches++;
-  if (!qwords.empty() && matches > 0) {
-    double ratio = static_cast<double>(matches) / static_cast<double>(qwords.size());
+
+  const std::string contentLower = toLower(doc.content);
+  int keywordMatches = 0;
+  for (const auto& w : queryWords) if (contentLower.find(w) != std::string::npos) keywordMatches++;
+  if (!queryWords.empty() && keywordMatches > 0) {
+    const double ratio = static_cast<double>(keywordMatches) / static_cast<double>(queryWords.size());
     score *= (1.0 + ratio * 0.2);
   }
 
   return std::min(score, 1.0);
 }
 
-static void loadDocs(AppState& state) {
-  const std::string docs = state.cacheDir + "/documents.json";
-  const std::string docsGz = docs + ".gz";
+static void loadDocsAndEmbeddings(AppState& state) {
+  const std::string docsPath = state.cacheDir + "/documents.json";
+  const std::string docsGzPath = docsPath + ".gz";
+  const std::string embPath = state.cacheDir + "/embeddings.bin";
+  const std::string embGzPath = embPath + ".gz";
 
-  std::string payload;
-  if (fileExists(docsGz)) {
-    payload = readGzip(docsGz);
-  } else if (fileExists(docs)) {
-    payload = readFile(docs);
-  } else {
+  if (!(fileExists(docsPath) || fileExists(docsGzPath))) {
     throw std::runtime_error("No documents.json(.gz) found in " + state.cacheDir);
   }
+  if (!(fileExists(embPath) || fileExists(embGzPath))) {
+    throw std::runtime_error("No embeddings.bin(.gz) found in " + state.cacheDir);
+  }
 
-  const auto arr = json::parse(payload);
-  if (!arr.is_array()) throw std::runtime_error("documents payload is not an array");
+  const std::string docsPayload = fileExists(docsGzPath) ? readGzip(docsGzPath) : readFile(docsPath);
+  auto docsJson = json::parse(docsPayload);
+  if (!docsJson.is_array()) throw std::runtime_error("documents payload is not array");
 
   state.docs.clear();
-  state.docs.reserve(arr.size());
-  for (const auto& item : arr) {
+  state.docs.reserve(docsJson.size());
+  state.knownProducts.clear();
+
+  for (const auto& item : docsJson) {
     Doc d;
     d.id = item.value("id", "");
     d.content = item.value("content", "");
@@ -216,6 +206,24 @@ static void loadDocs(AppState& state) {
     d.category = item.value("category", "");
     if (!d.product.empty()) state.knownProducts.insert(toLower(d.product));
     state.docs.push_back(std::move(d));
+  }
+
+  std::vector<unsigned char> embBuffer = fileExists(embGzPath) ? readBinaryGzip(embGzPath) : readBinary(embPath);
+  std::size_t off = 0;
+  const uint32_t count = readU32LE(embBuffer, off);
+  state.embeddings.clear();
+  state.embeddings.reserve(count);
+
+  for (uint32_t i = 0; i < count; ++i) {
+    const uint32_t len = readU32LE(embBuffer, off);
+    std::vector<float> emb;
+    emb.reserve(len);
+    for (uint32_t j = 0; j < len; ++j) emb.push_back(readF32LE(embBuffer, off));
+    state.embeddings.push_back(std::move(emb));
+  }
+
+  if (state.docs.size() != state.embeddings.size()) {
+    throw std::runtime_error("Documents/embeddings count mismatch");
   }
 
   state.ready = true;
@@ -247,7 +255,6 @@ static Request parseRequest(const std::string& raw) {
   std::string start;
   std::getline(lines, start);
   if (!start.empty() && start.back() == '\r') start.pop_back();
-
   std::istringstream startStream(start);
   startStream >> req.method >> req.path;
   return req;
@@ -257,23 +264,20 @@ static json routeRequest(const Request& req, AppState& state, int& status) {
   status = 200;
 
   if (req.method == "GET" && req.path == "/health") {
-    return {
-      {"ready", state.ready},
-      {"documents", state.docs.size()},
-      {"cacheDir", state.cacheDir}
-    };
+    return { {"ready", state.ready}, {"documents", state.docs.size()}, {"embeddings", state.embeddings.size()}, {"cacheDir", state.cacheDir} };
   }
 
   if (req.method == "GET" && req.path == "/schema") {
     return {
       {"name", "rag_search"},
-      {"description", "Simple C++ RAG search over local Huawei docs cache"},
+      {"description", "Semantic search over Huawei docs using MiniLM embeddings"},
       {"parameters", {
         {"type", "object"},
         {"properties", {
           {"query", {{"type", "string"}}},
           {"top_k", {{"type", "number"}, {"default", 3}}},
-          {"product", {{"type", "string"}}}
+          {"product", {{"type", "string"}}},
+          {"embedding", {{"type", "array"}, {"items", {{"type", "number"}}}}}
         }},
         {"required", json::array({"query"})}
       }}
@@ -295,69 +299,72 @@ static json routeRequest(const Request& req, AppState& state, int& status) {
     }
 
     const std::string query = input.value("query", "");
-    const std::string product = toLower(input.value("product", ""));
+    const std::string productFilter = toLower(input.value("product", ""));
     const int topK = std::max(1, std::min(10, input.value("top_k", 3)));
     const double threshold = 0.2;
-
     if (query.empty()) {
       status = 400;
       return {{"error", "query is required"}};
     }
 
-    const auto start = std::chrono::steady_clock::now();
-    const auto terms = splitWords(query);
-    const auto queryLower = toLower(query);
-    const auto mentionedProducts = findMentionedProducts(state, queryLower);
+    std::vector<float> queryEmbedding;
+    if (input.contains("embedding") && input["embedding"].is_array()) {
+      for (const auto& v : input["embedding"]) queryEmbedding.push_back(v.get<float>());
+    }
+
     const auto extractedServices = extractServiceNames(query);
 
     struct Scored {
-      const Doc* doc;
+      int idx;
       double score;
       double originalScore;
     };
 
+    const auto start = std::chrono::steady_clock::now();
     std::vector<Scored> scored;
     scored.reserve(state.docs.size());
 
-    for (const auto& d : state.docs) {
-      if (!product.empty() && toLower(d.product) != product) continue;
-      const double s = scoreDoc(d, terms, mentionedProducts, extractedServices, query);
-      const double original = s;
-      if (s >= threshold) {
-        scored.push_back({&d, s, original});
+    for (std::size_t i = 0; i < state.docs.size(); ++i) {
+      const auto& d = state.docs[i];
+      if (!productFilter.empty() && toLower(d.product) != productFilter) continue;
+
+      double semantic = 0.0;
+      if (!queryEmbedding.empty()) {
+        semantic = cosineSimilarity(queryEmbedding, state.embeddings[i]);
+      } else {
+        // fallback lexical mode (for direct backend tests)
+        std::string ql = toLower(query);
+        if (toLower(d.title).find(ql) != std::string::npos || toLower(d.content).find(ql) != std::string::npos) {
+          semantic = 0.5;
+        }
       }
+
+      const double boosted = calculateRelevanceScore(semantic, d, extractedServices, query);
+      if (boosted >= threshold) scored.push_back({static_cast<int>(i), boosted, semantic});
     }
 
-    std::sort(scored.begin(), scored.end(), [](const Scored& a, const Scored& b) {
-      return a.score > b.score;
-    });
+    std::sort(scored.begin(), scored.end(), [](const Scored& a, const Scored& b) { return a.score > b.score; });
 
-    if (!extractedServices.empty() && product.empty()) {
-      std::vector<Scored> topResults = scored;
-      const int initialTopK = std::max(topK, 5);
-      if (static_cast<int>(topResults.size()) > initialTopK) topResults.resize(initialTopK);
+    if (!extractedServices.empty() && productFilter.empty()) {
+      const int initK = std::max(topK, 5);
+      if (static_cast<int>(scored.size()) > initK) scored.resize(initK);
 
-      auto isServiceMatch = [&](const Scored& s) {
-        std::string p = s.doc->product;
-        std::transform(p.begin(), p.end(), p.begin(), [](unsigned char c){ return std::toupper(c); });
-        for (const auto& svc : extractedServices) if (p == svc) return true;
-        return false;
-      };
-
-      std::vector<Scored> serviceMatches;
-      std::vector<Scored> otherMatches;
-      for (const auto& item : topResults) {
-        if (isServiceMatch(item)) serviceMatches.push_back(item);
-        else otherMatches.push_back(item);
+      std::vector<Scored> svc, other;
+      for (const auto& s : scored) {
+        std::string p = state.docs[s.idx].product;
+        std::transform(p.begin(), p.end(), p.begin(), [](unsigned char c) { return std::toupper(c); });
+        bool hit = false;
+        for (const auto& svcName : extractedServices) if (p == svcName) { hit = true; break; }
+        (hit ? svc : other).push_back(s);
       }
 
-      if (!serviceMatches.empty()) {
-        int serviceCount = std::max(2, std::min(static_cast<int>(serviceMatches.size()), static_cast<int>(std::ceil(topK * 0.6))));
+      if (!svc.empty()) {
+        const int svcCount = std::max(2, std::min(static_cast<int>(svc.size()), static_cast<int>(std::ceil(topK * 0.6))));
         std::vector<Scored> combined;
-        for (int i = 0; i < serviceCount && i < static_cast<int>(serviceMatches.size()); ++i) combined.push_back(serviceMatches[i]);
-        for (const auto& item : otherMatches) {
+        for (int i = 0; i < svcCount; ++i) combined.push_back(svc[i]);
+        for (const auto& o : other) {
           if (static_cast<int>(combined.size()) >= topK) break;
-          combined.push_back(item);
+          combined.push_back(o);
         }
         scored = combined;
       } else if (static_cast<int>(scored.size()) > topK) {
@@ -369,28 +376,15 @@ static json routeRequest(const Request& req, AppState& state, int& status) {
 
     json results = json::array();
     for (const auto& s : scored) {
+      const auto& d = state.docs[s.idx];
       results.push_back({
-        {"id", s.doc->id},
-        {"title", s.doc->title},
-        {"source", s.doc->source},
-        {"product", s.doc->product},
-        {"category", s.doc->category},
-        {"content", s.doc->content},
-        {"score", s.score},
-        {"originalScore", s.originalScore}
+        {"id", d.id}, {"title", d.title}, {"source", d.source}, {"product", d.product},
+        {"category", d.category}, {"content", d.content}, {"score", s.score}, {"originalScore", s.originalScore}
       });
     }
 
-    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-      std::chrono::steady_clock::now() - start
-    ).count();
-
-    return {
-      {"results", results},
-      {"totalDocs", state.docs.size()},
-      {"queryTime", elapsed},
-      {"threshold", threshold}
-    };
+    const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
+    return {{"results", results}, {"totalDocs", state.docs.size()}, {"queryTime", elapsedMs}, {"threshold", threshold}};
   }
 
   status = 404;
@@ -402,20 +396,16 @@ int main() {
   state.cacheDir = getEnv("RAG_CACHE_DIR", "rag_cache");
 
   try {
-    loadDocs(state);
-    std::cerr << "Loaded docs: " << state.docs.size() << " from " << state.cacheDir << std::endl;
+    loadDocsAndEmbeddings(state);
+    std::cerr << "Loaded docs/embeddings: " << state.docs.size() << " from " << state.cacheDir << std::endl;
   } catch (const std::exception& e) {
     std::cerr << "Initial load failed: " << e.what() << std::endl;
     state.ready = false;
   }
 
   const int port = std::stoi(getEnv("RAG_SERVER_PORT", "8088"));
-
   int serverFd = socket(AF_INET, SOCK_STREAM, 0);
-  if (serverFd < 0) {
-    std::cerr << "socket() failed\n";
-    return 1;
-  }
+  if (serverFd < 0) return 1;
 
   int opt = 1;
   setsockopt(serverFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
@@ -425,17 +415,8 @@ int main() {
   addr.sin_addr.s_addr = INADDR_ANY;
   addr.sin_port = htons(port);
 
-  if (bind(serverFd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
-    std::cerr << "bind() failed\n";
-    close(serverFd);
-    return 1;
-  }
-
-  if (listen(serverFd, 64) < 0) {
-    std::cerr << "listen() failed\n";
-    close(serverFd);
-    return 1;
-  }
+  if (bind(serverFd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) return 1;
+  if (listen(serverFd, 64) < 0) return 1;
 
   std::cerr << "RAG C++ server listening on 0.0.0.0:" << port << std::endl;
 
@@ -448,45 +429,40 @@ int main() {
     ssize_t n;
     while ((n = read(client, buf, sizeof(buf))) > 0) {
       raw.append(buf, n);
-      if (raw.find("\r\n\r\n") != std::string::npos) {
-        const auto headerEnd = raw.find("\r\n\r\n");
-        std::string head = raw.substr(0, headerEnd);
-        std::size_t contentLength = 0;
-        std::istringstream hs(head);
-        std::string line;
-        while (std::getline(hs, line)) {
-          if (!line.empty() && line.back() == '\r') line.pop_back();
-          std::string lower = toLower(line);
-          if (lower.rfind("content-length:", 0) == 0) {
-            contentLength = static_cast<std::size_t>(std::stoul(line.substr(15)));
-          }
+      const auto headerEnd = raw.find("\r\n\r\n");
+      if (headerEnd == std::string::npos) continue;
+
+      std::size_t contentLength = 0;
+      std::istringstream hs(raw.substr(0, headerEnd));
+      std::string line;
+      while (std::getline(hs, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        std::string lower = toLower(line);
+        if (lower.rfind("content-length:", 0) == 0) {
+          contentLength = static_cast<std::size_t>(std::stoul(line.substr(15)));
+          break;
         }
-        if (raw.size() >= headerEnd + 4 + contentLength) break;
       }
+      if (raw.size() >= headerEnd + 4 + contentLength) break;
     }
 
     int status = 200;
     std::string statusText = "OK";
     json payload;
-
     try {
-      Request req = parseRequest(raw);
-      payload = routeRequest(req, state, status);
+      payload = routeRequest(parseRequest(raw), state, status);
     } catch (const std::exception& e) {
       status = 500;
       payload = {{"error", e.what()}};
     }
 
-    if (status == 404) statusText = "Not Found";
     if (status == 400) statusText = "Bad Request";
-    if (status == 500) statusText = "Internal Server Error";
-    if (status == 503) statusText = "Service Unavailable";
+    else if (status == 404) statusText = "Not Found";
+    else if (status == 500) statusText = "Internal Server Error";
+    else if (status == 503) statusText = "Service Unavailable";
 
-    const std::string response = makeHttpResponse(status, statusText, payload.dump());
+    const auto response = makeHttpResponse(status, statusText, payload.dump());
     send(client, response.data(), response.size(), 0);
     close(client);
   }
-
-  close(serverFd);
-  return 0;
 }

@@ -1,7 +1,28 @@
 import { NextResponse } from "next/server";
+import { pipeline } from "@xenova/transformers";
 
 const RAG_SERVER_URL = process.env.RAG_SERVER_URL || "http://127.0.0.1:8088";
 const RAG_TIMEOUT_MS = Number(process.env.RAG_TIMEOUT_MS || 15000);
+
+let embeddingPipeline: any | null = null;
+
+async function getEmbeddingPipeline() {
+  if (!embeddingPipeline) {
+    embeddingPipeline = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2", {
+      quantized: true,
+    });
+  }
+  return embeddingPipeline;
+}
+
+async function getQueryEmbedding(query: string): Promise<number[]> {
+  const pipe = await getEmbeddingPipeline();
+  const output = await pipe([query.slice(0, 2000)], {
+    pooling: "mean",
+    normalize: true,
+  });
+  return Array.from(output[0].data as Float32Array);
+}
 
 async function callRag(path: string, init?: RequestInit) {
   const controller = new AbortController();
@@ -41,18 +62,17 @@ export async function POST(request: Request) {
     }
 
     const topK = Math.min(Math.max(Number(top_k) || 3, 1), 10);
+    const embedding = await getQueryEmbedding(query);
 
     const ragResult = await callRag("/search", {
       method: "POST",
-      body: JSON.stringify({ query, product, top_k: topK }),
+      body: JSON.stringify({ query, product, top_k: topK, embedding }),
     });
 
     if (!ragResult.ok) {
       return NextResponse.json(
         {
-          error:
-            ragResult.payload?.error ||
-            "RAG backend request failed",
+          error: ragResult.payload?.error || "RAG backend request failed",
           backendStatus: ragResult.status,
         },
         { status: ragResult.status >= 400 ? ragResult.status : 502 },
@@ -78,8 +98,9 @@ export async function POST(request: Request) {
       totalDocs: ragResult.payload?.totalDocs || 0,
       queryTime: ragResult.payload?.queryTime || 0,
       threshold: ragResult.payload?.threshold || 0,
-      boosted: false,
+      boosted: true,
       backend: "cpp-rag",
+      embeddingModel: "Xenova/all-MiniLM-L6-v2",
     });
   } catch (error) {
     const message =
@@ -130,5 +151,6 @@ export async function GET(request: Request) {
     status: ragResult.payload?.ready ? "ready" : "not_ready",
     ragServer: RAG_SERVER_URL,
     backend: ragResult.payload,
+    embeddingModel: "Xenova/all-MiniLM-L6-v2",
   });
 }
