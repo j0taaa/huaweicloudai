@@ -21,6 +21,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "dist/**",
+    "launcher/build/**",
+    "rag-cpp-server/build/**",
+    "monolith/build/**",
   ]),
 ]);
 

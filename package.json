@@ -3,13 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
+    "dev": "bunx --bun next dev",
+    "build": "bunx --bun next build",
+    "start": "bunx --bun next start",
+    "lint": "bunx eslint .",
+    "compile": "bun build --compile .next/standalone/server.js --outfile dist/ts-server",
+    "build:rag": "cmake -S rag-cpp-server -B rag-cpp-server/build && cmake --build rag-cpp-server/build -j",
+    "build:launcher": "cmake -S launcher -B launcher/build && cmake --build launcher/build -j",
+    "build:release": "bash scripts/build-release.sh",
+    "test:e2e": "bash scripts/test-e2e.sh",
+    "test:rag": "bash scripts/test-rag-relevance.sh",
+    "test:launcher": "bash scripts/test-launcher.sh"
   },
   "dependencies": {
-    "@xenova/transformers": "^2.17.2",
     "chromadb": "^3.2.2",
     "glob": "^13.0.0",
     "jszip": "^3.10.1",
@@ -20,7 +26,8 @@
     "remark-gfm": "^4.0.1",
     "ssh2": "^1.17.0",
     "tar": "^7.5.7",
-    "undici": "^7.19.0"
+    "undici": "^7.19.0",
+    "@xenova/transformers": "^2.17.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

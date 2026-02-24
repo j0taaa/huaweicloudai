@@ -8,3 +8,4 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      RAG_SERVER_URL: http://127.0.0.1:8088

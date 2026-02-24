@@ -1,16 +1,15 @@
 # syntax=docker/dockerfile:1
-FROM node:20 AS deps
+FROM oven/bun:1 AS deps
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json package-lock.json* bun.lock* ./
+RUN bun install
 
-FROM node:20 AS builder
+FROM deps AS builder
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+RUN bun run build
 
-FROM node:20 AS runner
+FROM oven/bun:1 AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
@@ -22,4 +21,4 @@ COPY --from=builder /app/chrome-extension ./chrome-extension
 COPY --from=builder /app/app ./app
 COPY --from=builder /app/rag_cache ./rag_cache
 EXPOSE 3000
-CMD ["npm", "start"]
+CMD ["bun", "run", "start"]
