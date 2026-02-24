@@ -51,3 +51,6 @@ next-env.d.ts
 /dist
 /rag-cpp-server/build
 /launcher/build
+
+# admin sqlite
+/admin.db*
