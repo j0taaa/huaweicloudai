@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Image from "next/image";
 import {
   clearAdminSession,
   createAdminSession,
@@ -40,6 +41,28 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const users = authenticated ? listAppUsers() : [];
   const config = getAppConfig();
 
+  if (!authenticated) {
+    return (
+      <div className="app-shell flex min-h-dvh w-full items-center justify-center px-4 py-6 text-zinc-900 dark:text-zinc-50 sm:px-6 lg:px-8">
+        <main className="surface-card w-full max-w-md rounded-3xl border border-white/60 px-5 py-6 backdrop-blur sm:px-6">
+          <div className="flex items-center gap-3">
+            <Image src="/icon.svg" alt="Huawei Cloud AI Chat logo" width={40} height={40} className="h-10 w-10" priority />
+            <h1 className="text-xl font-semibold sm:text-2xl">Huawei Cloud AI Chat</h1>
+          </div>
+          <h2 className="mt-6 text-lg font-semibold">Admin sign in</h2>
+          {error ? <p className="mt-4 rounded-xl border border-red-300/70 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-400/30 dark:bg-red-950/30 dark:text-red-200">{decodeURIComponent(error)}</p> : null}
+          {success ? <p className="mt-4 rounded-xl border border-emerald-300/70 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-950/30 dark:text-emerald-200">{decodeURIComponent(success)}</p> : null}
+
+          <form action={loginAction} className="mt-4 flex flex-col gap-3">
+            <label htmlFor="password" className="text-sm font-medium">Admin password</label>
+            <input id="password" name="password" type="password" className="rounded-xl border border-zinc-200 bg-white/90 px-3 py-2 outline-none dark:border-white/15 dark:bg-black/30" required />
+            <button className="mt-1 w-fit rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900" type="submit">Login</button>
+          </form>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell min-h-dvh w-full px-4 py-6 text-zinc-900 dark:text-zinc-50 sm:px-6 lg:px-8">
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-5">
@@ -61,17 +84,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           {success ? <p className="mt-4 rounded-xl border border-emerald-300/70 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-950/30 dark:text-emerald-200">{decodeURIComponent(success)}</p> : null}
         </section>
 
-        {!authenticated ? (
-          <section className="flex justify-center">
-            <form action={loginAction} className="surface-card flex w-full max-w-md flex-col gap-3 rounded-3xl border border-white/60 px-5 py-6 backdrop-blur sm:px-6">
-              <h2 className="text-lg font-semibold">Sign in</h2>
-              <label htmlFor="password" className="text-sm font-medium">Admin password</label>
-              <input id="password" name="password" type="password" className="rounded-xl border border-zinc-200 bg-white/90 px-3 py-2 outline-none dark:border-white/15 dark:bg-black/30" required />
-              <button className="mt-1 w-fit rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900" type="submit">Login</button>
-            </form>
-          </section>
-        ) : (
-          <>
+        <>
             <section className="surface-card rounded-3xl border border-white/60 px-5 py-5 backdrop-blur sm:px-6">
               <h2 className="text-lg font-semibold">Settings</h2>
 
@@ -157,8 +170,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                 </ul>
               )}
             </section>
-          </>
-        )}
+        </>
       </main>
     </div>
   );

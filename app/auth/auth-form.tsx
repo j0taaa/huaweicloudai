@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -75,50 +76,51 @@ export function AuthForm({ mode }: AuthFormProps) {
   const isLogin = mode === "login";
 
   return (
-    <main className="app-shell min-h-dvh px-4 py-8 text-zinc-900 dark:text-zinc-50 sm:px-6 lg:px-8">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
-        <section className="surface-card rounded-3xl border border-white/60 px-5 py-6 backdrop-blur sm:px-8">
-          <h1 className="text-3xl font-semibold">Huawei Cloud AI Chat</h1>
-          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
-            {isLogin
-              ? "Sign in with your approved account to continue."
-              : "Create an account and wait for admin approval before signing in."}
-          </p>
-        </section>
-
-        <section className="surface-card mx-auto w-full max-w-lg rounded-3xl border border-white/60 px-5 py-6 backdrop-blur sm:px-8">
-          <h2 className="text-xl font-semibold">{isLogin ? "Sign in" : "Create account"}</h2>
-          <div className="mt-4 space-y-3">
-            <label className="block text-sm font-medium">Username</label>
-            <input
-              className="w-full rounded-xl border border-zinc-200 bg-white/90 px-3 py-2 outline-none dark:border-white/15 dark:bg-black/30"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-            />
-            <label className="block text-sm font-medium">Password</label>
-            <input
-              className="w-full rounded-xl border border-zinc-200 bg-white/90 px-3 py-2 outline-none dark:border-white/15 dark:bg-black/30"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-            {status ? <p className="text-sm text-red-600 dark:text-red-300">{status}</p> : null}
-            <button
-              className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
-              type="button"
-              onClick={submit}
-            >
-              {isLogin ? "Login" : "Register"}
-            </button>
-            <p className="text-sm text-zinc-600 dark:text-zinc-300">
-              {isLogin ? "Need an account? " : "Already have an account? "}
-              <Link className="font-semibold underline" href={isLogin ? "/register" : "/login"}>
-                {isLogin ? "Register" : "Login"}
-              </Link>
+    <main className="app-shell flex min-h-dvh items-center justify-center px-4 py-8 text-zinc-900 dark:text-zinc-50 sm:px-6 lg:px-8">
+      <section className="surface-card w-full max-w-lg rounded-3xl border border-white/60 px-5 py-6 backdrop-blur sm:px-8">
+        <div className="flex items-center gap-3">
+          <Image src="/icon.svg" alt="Huawei Cloud AI Chat logo" width={44} height={44} className="h-11 w-11" priority />
+          <div>
+            <h1 className="text-2xl font-semibold sm:text-3xl">Huawei Cloud AI Chat</h1>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+              {isLogin
+                ? "Sign in with your approved account to continue."
+                : "Create an account and wait for admin approval before signing in."}
             </p>
           </div>
-        </section>
-      </div>
+        </div>
+
+        <h2 className="mt-6 text-xl font-semibold">{isLogin ? "Sign in" : "Create account"}</h2>
+        <div className="mt-4 space-y-3">
+          <label className="block text-sm font-medium">Username</label>
+          <input
+            className="w-full rounded-xl border border-zinc-200 bg-white/90 px-3 py-2 outline-none dark:border-white/15 dark:bg-black/30"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+          />
+          <label className="block text-sm font-medium">Password</label>
+          <input
+            className="w-full rounded-xl border border-zinc-200 bg-white/90 px-3 py-2 outline-none dark:border-white/15 dark:bg-black/30"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+          {status ? <p className="text-sm text-red-600 dark:text-red-300">{status}</p> : null}
+          <button
+            className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
+            type="button"
+            onClick={submit}
+          >
+            {isLogin ? "Login" : "Register"}
+          </button>
+          <p className="text-sm text-zinc-600 dark:text-zinc-300">
+            {isLogin ? "Need an account? " : "Already have an account? "}
+            <Link className="font-semibold underline" href={isLogin ? "/register" : "/login"}>
+              {isLogin ? "Register" : "Login"}
+            </Link>
+          </p>
+        </div>
+      </section>
     </main>
   );
 }
