@@ -424,6 +424,14 @@ export default function Home() {
   const [inferenceMode, setInferenceMode] = useState<"default" | "custom">(
     "default",
   );
+  const [loginEnabled, setLoginEnabled] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authUsername, setAuthUsername] = useState<string | null>(null);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authForm, setAuthForm] = useState({ username: "", password: "" });
+  const [authStatus, setAuthStatus] = useState<string | null>(null);
+  const [builtInInferenceEnabled, setBuiltInInferenceEnabled] = useState(true);
   const [customInference, setCustomInference] = useState({
     baseUrl: "",
     model: "",
@@ -508,6 +516,7 @@ export default function Home() {
     { value: "light", label: "Light" },
     { value: "dark", label: "Dark" },
   ];
+  const effectiveInferenceMode = !builtInInferenceEnabled && inferenceMode === "default" ? "custom" : inferenceMode;
 
   const setConversationError = (conversationId: string, message: string | null) => {
     setConversationErrors((prev) => ({ ...prev, [conversationId]: message }));
@@ -726,6 +735,29 @@ export default function Home() {
         registration.update().catch(() => undefined);
       })
       .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/public-config")
+      .then((response) => response.json())
+      .then((payload: { loginEnabled?: boolean; builtInInferenceEnabled?: boolean }) => {
+        setLoginEnabled(Boolean(payload.loginEnabled));
+        setBuiltInInferenceEnabled(payload.builtInInferenceEnabled !== false);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        fetch("/api/auth/session")
+          .then((response) => response.json())
+          .then((payload: { authenticated?: boolean; username?: string | null; loginEnabled?: boolean }) => {
+            setIsAuthenticated(Boolean(payload.authenticated));
+            setAuthUsername(payload.username ?? null);
+            if (typeof payload.loginEnabled === "boolean") {
+              setLoginEnabled(payload.loginEnabled);
+            }
+          })
+          .catch(() => undefined)
+          .finally(() => setAuthReady(true));
+      });
   }, []);
 
   useEffect(() => {
@@ -962,7 +994,7 @@ export default function Home() {
             projectIds,
           },
           inference:
-            inferenceMode === "custom"
+            effectiveInferenceMode === "custom"
               ? {
                   mode: "custom",
                   baseUrl: customInference.baseUrl.trim(),
@@ -1684,7 +1716,7 @@ export default function Home() {
             projectIds,
           },
           inference:
-            inferenceMode === "custom"
+            effectiveInferenceMode === "custom"
               ? {
                   mode: "custom",
                   baseUrl: customInference.baseUrl.trim(),
@@ -2192,6 +2224,12 @@ export default function Home() {
   }, [accessKey, secretKey]);
 
   useEffect(() => {
+    if (!builtInInferenceEnabled && inferenceMode === "default") {
+      setInferenceMode("custom");
+    }
+  }, [builtInInferenceEnabled, inferenceMode]);
+
+  useEffect(() => {
     if (!inferenceHydratedRef.current) return;
     localStorage.setItem(INFERENCE_MODE_STORAGE_KEY, inferenceMode);
   }, [inferenceMode]);
@@ -2356,7 +2394,7 @@ export default function Home() {
           projectIds,
         },
         inference:
-          inferenceMode === "custom"
+          effectiveInferenceMode === "custom"
             ? {
                 mode: "custom",
                 baseUrl: customInference.baseUrl.trim(),
@@ -2731,6 +2769,51 @@ export default function Home() {
     </form>
   );
 
+  const submitAuth = async () => {
+    const endpoint = authMode === "login" ? "/api/auth/login" : "/api/auth/register";
+    setAuthStatus(null);
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: authForm.username, password: authForm.password }),
+    });
+    const payload = (await response.json()) as { error?: string; message?: string; username?: string };
+    if (!response.ok) {
+      setAuthStatus(payload.error ?? "Authentication failed.");
+      return;
+    }
+    if (authMode === "register") {
+      setAuthStatus(payload.message ?? "Registered. Awaiting admin approval.");
+      setAuthMode("login");
+      return;
+    }
+    setIsAuthenticated(true);
+    setAuthUsername(payload.username ?? authForm.username);
+    setAuthForm({ username: "", password: "" });
+  };
+
+  const logoutUser = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setIsAuthenticated(false);
+    setAuthUsername(null);
+  };
+
+  if (authReady && loginEnabled && !isAuthenticated) {
+    return (
+      <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center gap-4 p-6">
+        <h1 className="text-2xl font-bold">Huawei Cloud AI Chat</h1>
+        <p className="text-sm text-zinc-600 dark:text-zinc-300">Login is enabled by the admin. Register first, then wait for approval.</p>
+        <input className="rounded border px-3 py-2" placeholder="Username" value={authForm.username} onChange={(event) => setAuthForm((prev) => ({ ...prev, username: event.target.value }))} />
+        <input className="rounded border px-3 py-2" placeholder="Password" type="password" value={authForm.password} onChange={(event) => setAuthForm((prev) => ({ ...prev, password: event.target.value }))} />
+        {authStatus ? <p className="text-sm text-red-600">{authStatus}</p> : null}
+        <button className="rounded bg-black px-4 py-2 text-white" type="button" onClick={submitAuth}>{authMode === "login" ? "Login" : "Register"}</button>
+        <button className="text-sm underline" type="button" onClick={() => { setAuthStatus(null); setAuthMode((prev) => (prev === "login" ? "register" : "login")); }}>
+          {authMode === "login" ? "Need an account? Register" : "Already have an account? Login"}
+        </button>
+      </main>
+    );
+  }
+
   return (
     <div className="app-shell h-dvh w-full overflow-hidden text-zinc-900 dark:text-zinc-50 lg:flex lg:flex-row">
       {sidebarOpen ? (
@@ -2747,19 +2830,23 @@ export default function Home() {
         }`}
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-            Conversations
-          </h2>
-          <button
-            className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
-            type="button"
-            onClick={() => {
-              handleNewConversation();
-              setSidebarOpen(false);
-            }}
-          >
-            New
-          </button>
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Conversations</h2>
+            {loginEnabled && authUsername ? <p className="text-xs text-zinc-500">{authUsername}</p> : null}
+          </div>
+          <div className="flex gap-2">
+            {loginEnabled ? <button className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-600" type="button" onClick={logoutUser}>Logout</button> : null}
+            <button
+              className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+              type="button"
+              onClick={() => {
+                handleNewConversation();
+                setSidebarOpen(false);
+              }}
+            >
+              New
+            </button>
+          </div>
         </div>
         <div className="flex-1 space-y-2 overflow-y-auto pr-1">
           {conversations.map((conversation) => (
@@ -2924,25 +3011,27 @@ export default function Home() {
               Inference
             </span>
             <span className="text-xs text-zinc-500 dark:text-zinc-400">
-              {inferenceMode === "custom" ? "Custom LLM" : "Built-in"}
+              {effectiveInferenceMode === "custom" ? "Custom LLM" : "Built-in"}
             </span>
           </div>
           <div className="mt-3 flex items-center gap-2 rounded-full bg-zinc-100/80 p-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500 shadow-inner dark:bg-white/10 dark:text-zinc-300">
+            {builtInInferenceEnabled ? (
+              <button
+                type="button"
+                className={`flex-1 rounded-full px-3 py-1 transition ${
+                  inferenceMode === "default"
+                    ? "bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-white"
+                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                }`}
+                onClick={() => setInferenceMode("default")}
+              >
+                Built-in
+              </button>
+            ) : null}
             <button
               type="button"
               className={`flex-1 rounded-full px-3 py-1 transition ${
-                inferenceMode === "default"
-                  ? "bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-white"
-                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-              }`}
-              onClick={() => setInferenceMode("default")}
-            >
-              Built-in
-            </button>
-            <button
-              type="button"
-              className={`flex-1 rounded-full px-3 py-1 transition ${
-                inferenceMode === "custom"
+                effectiveInferenceMode === "custom"
                   ? "bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-white"
                   : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
               }`}
@@ -2951,7 +3040,10 @@ export default function Home() {
               Custom
             </button>
           </div>
-          {inferenceMode === "custom" ? (
+          {!builtInInferenceEnabled ? (
+            <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Built-in inference is disabled by admin.</p>
+          ) : null}
+          {effectiveInferenceMode === "custom" ? (
             <div className="mt-4 space-y-3">
               <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
                 Base URL
