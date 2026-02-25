@@ -35,7 +35,9 @@ const collectFiles = async (dir: string, rootDir: string): Promise<FileEntry[]> 
   return files;
 };
 
-const buildExtensionZip = async (): Promise<ArrayBuffer> => {
+const DEFAULT_SERVER_URL_PLACEHOLDER = "http://1.178.45.234:3000";
+
+const buildExtensionZip = async (defaultServerUrl: string): Promise<ArrayBuffer> => {
   const extensionStats = await fs.stat(EXTENSION_DIR);
   if (!extensionStats.isDirectory()) {
     throw new Error("Extension source directory not found.");
@@ -51,6 +53,15 @@ const buildExtensionZip = async (): Promise<ArrayBuffer> => {
   await Promise.all(
     files.map(async ({ absolutePath, relativePath }) => {
       const fileBuffer = await fs.readFile(absolutePath);
+
+      if (relativePath === "content.js") {
+        const patchedContent = fileBuffer
+          .toString("utf-8")
+          .replaceAll(DEFAULT_SERVER_URL_PLACEHOLDER, defaultServerUrl);
+        zip.file(relativePath, patchedContent);
+        return;
+      }
+
       zip.file(relativePath, fileBuffer);
     }),
   );
@@ -58,11 +69,10 @@ const buildExtensionZip = async (): Promise<ArrayBuffer> => {
   return zip.generateAsync({ type: "arraybuffer" });
 };
 
-const extensionZipPromise = buildExtensionZip();
-
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const zipData = await extensionZipPromise;
+    const defaultServerUrl = new URL(request.url).origin;
+    const zipData = await buildExtensionZip(defaultServerUrl);
     const zipBlob = new Blob([zipData], { type: "application/zip" });
 
     return new Response(zipBlob, {
