@@ -2991,11 +2991,7 @@ export default function Home() {
               Inference
             </span>
             <span className="text-xs text-zinc-500 dark:text-zinc-400">
-              {inferenceOpen
-                ? effectiveInferenceMode === "custom"
-                  ? "Custom LLM"
-                  : "Built-in"
-                : "Show"}
+              {inferenceOpen ? "Hide" : "Show"}
             </span>
           </button>
           {inferenceOpen ? (
