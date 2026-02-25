@@ -426,6 +426,7 @@ export default function Home() {
   const [inferenceMode, setInferenceMode] = useState<"default" | "custom">(
     "default",
   );
+  const [inferenceOpen, setInferenceOpen] = useState(true);
   const [loginEnabled, setLoginEnabled] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -2980,102 +2981,115 @@ export default function Home() {
           ) : null}
         </div>
         <div className="rounded-2xl border border-zinc-200/70 bg-white/90 p-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/80">
-          <div className="flex items-center justify-between">
+          <button
+            className="flex w-full items-center justify-between text-left"
+            type="button"
+            onClick={() => setInferenceOpen((prev) => !prev)}
+            aria-expanded={inferenceOpen}
+          >
             <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
               Inference
             </span>
             <span className="text-xs text-zinc-500 dark:text-zinc-400">
-              {effectiveInferenceMode === "custom" ? "Custom LLM" : "Built-in"}
+              {inferenceOpen
+                ? effectiveInferenceMode === "custom"
+                  ? "Custom LLM"
+                  : "Built-in"
+                : "Show"}
             </span>
-          </div>
-          <div className="mt-3 flex items-center gap-2 rounded-full bg-zinc-100/80 p-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500 shadow-inner dark:bg-white/10 dark:text-zinc-300">
-            {builtInInferenceEnabled ? (
-              <button
-                type="button"
-                className={`flex-1 rounded-full px-3 py-1 transition ${
-                  inferenceMode === "default"
-                    ? "bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-white"
-                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-                }`}
-                onClick={() => setInferenceMode("default")}
-              >
-                Built-in
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className={`flex-1 rounded-full px-3 py-1 transition ${
-                effectiveInferenceMode === "custom"
-                  ? "bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-white"
-                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-              }`}
-              onClick={() => setInferenceMode("custom")}
-            >
-              Custom
-            </button>
-          </div>
-          {!builtInInferenceEnabled ? (
-            <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Built-in inference is disabled by admin.</p>
+          </button>
+          {inferenceOpen ? (
+            <>
+              <div className="mt-3 flex items-center gap-2 rounded-full bg-zinc-100/80 p-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500 shadow-inner dark:bg-white/10 dark:text-zinc-300">
+                {builtInInferenceEnabled ? (
+                  <button
+                    type="button"
+                    className={`flex-1 rounded-full px-3 py-1 transition ${
+                      inferenceMode === "default"
+                        ? "bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-white"
+                        : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                    }`}
+                    onClick={() => setInferenceMode("default")}
+                  >
+                    Built-in
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className={`flex-1 rounded-full px-3 py-1 transition ${
+                    effectiveInferenceMode === "custom"
+                      ? "bg-white text-zinc-900 shadow-sm dark:bg-black dark:text-white"
+                      : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  }`}
+                  onClick={() => setInferenceMode("custom")}
+                >
+                  Custom
+                </button>
+              </div>
+              {!builtInInferenceEnabled ? (
+                <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Built-in inference is disabled by admin.</p>
+              ) : null}
+              {effectiveInferenceMode === "custom" ? (
+                <div className="mt-4 space-y-3">
+                  <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+                    Base URL
+                    <input
+                      className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-normal text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                      placeholder="https://openrouter.ai/api/v1"
+                      value={customInference.baseUrl}
+                      onChange={(event) =>
+                        setCustomInference((prev) => ({
+                          ...prev,
+                          baseUrl: event.target.value,
+                        }))
+                      }
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+                    Model
+                    <input
+                      className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-normal text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                      placeholder="openrouter/auto"
+                      value={customInference.model}
+                      onChange={(event) =>
+                        setCustomInference((prev) => ({
+                          ...prev,
+                          model: event.target.value,
+                        }))
+                      }
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+                    API key
+                    <input
+                      className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-normal text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
+                      placeholder="Enter your provider key"
+                      value={customInference.apiKey}
+                      onChange={(event) =>
+                        setCustomInference((prev) => ({
+                          ...prev,
+                          apiKey: event.target.value,
+                        }))
+                      }
+                      autoComplete="off"
+                      type="password"
+                    />
+                  </label>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    These settings are stored locally and only sent when you choose
+                    Custom inference.
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+                  Uses the built-in GLM 4.7 ZAI coding plan configured on the
+                  server.
+                </p>
+              )}
+            </>
           ) : null}
-          {effectiveInferenceMode === "custom" ? (
-            <div className="mt-4 space-y-3">
-              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
-                Base URL
-                <input
-                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-normal text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
-                  placeholder="https://openrouter.ai/api/v1"
-                  value={customInference.baseUrl}
-                  onChange={(event) =>
-                    setCustomInference((prev) => ({
-                      ...prev,
-                      baseUrl: event.target.value,
-                    }))
-                  }
-                  autoComplete="off"
-                />
-              </label>
-              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
-                Model
-                <input
-                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-normal text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
-                  placeholder="openrouter/auto"
-                  value={customInference.model}
-                  onChange={(event) =>
-                    setCustomInference((prev) => ({
-                      ...prev,
-                      model: event.target.value,
-                    }))
-                  }
-                  autoComplete="off"
-                />
-              </label>
-              <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
-                API key
-                <input
-                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-normal text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-white/10 dark:bg-black dark:text-zinc-100 dark:focus:border-white/20 dark:focus:ring-white/10"
-                  placeholder="Enter your provider key"
-                  value={customInference.apiKey}
-                  onChange={(event) =>
-                    setCustomInference((prev) => ({
-                      ...prev,
-                      apiKey: event.target.value,
-                    }))
-                  }
-                  autoComplete="off"
-                  type="password"
-                />
-              </label>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                These settings are stored locally and only sent when you choose
-                Custom inference.
-              </p>
-            </div>
-          ) : (
-            <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-              Uses the built-in GLM 4.7 ZAI coding plan configured on the
-              server.
-            </p>
-          )}
         </div>
       </aside>
       <main className="flex h-full w-full min-h-0 flex-1 flex-col overflow-hidden">
