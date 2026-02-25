@@ -23,6 +23,23 @@ cp -r node_modules "$DIST_DIR/node_modules"
 cp -r chrome-extension "$DIST_DIR/chrome-extension"
 cp -r rag_cache "$DIST_DIR/rag_cache"
 
+# Bun-compiled executables cannot resolve bare package specifiers via dynamic
+# import in Turbopack runtime. Rewrite it to use our runtime resolver hook.
+TURBOPACK_RUNTIME="$DIST_DIR/.next/server/chunks/[turbopack]_runtime.js"
+if [ -f "$TURBOPACK_RUNTIME" ]; then
+  bun -e '
+const fs = require("fs");
+const runtimePath = process.argv[1];
+const needle = "raw = await import(id);";
+const replacement = "raw = await import(globalThis.__HCAI_RESOLVE_EXTERNAL_ID__ ? globalThis.__HCAI_RESOLVE_EXTERNAL_ID__(id) : id);";
+const source = fs.readFileSync(runtimePath, "utf8");
+if (!source.includes(needle)) {
+  throw new Error("Could not patch Turbopack runtime import path");
+}
+fs.writeFileSync(runtimePath, source.replace(needle, replacement));
+' "$TURBOPACK_RUNTIME"
+fi
+
 cmake -S rag-cpp-server -B rag-cpp-server/build
 cmake --build rag-cpp-server/build -j
 cp rag-cpp-server/build/rag-cpp-server "$DIST_DIR/rag-cpp-server"

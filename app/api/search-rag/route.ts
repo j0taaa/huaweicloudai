@@ -1,22 +1,35 @@
 import { NextResponse } from "next/server";
-import { pipeline } from "@xenova/transformers";
 
 const RAG_SERVER_URL = process.env.RAG_SERVER_URL || "http://127.0.0.1:8088";
 const RAG_TIMEOUT_MS = Number(process.env.RAG_TIMEOUT_MS || 15000);
 
 let embeddingPipeline: any | null = null;
+let embeddingPipelineUnavailable = false;
+let embeddingPipelineError: string | null = null;
 
 async function getEmbeddingPipeline() {
-  if (!embeddingPipeline) {
+  if (embeddingPipeline || embeddingPipelineUnavailable) {
+    return embeddingPipeline;
+  }
+
+  try {
+    const { pipeline } = await import("@xenova/transformers");
     embeddingPipeline = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2", {
       quantized: true,
     });
+    return embeddingPipeline;
+  } catch {
+    embeddingPipelineUnavailable = true;
+    embeddingPipelineError = "embedding_unavailable";
+    console.warn("Embedding pipeline unavailable, using lexical-only RAG fallback.");
+    return null;
   }
-  return embeddingPipeline;
 }
 
-async function getQueryEmbedding(query: string): Promise<number[]> {
+async function getQueryEmbedding(query: string): Promise<number[] | null> {
   const pipe = await getEmbeddingPipeline();
+  if (!pipe) return null;
+
   const output = await pipe([query.slice(0, 2000)], {
     pooling: "mean",
     normalize: true,
@@ -63,10 +76,12 @@ export async function POST(request: Request) {
 
     const topK = Math.min(Math.max(Number(top_k) || 3, 1), 10);
     const embedding = await getQueryEmbedding(query);
+    const requestPayload: Record<string, unknown> = { query, product, top_k: topK };
+    if (embedding) requestPayload.embedding = embedding;
 
     const ragResult = await callRag("/search", {
       method: "POST",
-      body: JSON.stringify({ query, product, top_k: topK, embedding }),
+      body: JSON.stringify(requestPayload),
     });
 
     if (!ragResult.ok) {
@@ -100,7 +115,8 @@ export async function POST(request: Request) {
       threshold: ragResult.payload?.threshold || 0,
       boosted: true,
       backend: "cpp-rag",
-      embeddingModel: "Xenova/all-MiniLM-L6-v2",
+      embeddingModel: embedding ? "Xenova/all-MiniLM-L6-v2" : null,
+      embeddingFallback: embedding ? null : (embeddingPipelineError ?? "embedding_disabled"),
     });
   } catch (error) {
     const message =
