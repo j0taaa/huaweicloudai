@@ -32,14 +32,20 @@ const parseServerResponse = async (response) => {
   return response.json();
 };
 
-const requestChat = async (serverUrl, endpoint, payload) => {
-  const response = await fetch(`${serverUrl}${endpoint}`, {
-    method: "POST",
+const requestServer = async (serverUrl, endpoint, payload, method = "POST") => {
+  const requestInit = {
+    method,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
-  });
+  };
+
+  if (method !== "GET") {
+    requestInit.body = JSON.stringify(payload || {});
+  }
+
+  const response = await fetch(`${serverUrl}${endpoint}`, requestInit);
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -54,11 +60,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return false;
   }
 
-  const { serverUrl, payload, endpoint = "/api/chat" } = message;
+  const { serverUrl, payload, endpoint = "/api/chat", method = "POST" } = message;
 
   (async () => {
     try {
-      const data = await requestChat(serverUrl, endpoint, payload);
+      const data = await requestServer(serverUrl, endpoint, payload, method);
       sendResponse({ ok: true, data });
     } catch (error) {
       sendResponse({

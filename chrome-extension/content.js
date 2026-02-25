@@ -87,6 +87,57 @@ if (!existingWidget) {
   serverUrlInput.autocomplete = "off";
   serverUrlLabel.append(serverUrlInput);
 
+  const authSection = document.createElement("div");
+  authSection.className = "hwc-chat-auth";
+  authSection.hidden = true;
+
+  const authTitle = document.createElement("p");
+  authTitle.className = "hwc-chat-auth-title";
+  authTitle.textContent = "Login";
+
+  const authUserLabel = document.createElement("label");
+  authUserLabel.className = "hwc-chat-label";
+  authUserLabel.textContent = "Username";
+
+  const authUserInput = document.createElement("input");
+  authUserInput.type = "text";
+  authUserInput.className = "hwc-chat-input";
+  authUserInput.placeholder = "Enter username";
+  authUserInput.autocomplete = "username";
+  authUserLabel.append(authUserInput);
+
+  const authPasswordLabel = document.createElement("label");
+  authPasswordLabel.className = "hwc-chat-label";
+  authPasswordLabel.textContent = "Password";
+
+  const authPasswordInput = document.createElement("input");
+  authPasswordInput.type = "password";
+  authPasswordInput.className = "hwc-chat-input";
+  authPasswordInput.placeholder = "Enter password";
+  authPasswordInput.autocomplete = "current-password";
+  authPasswordLabel.append(authPasswordInput);
+
+  const authFooter = document.createElement("div");
+  authFooter.className = "hwc-chat-auth-footer";
+
+  const authLoginButton = document.createElement("button");
+  authLoginButton.type = "button";
+  authLoginButton.className = "hwc-chat-save";
+  authLoginButton.textContent = "Login";
+
+  const authLogoutButton = document.createElement("button");
+  authLogoutButton.type = "button";
+  authLogoutButton.className = "hwc-chat-save hwc-chat-save-secondary";
+  authLogoutButton.textContent = "Logout";
+  authLogoutButton.hidden = true;
+
+  const authStatus = document.createElement("span");
+  authStatus.className = "hwc-chat-save-status";
+  authStatus.textContent = "Not logged in";
+
+  authFooter.append(authLoginButton, authLogoutButton, authStatus);
+  authSection.append(authTitle, authUserLabel, authPasswordLabel, authFooter);
+
   const accessKeyLabel = document.createElement("label");
   accessKeyLabel.className = "hwc-chat-label";
   accessKeyLabel.textContent = "Access Key (AK)";
@@ -198,6 +249,7 @@ if (!existingWidget) {
   credentialsFooter.append(saveButton, saveStatus);
   credentialsBody.append(
     serverUrlLabel,
+    authSection,
     accessKeyLabel,
     secretKeyLabel,
     inferenceSection,
@@ -322,6 +374,10 @@ if (!existingWidget) {
   let activeRequestId = 0;
   let activeAssistantBubble = null;
   let skipToggleClick = false;
+  let loginEnabled = false;
+  let isAuthenticated = false;
+  let authUsername = "";
+  let authRequestInFlight = false;
 
   const clampValue = (value, min, max) => Math.min(Math.max(value, min), max);
   const widgetPadding = 24;
@@ -547,8 +603,9 @@ if (!existingWidget) {
   const updateFormState = () => {
     const isBusy = isSending || hasRunningToolCalls;
     const hasText = Boolean(input.value.trim());
-    input.disabled = Boolean(pendingChoice);
-    sendButton.disabled = (!isBusy && !hasText) || Boolean(pendingChoice);
+    const authLocked = loginEnabled && !isAuthenticated;
+    input.disabled = Boolean(pendingChoice) || authLocked;
+    sendButton.disabled = authLocked || (!isBusy && !hasText) || Boolean(pendingChoice);
     sendButton.type = isBusy ? "button" : "submit";
     sendButton.setAttribute(
       "aria-label",
@@ -614,6 +671,70 @@ if (!existingWidget) {
     status.textContent = message;
     status.dataset.state = state;
   };
+
+  const updateAuthUi = () => {
+    authSection.hidden = !loginEnabled;
+    authLoginButton.hidden = isAuthenticated;
+    authLogoutButton.hidden = !isAuthenticated;
+    authUserInput.disabled = isAuthenticated || authRequestInFlight;
+    authPasswordInput.disabled = isAuthenticated || authRequestInFlight;
+    authLoginButton.disabled =
+      authRequestInFlight ||
+      isAuthenticated ||
+      !authUserInput.value.trim() ||
+      !authPasswordInput.value.trim();
+    authLogoutButton.disabled = authRequestInFlight || !isAuthenticated;
+
+    if (!loginEnabled) {
+      authStatus.textContent = "Login disabled on server";
+      authStatus.dataset.state = "neutral";
+      input.placeholder = "Ask about Huawei Cloud services...";
+    } else if (isAuthenticated) {
+      authStatus.textContent = authUsername
+        ? `Logged in as ${authUsername}`
+        : "Logged in";
+      authStatus.dataset.state = "success";
+      input.placeholder = "Ask about Huawei Cloud services...";
+    } else {
+      authStatus.textContent = "Login required";
+      authStatus.dataset.state = "warning";
+      input.placeholder = "Login required before chatting...";
+    }
+
+    updateFormState();
+  };
+
+  const refreshAuthState = async () => {
+    const serverUrl = normalizeServerUrl(activeServerUrl);
+    try {
+      const configPayload = await requestServer(serverUrl, "/api/public-config", null, {
+        method: "GET",
+      });
+      loginEnabled = Boolean(configPayload?.loginEnabled);
+
+      if (!loginEnabled) {
+        isAuthenticated = true;
+        authUsername = "";
+        updateAuthUi();
+        return;
+      }
+
+      const sessionPayload = await requestServer(serverUrl, "/api/auth/session", null, {
+        method: "GET",
+      });
+      isAuthenticated = Boolean(sessionPayload?.authenticated);
+      authUsername =
+        typeof sessionPayload?.username === "string" ? sessionPayload.username : "";
+    } catch {
+      loginEnabled = false;
+      isAuthenticated = true;
+      authUsername = "";
+    }
+
+    updateAuthUi();
+  };
+
+  updateAuthUi();
 
   const setDevMode = (enabled) => {
     isDevMode = enabled;
@@ -1475,7 +1596,7 @@ if (!existingWidget) {
     return response.json();
   };
 
-  const requestServer = async (serverUrl, endpoint, payload, { signal } = {}) => {
+  const requestServer = async (serverUrl, endpoint, payload, { signal, method = "POST" } = {}) => {
     if (
       typeof chrome !== "undefined" &&
       chrome.runtime &&
@@ -1498,7 +1619,7 @@ if (!existingWidget) {
           signal.addEventListener("abort", handleAbort, { once: true });
         }
         chrome.runtime.sendMessage(
-          { type: "hwc-chat-request", serverUrl, endpoint, payload },
+          { type: "hwc-chat-request", serverUrl, endpoint, payload, method },
           (response) => {
             if (settled) {
               return;
@@ -1529,11 +1650,12 @@ if (!existingWidget) {
     }
 
     const response = await fetch(`${serverUrl}${endpoint}`, {
-      method: "POST",
+      method,
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(payload),
+      body: method === "GET" ? undefined : JSON.stringify(payload || {}),
       signal,
     });
 
@@ -2246,6 +2368,7 @@ if (!existingWidget) {
     serverUrlInput.value = normalized;
     activeServerUrl = normalized;
     storageSet({ serverUrl: normalized });
+    refreshAuthState();
   });
 
   saveButton.addEventListener("click", async () => {
@@ -2317,6 +2440,11 @@ if (!existingWidget) {
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (isSending || hasRunningToolCalls || pendingChoice) {
+      return;
+    }
+
+    if (loginEnabled && !isAuthenticated) {
+      setStatus("Please login first.", "warning");
       return;
     }
 
@@ -2425,6 +2553,61 @@ if (!existingWidget) {
     },
   );
 
+  [authUserInput, authPasswordInput].forEach((field) => {
+    field.addEventListener("input", () => {
+      updateAuthUi();
+    });
+  });
+
+  authLoginButton.addEventListener("click", async () => {
+    const username = authUserInput.value.trim();
+    const password = authPasswordInput.value.trim();
+    if (!username || !password || authRequestInFlight) {
+      return;
+    }
+
+    authRequestInFlight = true;
+    updateAuthUi();
+    try {
+      const serverUrl = normalizeServerUrl(activeServerUrl);
+      const payload = await requestServer(serverUrl, "/api/auth/login", { username, password });
+      if (payload?.error) {
+        throw new Error(payload.error);
+      }
+      authPasswordInput.value = "";
+      setStatus("Logged in", "success");
+      await refreshAuthState();
+    } catch (error) {
+      authStatus.textContent = error instanceof Error ? error.message : "Login failed";
+      authStatus.dataset.state = "error";
+      setStatus("Login failed", "error");
+    } finally {
+      authRequestInFlight = false;
+      updateAuthUi();
+    }
+  });
+
+  authLogoutButton.addEventListener("click", async () => {
+    if (authRequestInFlight) {
+      return;
+    }
+
+    authRequestInFlight = true;
+    updateAuthUi();
+    try {
+      const serverUrl = normalizeServerUrl(activeServerUrl);
+      await requestServer(serverUrl, "/api/auth/logout", {});
+      isAuthenticated = false;
+      authUsername = "";
+      setStatus("Logged out", "neutral");
+    } catch {
+      setStatus("Logout failed", "error");
+    } finally {
+      authRequestInFlight = false;
+      await refreshAuthState();
+    }
+  });
+
   storageGet([
     CREDENTIALS_STORAGE_KEY,
     "accessKey",
@@ -2520,6 +2703,7 @@ if (!existingWidget) {
     setDevMode(isDevMode);
     activeServerUrl = serverUrlInput.value;
     updateSaveButton();
+    refreshAuthState();
     ensureWidgetOnScreen();
     updatePanelOffset();
     saveWidgetPosition();
