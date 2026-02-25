@@ -1,7 +1,34 @@
 import Database from "bun:sqlite";
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const db = new Database("./admin.db", { create: true, readwrite: true });
+const findProjectRoot = () => {
+  const candidates = [process.cwd(), dirname(fileURLToPath(import.meta.url))];
+
+  for (const candidate of candidates) {
+    let currentDir = resolve(candidate);
+
+    while (true) {
+      if (existsSync(join(currentDir, "package.json"))) {
+        return currentDir;
+      }
+
+      const parent = dirname(currentDir);
+      if (parent === currentDir) {
+        break;
+      }
+      currentDir = parent;
+    }
+  }
+
+  return process.cwd();
+};
+
+const ADMIN_DB_PATH = process.env.ADMIN_DB_PATH ?? join(findProjectRoot(), "admin.db");
+
+const db = new Database(ADMIN_DB_PATH, { create: true, readwrite: true });
 
 let isInitialized = false;
 
