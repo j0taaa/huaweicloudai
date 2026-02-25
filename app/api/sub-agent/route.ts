@@ -1,8 +1,7 @@
-import fs from "fs";
-import path from "path";
 import { ProxyAgent } from "undici";
 import { getAppConfig } from "@/lib/app-config";
 import { requireApprovedUser } from "@/lib/user-auth";
+import { DEFAULT_SYSTEM_PROMPT } from "../chat/system-prompt";
 
 type ChatMessage = {
   role: "user" | "assistant" | "system" | "tool";
@@ -27,8 +26,6 @@ type StreamEvent =
   | { type: "final"; result: string; mode: string; steps: StepTraceEntry[] }
   | { type: "error"; error: string; steps: StepTraceEntry[] };
 
-const SYSTEM_PROMPT_PATH = path.join(process.cwd(), "app", "api", "chat", "system_prompt.md");
-const DEFAULT_SYSTEM_PROMPT = fs.readFileSync(SYSTEM_PROMPT_PATH, "utf8");
 const SYSTEM_PROMPT_PLACEHOLDER = "{{CREDENTIALS_BLOCK}}";
 
 const buildCredentialsBlock = (context: SharedContext = {}) => {
