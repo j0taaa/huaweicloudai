@@ -1,18 +1,12 @@
 #!/usr/bin/env bun
-import { spawn } from "bun";
+import { createRequire } from "node:module";
 
 const appRoot = process.env.APP_ROOT || process.cwd();
-const nextCli = `${appRoot}/node_modules/.bin/next`;
+process.chdir(appRoot);
 
-const child = spawn({
-  // Use local Next.js CLI directly to avoid requiring external `bun`/`bunx`.
-  cmd: [nextCli, "start"],
-  cwd: appRoot,
-  env: process.env,
-  stdout: "inherit",
-  stderr: "inherit",
-  stdin: "inherit",
-});
-
-const exitCode = await child.exited;
-process.exit(exitCode);
+// Execute Next.js CLI in-process on the embedded Bun runtime from this
+// compiled executable so no external `bun`, `bunx`, or `node` binary is
+// required on target systems.
+process.argv = [process.argv0 || "bun", "next", "start"];
+const require = createRequire(import.meta.url);
+require(`${appRoot}/node_modules/next/dist/bin/next`);

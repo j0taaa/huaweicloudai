@@ -15,7 +15,8 @@ trap cleanup EXIT
 cp "$ROOT_DIR/dist/huaweicloudai-single" /tmp/huaweicloudai-single
 chmod +x /tmp/huaweicloudai-single
 
-PORT=3011 RAG_SERVER_PORT=8093 /tmp/huaweicloudai-single > /tmp/huaweicloudai-single.log 2>&1 &
+# Simulate a target host without Bun/Node installed in PATH.
+PATH=/usr/bin:/bin PORT=3011 RAG_SERVER_PORT=8093 /tmp/huaweicloudai-single > /tmp/huaweicloudai-single.log 2>&1 &
 
 for _ in {1..120}; do
   if curl -sf "http://127.0.0.1:3011/api/search-rag?action=schema" >/dev/null; then
@@ -23,6 +24,12 @@ for _ in {1..120}; do
   fi
   sleep 1
 done
+
+# Regression check: compiled monolith must not require host `node`.
+if rg -q "/usr/bin/env: .*node" /tmp/huaweicloudai-single.log; then
+  echo "monolith attempted to execute host node runtime" >&2
+  exit 1
+fi
 
 curl -sf "http://127.0.0.1:3011/api/search-rag?action=schema" | jq '.name' | grep 'rag_search' >/dev/null
 curl -sf -X POST "http://127.0.0.1:3011/api/search-rag" -H 'content-type: application/json' -d '{"query":"where are EVS snapshots stored","top_k":3}' | jq '.results[0].product' | grep 'EVS' >/dev/null
