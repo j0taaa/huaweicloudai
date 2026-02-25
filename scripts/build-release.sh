@@ -12,8 +12,8 @@ mkdir -p "$DIST_DIR"
 bun install
 bun run build
 
-# Compile TS launcher executable with bun compile
-bun build --compile scripts/ts-server-entry.ts --outfile "$DIST_DIR/ts-server"
+# Compile TS launcher executable with bun compile + minification
+bun build --compile --minify scripts/ts-server-entry.ts --outfile "$DIST_DIR/ts-server"
 
 # Copy Next runtime assets needed by `next start`
 cp -r .next "$DIST_DIR/.next"
