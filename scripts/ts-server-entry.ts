@@ -2,9 +2,11 @@
 import { spawn } from "bun";
 
 const appRoot = process.env.APP_ROOT || process.cwd();
+const nextCli = `${appRoot}/node_modules/.bin/next`;
 
 const child = spawn({
-  cmd: ["bunx", "--bun", "next", "start"],
+  // Use local Next.js CLI directly to avoid requiring external `bun`/`bunx`.
+  cmd: [nextCli, "start"],
   cwd: appRoot,
   env: process.env,
   stdout: "inherit",
