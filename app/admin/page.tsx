@@ -210,10 +210,14 @@ const saveCoreSettingsAction = async (formData: FormData) => {
 
 const changeAdminPasswordAction = async (formData: FormData) => {
   "use server";
-  await ensureAdmin();
   const currentPassword = String(formData.get("currentPassword") ?? "");
   const newPassword = String(formData.get("newPassword") ?? "");
   const confirmPassword = String(formData.get("confirmPassword") ?? "");
+
+  const authenticated = await isAdminAuthenticated();
+  if (!authenticated && !isValidAdminPassword(currentPassword)) {
+    redirect("/admin?error=Unauthorized");
+  }
 
   if (!isValidAdminPassword(currentPassword)) {
     redirect("/admin?error=Current%20password%20is%20incorrect");
@@ -226,6 +230,9 @@ const changeAdminPasswordAction = async (formData: FormData) => {
   }
 
   updateAdminPassword(newPassword);
+  if (!authenticated) {
+    await createAdminSession();
+  }
   redirect("/admin?success=Admin%20password%20updated");
 };
 
