@@ -22,7 +22,7 @@ export const HARD_CODED_LICENSE_AUTHORITY_URL = "https://license.hwctools.site";
 // Replace this key pair before production rollout if needed.
 // Public key is pinned in client builds; authority must sign with matching private key.
 const HARD_CODED_LICENSE_PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAGp9chEz7khPKzbG+U3tFN140Z4r6uIDpOgXj2N6dCbw=
+MCowBQYDK2VwAyEA5UMiS/9H+irE9UY8dZdLYKAnN+TzooPS6H1vBkBC3lI=
 -----END PUBLIC KEY-----`;
 
 const DEFAULT_TOKEN_TTL_MS = 2 * 60 * 60 * 1000;
