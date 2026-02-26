@@ -46,10 +46,17 @@ jobs:
             bun run build:release:licensed
           elif bun -e 'const p=require("./package.json"); process.exit(p.scripts && p.scripts["build:release"] ? 0 : 1);'; then
             bun run build:release
-            mkdir -p dist/licensed
-            find dist -mindepth 1 -maxdepth 1 ! -name licensed -exec cp -a {} dist/licensed/ \;
           else
             echo "Neither build:release:licensed nor build:release exists in package.json"
+            exit 1
+          fi
+
+          if [ -f dist/licensed/huaweicloudai-single ]; then
+            cp -f dist/licensed/huaweicloudai-single dist/huaweicloudai-single
+          fi
+
+          if [ ! -f dist/huaweicloudai-single ]; then
+            echo "Expected dist/huaweicloudai-single was not produced by build."
             exit 1
           fi
 
@@ -92,7 +99,7 @@ jobs:
 
           docker build \
             -f Dockerfile.swr \
-            --build-arg DIST_PATH=dist/licensed \
+            --build-arg DIST_PATH=dist \
             --build-arg DEFAULT_LICENSE_MODE=client \
             --build-arg DEFAULT_LICENSE_ENFORCEMENT=required \
             -t "${APP_IMAGE}:${IMAGE_TAG}" \
@@ -113,7 +120,7 @@ jobs:
 
           docker build \
             -f Dockerfile.swr \
-            --build-arg DIST_PATH=dist/licensed \
+            --build-arg DIST_PATH=dist \
             --build-arg DEFAULT_LICENSE_MODE=authority \
             --build-arg DEFAULT_LICENSE_ENFORCEMENT=disabled \
             -t "${LICENSE_IMAGE}:${IMAGE_TAG}" \
