@@ -10,7 +10,7 @@ const UUID_REGEX =
 
 const PORT = Number(process.env.PORT || 80);
 const HOST = process.env.HOST?.trim() || "0.0.0.0";
-const ADMIN_PASSWORD = process.env.LICENSE_ADMIN_PASSWORD?.trim() || "admin123";
+const DEFAULT_ADMIN_PASSWORD = process.env.LICENSE_ADMIN_PASSWORD?.trim() || "admin123";
 const SHARED_SECRET = process.env.LICENSE_SHARED_SECRET?.trim() || "";
 const DB_PATH = process.env.LICENSE_DB_PATH?.trim() || path.join(process.cwd(), "license.db");
 const TOKEN_TTL_MS = Number(process.env.LICENSE_TOKEN_TTL_MS || 2 * 60 * 60 * 1000);
@@ -53,15 +53,46 @@ db.run(
     last_ip TEXT NOT NULL DEFAULT ''
   )`,
 );
+db.run(
+  `CREATE TABLE IF NOT EXISTS admin_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  )`,
+);
 
 const sessions = new Map();
 
 const sha = (value) => createHash("sha256").update(value).digest();
-const adminPasswordDigest = sha(ADMIN_PASSWORD);
+const shaHex = (value) => createHash("sha256").update(value).digest("hex");
+const getAdminSetting = (key) => {
+  const row = db.query("SELECT value FROM admin_settings WHERE key = ? LIMIT 1").get(key);
+  return typeof row?.value === "string" ? row.value : null;
+};
+const setAdminSetting = (key, value) => {
+  db.query(
+    "INSERT INTO admin_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+  ).run(key, value);
+};
+
+const loadAdminPasswordDigest = () => {
+  const stored = getAdminSetting("admin_password_sha256");
+  if (stored && /^[a-f0-9]{64}$/i.test(stored)) {
+    return Buffer.from(stored, "hex");
+  }
+  return sha(DEFAULT_ADMIN_PASSWORD);
+};
+let adminPasswordDigest = loadAdminPasswordDigest();
 
 const isAdminPasswordValid = (value) => {
   const received = sha(value);
+  if (received.length !== adminPasswordDigest.length) return false;
   return timingSafeEqual(adminPasswordDigest, received);
+};
+
+const updateAdminPassword = (nextPassword) => {
+  const digestHex = shaHex(nextPassword);
+  setAdminSetting("admin_password_sha256", digestHex);
+  adminPasswordDigest = Buffer.from(digestHex, "hex");
 };
 
 const now = () => Date.now();
@@ -202,7 +233,16 @@ const withSetCookie = (response, cookieValue) => {
   });
 };
 
-const redirect = (request, pathname) => Response.redirect(new URL(pathname, request.url), 303);
+const redirect = (request, pathname, searchParams = null) => {
+  const target = new URL(pathname, request.url);
+  if (searchParams) {
+    for (const [key, value] of Object.entries(searchParams)) {
+      if (!value) continue;
+      target.searchParams.set(key, String(value));
+    }
+  }
+  return Response.redirect(target, 303);
+};
 
 const loginPage = (error = "") => `<!doctype html>
 <html>
@@ -211,12 +251,20 @@ const loginPage = (error = "") => `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>License Server Login</title>
     <style>
-      body { font-family: Arial, sans-serif; margin: 0; background: #f7f7f8; color: #111; }
-      .card { max-width: 420px; margin: 80px auto; background: #fff; border: 1px solid #ddd; border-radius: 12px; padding: 20px; }
-      input, button { width: 100%; padding: 10px; margin-top: 10px; box-sizing: border-box; }
-      button { cursor: pointer; background: #111; color: #fff; border: 0; border-radius: 8px; }
-      .error { margin-top: 10px; color: #b00020; font-size: 14px; }
-      .muted { color: #666; font-size: 12px; margin-top: 8px; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; font-family: "Segoe UI", Arial, sans-serif; color: #1f2937;
+             background: radial-gradient(circle at top, #e0ecff 0%, #eef2ff 40%, #f8fafc 100%); display: grid; place-items: center; padding: 20px; }
+      .card { width: 100%; max-width: 460px; background: #fff; border: 1px solid #dbe4f0; border-radius: 16px; padding: 26px;
+              box-shadow: 0 20px 50px -36px rgba(15, 23, 42, 0.65); }
+      h2 { margin: 0; font-size: 24px; letter-spacing: -0.02em; }
+      label { display: block; margin-top: 10px; font-size: 13px; color: #4b5563; font-weight: 600; }
+      input, button { width: 100%; padding: 11px 12px; margin-top: 8px; border-radius: 10px; font-size: 14px; }
+      input { border: 1px solid #cbd5e1; }
+      input:focus { outline: 2px solid #93c5fd; outline-offset: 0; border-color: #60a5fa; }
+      button { cursor: pointer; border: 0; color: #fff; font-weight: 700; letter-spacing: 0.01em;
+               background: linear-gradient(90deg, #2563eb 0%, #3b82f6 55%, #0ea5e9 100%); }
+      .error { margin-top: 12px; color: #b91c1c; background: #fee2e2; border: 1px solid #fecaca; border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+      .muted { color: #64748b; font-size: 12px; margin-top: 8px; }
     </style>
   </head>
   <body>
@@ -233,7 +281,7 @@ const loginPage = (error = "") => `<!doctype html>
   </body>
 </html>`;
 
-const dashboardPage = () => {
+const dashboardPage = ({ message = "", error = "" } = {}) => {
   const rows = listClients()
     .map(
       (client) => `
@@ -249,9 +297,9 @@ const dashboardPage = () => {
         <td>
           <form method="post" action="/admin/client/status" style="display:flex; gap:6px; flex-wrap:wrap;">
             <input type="hidden" name="uuid" value="${htmlEscape(client.uuid)}" />
-            <button name="status" value="approved" type="submit">Approve</button>
+            <button class="btn-approve" name="status" value="approved" type="submit">Approve</button>
             <button name="status" value="pending" type="submit">Pending</button>
-            <button name="status" value="denied" type="submit">Deny</button>
+            <button class="btn-deny" name="status" value="denied" type="submit">Deny</button>
           </form>
         </td>
         <td>${htmlEscape(client.status)}</td>
@@ -271,42 +319,86 @@ const dashboardPage = () => {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>License Server</title>
     <style>
-      body { font-family: Arial, sans-serif; margin: 20px; background: #f7f7f8; color: #111; }
-      .top { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
-      .muted { color:#666; font-size: 13px; }
-      table { width:100%; border-collapse: collapse; background:#fff; border:1px solid #ddd; }
-      th, td { border-bottom:1px solid #eee; padding:8px; text-align:left; vertical-align:top; font-size:13px; }
-      th { background:#fafafa; }
-      input { padding:8px; border:1px solid #ccc; border-radius:6px; min-width:160px; }
-      button { padding:7px 10px; border:1px solid #ccc; border-radius:6px; background:#fff; cursor:pointer; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; color: #1f2937; background: #f1f5f9; }
+      .wrap { max-width: 1440px; margin: 0 auto; padding: 22px; }
+      .top { display:flex; justify-content:space-between; gap: 14px; align-items:flex-start; margin-bottom: 16px; flex-wrap: wrap; }
+      .title { margin: 0; font-size: 24px; letter-spacing: -0.02em; }
+      .muted { color:#64748b; font-size: 13px; margin-top: 4px; }
+      .panel { background:#fff; border:1px solid #dbe4f0; border-radius:14px; box-shadow: 0 14px 32px -28px rgba(15,23,42,0.65); }
+      .alerts { margin-bottom: 12px; display: grid; gap: 8px; }
+      .notice, .error { padding: 10px 12px; border-radius: 10px; font-size: 13px; }
+      .notice { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+      .error { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+      table { width:100%; border-collapse: collapse; background:#fff; }
+      th, td { border-bottom:1px solid #eef2f7; padding:10px; text-align:left; vertical-align:top; font-size:13px; }
+      th { background:#f8fafc; color: #475569; position: sticky; top: 0; z-index: 1; }
+      input { padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; min-width: 180px; background: #fff; }
+      input:focus { outline: 2px solid #93c5fd; border-color: #60a5fa; }
+      button { padding:8px 12px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; cursor:pointer; font-weight: 600; }
+      .btn-primary { color: #fff; border-color: #2563eb; background: linear-gradient(90deg, #2563eb, #3b82f6); }
+      .btn-approve { border-color: #22c55e; color: #166534; }
+      .btn-deny { border-color: #ef4444; color: #991b1b; }
       code { font-size: 11px; }
-      .empty { background:#fff; border:1px solid #ddd; border-radius:10px; padding:14px; }
+      .empty { padding:18px; }
+      .grid { display:grid; gap: 14px; grid-template-columns: 1fr; margin-bottom: 14px; }
+      .card { padding: 14px; }
+      .card h3 { margin: 0 0 8px; font-size: 15px; }
+      .form-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+      .table-wrap { overflow: auto; max-height: 68vh; border-radius: 14px; }
+      @media (min-width: 1100px) { .grid { grid-template-columns: 1.2fr 1fr; } }
     </style>
   </head>
   <body>
-    <div class="top">
-      <div>
-        <h2 style="margin:0;">License Server</h2>
-        <div class="muted">Authority URL: ${AUTHORITY_URL}</div>
+    <div class="wrap">
+      <div class="top">
+        <div>
+          <h2 class="title">License Authority Console</h2>
+          <div class="muted">Authority URL: ${AUTHORITY_URL}</div>
+        </div>
+        <form method="post" action="/logout"><button type="submit">Logout</button></form>
       </div>
-      <form method="post" action="/logout"><button type="submit">Logout</button></form>
+
+      ${message || error ? `<div class="alerts">
+        ${message ? `<div class="notice">${htmlEscape(message)}</div>` : ""}
+        ${error ? `<div class="error">${htmlEscape(error)}</div>` : ""}
+      </div>` : ""}
+
+      <div class="grid">
+        <section class="panel card">
+          <h3>Owner Password</h3>
+          <div class="muted">Change the admin password used to access this console.</div>
+          <form method="post" action="/admin/password" style="margin-top: 12px;">
+            <div class="form-row"><input name="currentPassword" type="password" placeholder="Current password" required /></div>
+            <div class="form-row" style="margin-top:8px;"><input name="newPassword" type="password" placeholder="New password (min 8 chars)" minlength="8" required /></div>
+            <div class="form-row" style="margin-top:8px;"><input name="confirmPassword" type="password" placeholder="Confirm new password" minlength="8" required /></div>
+            <div class="form-row" style="margin-top:10px;"><button class="btn-primary" type="submit">Update Password</button></div>
+          </form>
+        </section>
+
+        <section class="panel card">
+          <h3>Client Statuses</h3>
+          <div class="muted">Approve, pend, or deny registered subservers.</div>
+        </section>
+      </div>
+
+      ${rows ? `<div class="panel table-wrap"><table>
+        <thead>
+          <tr>
+            <th>UUID</th>
+            <th>Name</th>
+            <th>Actions</th>
+            <th>Status</th>
+            <th>Host</th>
+            <th>Version</th>
+            <th>IP</th>
+            <th>First Seen</th>
+            <th>Last Seen</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table></div>` : `<div class="panel empty">No subservers registered yet.</div>`}
     </div>
-    ${rows ? `<table>
-      <thead>
-        <tr>
-          <th>UUID</th>
-          <th>Name</th>
-          <th>Actions</th>
-          <th>Status</th>
-          <th>Host</th>
-          <th>Version</th>
-          <th>IP</th>
-          <th>First Seen</th>
-          <th>Last Seen</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>` : `<div class="empty">No subservers registered yet.</div>`}
   </body>
 </html>`;
 };
@@ -373,12 +465,14 @@ const server = Bun.serve({
     }
 
     if (url.pathname === "/") {
+      const notice = url.searchParams.get("notice") || "";
+      const error = url.searchParams.get("error") || "";
       if (!isAdminAuthenticated(request)) {
         return new Response(loginPage(), {
           headers: { "Content-Type": "text/html; charset=utf-8" },
         });
       }
-      return new Response(dashboardPage(), {
+      return new Response(dashboardPage({ message: notice, error }), {
         headers: { "Content-Type": "text/html; charset=utf-8" },
       });
     }
@@ -435,6 +529,30 @@ const server = Bun.serve({
         setClientName(uuid, displayName);
       }
       return redirect(request, "/");
+    }
+
+    if (request.method === "POST" && url.pathname === "/admin/password") {
+      if (!isAdminAuthenticated(request)) {
+        return redirect(request, "/");
+      }
+
+      const form = await request.formData();
+      const currentPassword = String(form.get("currentPassword") || "");
+      const newPassword = String(form.get("newPassword") || "");
+      const confirmPassword = String(form.get("confirmPassword") || "");
+
+      if (!isAdminPasswordValid(currentPassword)) {
+        return redirect(request, "/", { error: "Current password is incorrect." });
+      }
+      if (newPassword.length < 8) {
+        return redirect(request, "/", { error: "New password must be at least 8 characters." });
+      }
+      if (newPassword !== confirmPassword) {
+        return redirect(request, "/", { error: "New password and confirmation do not match." });
+      }
+
+      updateAdminPassword(newPassword);
+      return redirect(request, "/", { notice: "Owner password updated successfully." });
     }
 
     if (url.pathname === "/health") {
