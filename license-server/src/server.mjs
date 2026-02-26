@@ -3,7 +3,7 @@ import { createHash, createPrivateKey, randomUUID, sign, timingSafeEqual } from 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-const AUTHORITY_URL = "https://hwctools.site";
+const AUTHORITY_URL = "https://license.hwctools.site";
 const COOKIE_NAME = "license_admin_session";
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

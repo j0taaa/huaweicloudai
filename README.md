@@ -79,7 +79,7 @@ bun run license-server:dev
 When running in `client` mode with `LICENSE_ENFORCEMENT=required`, the server:
 
 - Generates and persists a machine UUID.
-- Registers itself with the hardcoded authority URL: `https://hwctools.site`.
+- Registers itself with the hardcoded authority URL: `https://license.hwctools.site`.
 - Sends heartbeat checks every hour.
 - Keeps working for up to 72h without authority responses (`LICENSE_GRACE_PERIOD_MS` controls this).
 - Requires a signed license token from authority (Ed25519 signature verified with pinned public key in client).
