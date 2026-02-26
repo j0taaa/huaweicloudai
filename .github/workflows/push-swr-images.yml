@@ -1,0 +1,114 @@
+name: Build and Push SWR Images
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "*"
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Optional image tag override"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  SWR_REGISTRY: swr.sa-brazil-1.myhuaweicloud.com
+  SWR_ORG: org
+  APP_IMAGE_NAME: huaweicloudai-app
+  LICENSE_SERVER_IMAGE_NAME: huaweicloudai-license-server
+
+jobs:
+  push-images:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake
+
+      - name: Build licensed release artifacts
+        run: bun run build:release:licensed
+
+      - name: Resolve image tag
+        id: meta
+        run: |
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            IMAGE_TAG="${GITHUB_REF_NAME}"
+          else
+            IMAGE_TAG="${GITHUB_SHA::7}"
+          fi
+
+          PUSH_LATEST="false"
+          if [ "${GITHUB_REF_TYPE}" = "branch" ] && [ "${GITHUB_REF_NAME}" = "main" ]; then
+            PUSH_LATEST="true"
+          fi
+
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "push_latest=${PUSH_LATEST}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to Huawei Cloud SWR
+        env:
+          SWR_USERNAME: ${{ secrets.SWR_USERNAME }}
+          SWR_PASSWORD: ${{ secrets.SWR_PASSWORD }}
+        run: |
+          if [ -z "${SWR_USERNAME}" ] || [ -z "${SWR_PASSWORD}" ]; then
+            echo "SWR_USERNAME and SWR_PASSWORD secrets are required."
+            exit 1
+          fi
+          echo "${SWR_PASSWORD}" | docker login "${SWR_REGISTRY}" --username "${SWR_USERNAME}" --password-stdin
+
+      - name: Build and push licensed app image
+        env:
+          IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
+          PUSH_LATEST: ${{ steps.meta.outputs.push_latest }}
+        run: |
+          APP_IMAGE="${SWR_REGISTRY}/${SWR_ORG}/${APP_IMAGE_NAME}"
+
+          docker build \
+            -f Dockerfile.swr \
+            --build-arg DIST_PATH=dist/licensed \
+            -t "${APP_IMAGE}:${IMAGE_TAG}" \
+            .
+          docker push "${APP_IMAGE}:${IMAGE_TAG}"
+
+          if [ "${PUSH_LATEST}" = "true" ]; then
+            docker tag "${APP_IMAGE}:${IMAGE_TAG}" "${APP_IMAGE}:latest"
+            docker push "${APP_IMAGE}:latest"
+          fi
+
+      - name: Build and push license server image
+        env:
+          IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
+          PUSH_LATEST: ${{ steps.meta.outputs.push_latest }}
+        run: |
+          LICENSE_IMAGE="${SWR_REGISTRY}/${SWR_ORG}/${LICENSE_SERVER_IMAGE_NAME}"
+
+          docker build \
+            -f Dockerfile.swr \
+            --build-arg DIST_PATH=dist/licensed \
+            --build-arg DEFAULT_LICENSE_MODE=authority \
+            --build-arg DEFAULT_LICENSE_ENFORCEMENT=disabled \
+            -t "${LICENSE_IMAGE}:${IMAGE_TAG}" \
+            .
+          docker push "${LICENSE_IMAGE}:${IMAGE_TAG}"
+
+          if [ "${PUSH_LATEST}" = "true" ]; then
+            docker tag "${LICENSE_IMAGE}:${IMAGE_TAG}" "${LICENSE_IMAGE}:latest"
+            docker push "${LICENSE_IMAGE}:latest"
+          fi
