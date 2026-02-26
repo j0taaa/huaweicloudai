@@ -17,7 +17,7 @@ export type SignedLicenseToken = {
   signature: string;
 };
 
-export const HARD_CODED_LICENSE_AUTHORITY_URL = "https://hwctools.site";
+export const HARD_CODED_LICENSE_AUTHORITY_URL = "https://license.hwctools.site";
 
 // Replace this key pair before production rollout if needed.
 // Public key is pinned in client builds; authority must sign with matching private key.
