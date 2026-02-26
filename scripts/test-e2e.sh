@@ -35,9 +35,21 @@ for _ in {1..30}; do
   sleep 1
 done
 
-curl -sf "http://127.0.0.1:8088/health" | jq '.ready' | grep true >/dev/null
-curl -sf "http://127.0.0.1:8088/schema" | jq '.name' | grep 'rag_search' >/dev/null
-curl -sf -X POST "http://127.0.0.1:8088/search" -H 'content-type: application/json' -d '{"query":"ECS instance","top_k":2}' | jq '.results | length >= 0' | grep true >/dev/null
-curl -sf -X POST "http://127.0.0.1:3000/api/search-rag" -H 'content-type: application/json' -d '{"query":"ECS instance","top_k":2}' | jq '.results' >/dev/null
+curl -sf "http://127.0.0.1:8088/health" | bun -e '
+const payload = JSON.parse(await Bun.stdin.text());
+if (payload?.ready !== true) process.exit(1);
+'
+curl -sf "http://127.0.0.1:8088/schema" | bun -e '
+const payload = JSON.parse(await Bun.stdin.text());
+if (payload?.name !== "rag_search") process.exit(1);
+'
+curl -sf -X POST "http://127.0.0.1:8088/search" -H 'content-type: application/json' -d '{"query":"ECS instance","top_k":2}' | bun -e '
+const payload = JSON.parse(await Bun.stdin.text());
+if (!Array.isArray(payload?.results)) process.exit(1);
+'
+curl -sf -X POST "http://127.0.0.1:3000/api/search-rag" -H 'content-type: application/json' -d '{"query":"ECS instance","top_k":2}' | bun -e '
+const payload = JSON.parse(await Bun.stdin.text());
+if (!Array.isArray(payload?.results)) process.exit(1);
+'
 
 echo "e2e checks passed"

@@ -7,7 +7,7 @@
     "build": "bunx --bun next build",
     "start": "bunx --bun next start",
     "lint": "bunx eslint .",
-    "compile": "bun build --compile .next/standalone/server.js --outfile dist/ts-server",
+    "compile": "bun build --compile --minify .next/standalone/server.js --outfile dist/ts-server",
     "build:rag": "cmake -S rag-cpp-server -B rag-cpp-server/build && cmake --build rag-cpp-server/build -j",
     "build:launcher": "cmake -S launcher -B launcher/build && cmake --build launcher/build -j",
     "build:release": "bash scripts/build-release.sh",
