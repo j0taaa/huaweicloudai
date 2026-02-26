@@ -43,6 +43,7 @@ curl -sf -X POST "http://127.0.0.1:3011/api/search-rag" -H 'content-type: applic
 const payload = JSON.parse(await Bun.stdin.text());
 if (payload?.error) process.exit(1);
 if (!Array.isArray(payload?.results)) process.exit(1);
+if (payload?.embeddingFallback === "embedding_unavailable") process.exit(1);
 '
 
 echo "single-file monolith launcher smoke test passed"

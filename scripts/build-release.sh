@@ -200,6 +200,188 @@ async function minifyFile(filePath) {
 })();
 ' "$DIST_DIR"
 
+# Work around Bun compiled-runtime ESM resolver failing to locate bare
+# third-party imports from @xenova/transformers internals.
+XENOVA_ROOT="$DIST_DIR/node_modules/@xenova/transformers"
+NODE_MODULES_ROOT="$DIST_DIR/node_modules"
+if [ -d "$XENOVA_ROOT" ] && [ -d "$NODE_MODULES_ROOT" ]; then
+  bun - "$XENOVA_ROOT" "$NODE_MODULES_ROOT" <<'BUN'
+const fs = require("fs");
+const path = require("path");
+
+const xenovaRoot = process.argv[2];
+const nodeModulesRoot = process.argv[3];
+const files = [];
+const stack = [xenovaRoot];
+const packageJsonCache = new Map();
+const dependencySpecifiers = [
+  "@huggingface/jinja",
+  "sharp",
+  "onnxruntime-web",
+  "onnxruntime-node",
+];
+
+function splitPackageSpecifier(specifier) {
+  if (specifier.startsWith("@")) {
+    const [scope, name, ...rest] = specifier.split("/");
+    return { packageName: `${scope}/${name ?? ""}`, subpath: rest.join("/") };
+  }
+  const [name, ...rest] = specifier.split("/");
+  return { packageName: name ?? "", subpath: rest.join("/") };
+}
+
+function readPackageJson(packageDir) {
+  const cached = packageJsonCache.get(packageDir);
+  if (cached !== undefined) return cached;
+
+  const packageJsonPath = path.join(packageDir, "package.json");
+  if (!fs.existsSync(packageJsonPath)) {
+    packageJsonCache.set(packageDir, null);
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+    packageJsonCache.set(packageDir, parsed);
+    return parsed;
+  } catch {
+    packageJsonCache.set(packageDir, null);
+    return null;
+  }
+}
+
+function selectConditionalExportTarget(value) {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object") return undefined;
+
+  for (const key of ["import", "default", "module", "require", "node", "bun"]) {
+    const selected = selectConditionalExportTarget(value[key]);
+    if (selected) return selected;
+  }
+
+  for (const nested of Object.values(value)) {
+    const selected = selectConditionalExportTarget(nested);
+    if (selected) return selected;
+  }
+
+  return undefined;
+}
+
+function resolveFileOrDirectory(basePath) {
+  if (fs.existsSync(basePath) && fs.statSync(basePath).isFile()) return basePath;
+
+  for (const ext of [".js", ".mjs", ".cjs", ".json"]) {
+    const candidate = `${basePath}${ext}`;
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
+  }
+
+  if (!fs.existsSync(basePath) || !fs.statSync(basePath).isDirectory()) return undefined;
+
+  const pkg = readPackageJson(basePath);
+  if (pkg?.exports) {
+    const target = selectConditionalExportTarget(pkg.exports["."] ?? pkg.exports);
+    if (target && target.startsWith(".")) {
+      const resolved = resolveFileOrDirectory(path.resolve(basePath, target));
+      if (resolved) return resolved;
+    }
+  }
+
+  if (typeof pkg?.module === "string") {
+    const resolved = resolveFileOrDirectory(path.resolve(basePath, pkg.module));
+    if (resolved) return resolved;
+  }
+  if (typeof pkg?.main === "string") {
+    const resolved = resolveFileOrDirectory(path.resolve(basePath, pkg.main));
+    if (resolved) return resolved;
+  }
+
+  for (const indexFile of ["index.js", "index.mjs", "index.cjs", "index.json"]) {
+    const candidate = path.join(basePath, indexFile);
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
+  }
+
+  return undefined;
+}
+
+function resolvePackageEntry(specifier) {
+  const { packageName, subpath } = splitPackageSpecifier(specifier);
+  if (!packageName) return null;
+
+  const packageDir = path.join(nodeModulesRoot, packageName);
+  if (!fs.existsSync(packageDir) || !fs.statSync(packageDir).isDirectory()) return null;
+
+  const pkg = readPackageJson(packageDir);
+  const subpathKey = subpath ? `./${subpath}` : ".";
+  const targetFromExports =
+    pkg?.exports && typeof pkg.exports === "object"
+      ? selectConditionalExportTarget(pkg.exports[subpathKey])
+      : !subpath
+        ? selectConditionalExportTarget(pkg?.exports)
+        : undefined;
+
+  if (targetFromExports && targetFromExports.startsWith(".")) {
+    const resolved = resolveFileOrDirectory(path.resolve(packageDir, targetFromExports));
+    if (resolved) return resolved;
+  }
+
+  if (subpath) {
+    return resolveFileOrDirectory(path.join(packageDir, subpath)) ?? null;
+  }
+
+  return resolveFileOrDirectory(packageDir) ?? null;
+}
+
+const resolvedSpecifiers = new Map();
+for (const specifier of dependencySpecifiers) {
+  const entry = resolvePackageEntry(specifier);
+  if (entry) resolvedSpecifiers.set(specifier, entry);
+}
+
+if (resolvedSpecifiers.size === 0) {
+  throw new Error("Could not resolve any dependency entrypoints for @xenova/transformers rewrite");
+}
+
+while (stack.length) {
+  const current = stack.pop();
+  for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+    const fullPath = path.join(current, entry.name);
+    if (entry.isDirectory()) {
+      stack.push(fullPath);
+      continue;
+    }
+    if (!entry.isFile() || !/\.(c?m?js)$/.test(entry.name)) continue;
+    files.push(fullPath);
+  }
+}
+
+let rewritten = 0;
+for (const filePath of files) {
+  const source = fs.readFileSync(filePath, "utf8");
+  let next = source;
+
+  for (const [specifier, entryPath] of resolvedSpecifiers.entries()) {
+    if (!next.includes(specifier)) continue;
+    const relPath = path
+      .relative(path.dirname(filePath), entryPath)
+      .split(path.sep)
+      .join("/");
+    next = next
+      .replaceAll(`"${specifier}"`, `"${relPath}"`)
+      .replaceAll(`'${specifier}'`, `'${relPath}'`);
+  }
+
+  if (next !== source) {
+    rewritten += 1;
+    fs.writeFileSync(filePath, next);
+  }
+}
+
+if (rewritten === 0) {
+  throw new Error("Could not rewrite @xenova/transformers bare dependency imports");
+}
+BUN
+fi
+
 cmake -S rag-cpp-server -B rag-cpp-server/build -DCMAKE_BUILD_TYPE=Release
 cmake --build rag-cpp-server/build -j
 cp rag-cpp-server/build/rag-cpp-server "$DIST_DIR/rag-cpp-server"

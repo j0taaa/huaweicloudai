@@ -18,10 +18,16 @@ async function getEmbeddingPipeline() {
       quantized: true,
     });
     return embeddingPipeline;
-  } catch {
+  } catch (error) {
     embeddingPipelineUnavailable = true;
     embeddingPipelineError = "embedding_unavailable";
-    console.warn("Embedding pipeline unavailable, using lexical-only RAG fallback.");
+    const detail =
+      error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : JSON.stringify(error);
+    console.warn(`Embedding pipeline unavailable (${detail}), using lexical-only RAG fallback.`);
     return null;
   }
 }
