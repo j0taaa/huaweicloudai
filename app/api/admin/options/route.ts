@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { getOptions, upsertOption } from "@/lib/admin-db";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { enforceLicenseForApi } from "@/lib/license-guard";
 
 export async function GET() {
+  const licenseError = await enforceLicenseForApi();
+  if (licenseError) return licenseError;
   const isAuthenticated = await isAdminAuthenticated();
   if (!isAuthenticated) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -12,6 +15,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const licenseError = await enforceLicenseForApi();
+  if (licenseError) return licenseError;
   const isAuthenticated = await isAdminAuthenticated();
   if (!isAuthenticated) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

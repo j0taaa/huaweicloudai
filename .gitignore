@@ -54,3 +54,7 @@ next-env.d.ts
 
 # admin sqlite
 /admin.db*
+
+# license server sqlite
+/license-server/license.db*
+/license.db*

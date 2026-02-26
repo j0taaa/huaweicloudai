@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { enforceLicenseForApi } from "@/lib/license-guard";
 
 type SignRequest = {
   method?: string;
@@ -273,6 +274,8 @@ const hmacSHA1 = async (key: string, message: string): Promise<string> => {
 };
 
 export async function POST(request: Request) {
+  const licenseError = await enforceLicenseForApi();
+  if (licenseError) return licenseError;
   const body = (await request.json()) as SignRequest;
 
   if (!body.url || !body.ak || !body.sk) {

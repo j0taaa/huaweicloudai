@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { enforceLicenseForApi } from "@/lib/license-guard";
 
 type ProjectIdEntry = {
   region: string;
@@ -284,6 +285,8 @@ const fetchProjectIds = async (ak: string, sk: string) => {
 };
 
 export async function POST(request: Request) {
+  const licenseError = await enforceLicenseForApi();
+  if (licenseError) return licenseError;
   const body = (await request.json()) as ProjectIdsRequest;
   const accessKey = body.accessKey?.trim();
   const secretKey = body.secretKey?.trim();

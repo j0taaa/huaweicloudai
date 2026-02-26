@@ -2,6 +2,7 @@ import { ProxyAgent } from "undici";
 import { getAppConfig } from "@/lib/app-config";
 import { requireApprovedUser } from "@/lib/user-auth";
 import { DEFAULT_SYSTEM_PROMPT } from "../chat/system-prompt";
+import { enforceLicenseForApi } from "@/lib/license-guard";
 
 type ChatMessage = {
   role: "user" | "assistant" | "system" | "tool";
@@ -251,6 +252,8 @@ const pushStep = (
 };
 
 export async function POST(request: Request) {
+  const licenseError = await enforceLicenseForApi();
+  if (licenseError) return licenseError;
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {

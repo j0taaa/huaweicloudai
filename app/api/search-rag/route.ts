@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { enforceLicenseForApi } from "@/lib/license-guard";
 
 const RAG_SERVER_URL = process.env.RAG_SERVER_URL || "http://127.0.0.1:8088";
 const RAG_TIMEOUT_MS = Number(process.env.RAG_TIMEOUT_MS || 15000);
@@ -69,6 +70,8 @@ async function callRag(path: string, init?: RequestInit) {
 }
 
 export async function POST(request: Request) {
+  const licenseError = await enforceLicenseForApi();
+  if (licenseError) return licenseError;
   try {
     const body = await request.json();
     const { query, product, top_k = 3 } = body || {};
@@ -140,6 +143,8 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
+  const licenseError = await enforceLicenseForApi();
+  if (licenseError) return licenseError;
   const { searchParams } = new URL(request.url);
   const action = searchParams.get("action");
 

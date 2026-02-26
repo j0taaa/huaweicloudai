@@ -1,6 +1,7 @@
 import JSZip from "jszip";
 import { promises as fs } from "fs";
 import path from "path";
+import { enforceLicenseForApi } from "@/lib/license-guard";
 
 const EXTENSION_DIR = path.join(process.cwd(), "chrome-extension");
 
@@ -70,6 +71,8 @@ const buildExtensionZip = async (defaultServerUrl: string): Promise<ArrayBuffer>
 };
 
 export async function GET(request: Request) {
+  const licenseError = await enforceLicenseForApi();
+  if (licenseError) return licenseError;
   try {
     const defaultServerUrl = new URL(request.url).origin;
     const zipData = await buildExtensionZip(defaultServerUrl);

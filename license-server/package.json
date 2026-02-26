@@ -1,0 +1,9 @@
+{
+  "name": "huaweicloudai-license-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/server.mjs",
+    "start": "bun run src/server.mjs"
+  }
+}

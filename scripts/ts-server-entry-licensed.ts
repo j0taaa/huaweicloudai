@@ -2,10 +2,10 @@
 export {};
 
 if (!process.env.LICENSE_MODE) {
-  process.env.LICENSE_MODE = "disabled";
+  process.env.LICENSE_MODE = "client";
 }
 if (!process.env.LICENSE_ENFORCEMENT) {
-  process.env.LICENSE_ENFORCEMENT = "disabled";
+  process.env.LICENSE_ENFORCEMENT = "required";
 }
 
 await import("./ts-server-entry-core");

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { enforceLicenseForApi } from "@/lib/license-guard";
 
 interface ApiParam {
   name: string;
@@ -279,6 +280,8 @@ type GetApiDetailsRequest = {
 };
 
 export async function POST(request: Request) {
+  const licenseError = await enforceLicenseForApi();
+  if (licenseError) return licenseError;
   const { productShort, action, regionId } = (await request.json()) as GetApiDetailsRequest;
 
   if (!productShort || !action) {

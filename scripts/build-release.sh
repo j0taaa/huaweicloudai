@@ -2,7 +2,63 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-DIST_DIR="$ROOT_DIR/dist"
+
+VARIANT="${HCAI_RELEASE_VARIANT:-no-license}"
+OUTPUT_SUBDIR=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --variant)
+      if [ $# -lt 2 ]; then
+        echo "Missing value for --variant" >&2
+        exit 1
+      fi
+      VARIANT="$2"
+      shift 2
+      ;;
+    --variant=*)
+      VARIANT="${1#*=}"
+      shift
+      ;;
+    --out-subdir)
+      if [ $# -lt 2 ]; then
+        echo "Missing value for --out-subdir" >&2
+        exit 1
+      fi
+      OUTPUT_SUBDIR="$2"
+      shift 2
+      ;;
+    --out-subdir=*)
+      OUTPUT_SUBDIR="${1#*=}"
+      shift
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+case "$VARIANT" in
+  no-license|licensed)
+    ;;
+  *)
+    echo "Unsupported variant: $VARIANT (expected: no-license, licensed)" >&2
+    exit 1
+    ;;
+esac
+
+if [ -n "$OUTPUT_SUBDIR" ]; then
+  DIST_DIR="$ROOT_DIR/dist/$OUTPUT_SUBDIR"
+else
+  DIST_DIR="$ROOT_DIR/dist"
+fi
+
+if [ "$VARIANT" = "licensed" ]; then
+  TS_ENTRY="scripts/ts-server-entry-licensed.ts"
+else
+  TS_ENTRY="scripts/ts-server-entry-unlicensed.ts"
+fi
 
 cd "$ROOT_DIR"
 
@@ -13,7 +69,7 @@ bun install
 bun run build
 
 # Compile TS launcher executable with bun compile + minification
-bun build --compile --minify scripts/ts-server-entry.ts --outfile "$DIST_DIR/ts-server"
+bun build --compile --minify "$TS_ENTRY" --outfile "$DIST_DIR/ts-server"
 
 # Copy Next runtime assets needed by `next start`
 cp -r .next "$DIST_DIR/.next"
@@ -399,6 +455,7 @@ if command -v strip >/dev/null 2>&1; then
 fi
 
 export PAYLOAD_TAR="$(mktemp /tmp/huaweicloudai-payload-XXXXXX.tar.gz)"
+export HCAI_DIST_DIR="$DIST_DIR"
 tar -C "$DIST_DIR" -czf "$PAYLOAD_TAR" .
 bun -e '
 const fs = require("fs");
@@ -476,7 +533,7 @@ authTag.copy(footer, 24);
 MAGIC.copy(footer, 40);
 
 const out = Buffer.concat([stub, encryptedPayload, footer]);
-fs.writeFileSync("dist/huaweicloudai-single", out);
+fs.writeFileSync(`${process.env.HCAI_DIST_DIR}/huaweicloudai-single`, out);
 '
 rm -f "$PAYLOAD_TAR"
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSession } from "../sessionStore";
+import { enforceLicenseForApi } from "@/lib/license-guard";
 
 export const runtime = "nodejs";
 
@@ -11,6 +12,8 @@ type ConnectRequest = {
 };
 
 export async function POST(request: Request) {
+  const licenseError = await enforceLicenseForApi();
+  if (licenseError) return licenseError;
   const { host, port, username, password } = (await request.json()) as ConnectRequest;
 
   if (!host || !username || !password) {

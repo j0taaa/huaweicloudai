@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { enforceLicenseForApi } from "@/lib/license-guard";
 
 type WaitRequest = {
   seconds?: number;
@@ -8,6 +9,8 @@ const MIN_WAIT_SECONDS = 0;
 const MAX_WAIT_SECONDS = 120;
 
 export async function POST(request: Request) {
+  const licenseError = await enforceLicenseForApi();
+  if (licenseError) return licenseError;
   const body = (await request.json()) as WaitRequest;
   const seconds = body.seconds;
 

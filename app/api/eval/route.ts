@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import HuaweiCloudSigner from "../../../huawei_signer.js";
+import { enforceLicenseForApi } from "@/lib/license-guard";
 
 type ProjectIdEntry = {
   region: string;
@@ -84,6 +85,8 @@ const resolvePlaceholders = (
 };
 
 export async function POST(request: Request) {
+  const licenseError = await enforceLicenseForApi();
+  if (licenseError) return licenseError;
   const { code, context } = (await request.json()) as EvalRequest;
 
   if (!code) {

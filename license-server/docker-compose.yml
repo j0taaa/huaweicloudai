@@ -1,0 +1,16 @@
+services:
+  license-server:
+    build: .
+    ports:
+      - "8080:80"
+    environment:
+      PORT: 80
+      LICENSE_ADMIN_PASSWORD: change-me
+      # Optional shared secret for subserver requests:
+      # LICENSE_SHARED_SECRET: your-secret
+      # Required signing key (one of the two):
+      # LICENSE_SIGNING_PRIVATE_KEY_PEM: |
+      #   -----BEGIN PRIVATE KEY-----
+      #   ...
+      #   -----END PRIVATE KEY-----
+      # LICENSE_SIGNING_PRIVATE_KEY_PATH: /run/secrets/license_signing_key.pem
