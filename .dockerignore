@@ -4,3 +4,9 @@
 !dist/
 dist/*
 !dist/huaweicloudai-single
+!dist/licensed/
+dist/licensed/*
+!dist/licensed/huaweicloudai-single
+!dist/no-license/
+dist/no-license/*
+!dist/no-license/huaweicloudai-single

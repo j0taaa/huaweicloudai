@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sendCommand } from "../sessionStore";
+import { enforceLicenseForApi } from "@/lib/license-guard";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,8 @@ type SendRequest = {
 };
 
 export async function POST(request: Request) {
+  const licenseError = await enforceLicenseForApi();
+  if (licenseError) return licenseError;
   const { sessionId, command, appendNewline = true } = (await request.json()) as SendRequest;
 
   if (!sessionId || !command) {

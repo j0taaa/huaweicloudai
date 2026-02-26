@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import { getAppUserByUsername } from "@/lib/admin-db";
 import { getAppConfig } from "@/lib/app-config";
 import { registerUser } from "@/lib/user-auth";
+import { enforceLicenseForApi } from "@/lib/license-guard";
 
 export async function POST(request: Request) {
+  const licenseError = await enforceLicenseForApi();
+  if (licenseError) return licenseError;
   const config = getAppConfig();
   if (!config.loginEnabled) {
     return NextResponse.json({ error: "Login system is disabled." }, { status: 400 });

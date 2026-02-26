@@ -51,12 +51,8 @@ jobs:
             exit 1
           fi
 
-          if [ -f dist/licensed/huaweicloudai-single ]; then
-            cp -f dist/licensed/huaweicloudai-single dist/huaweicloudai-single
-          fi
-
-          if [ ! -f dist/huaweicloudai-single ]; then
-            echo "Expected dist/huaweicloudai-single was not produced by build."
+          if [ ! -f dist/licensed/huaweicloudai-single ]; then
+            echo "Expected dist/licensed/huaweicloudai-single was not produced by build."
             exit 1
           fi
 
@@ -99,7 +95,7 @@ jobs:
 
           docker build \
             -f Dockerfile.swr \
-            --build-arg DIST_PATH=dist \
+            --build-arg DIST_PATH=dist/licensed \
             --build-arg DEFAULT_LICENSE_MODE=client \
             --build-arg DEFAULT_LICENSE_ENFORCEMENT=required \
             -t "${APP_IMAGE}:${IMAGE_TAG}" \
@@ -119,12 +115,9 @@ jobs:
           LICENSE_IMAGE="${SWR_REGISTRY}/${SWR_ORG}/${LICENSE_SERVER_IMAGE_NAME}"
 
           docker build \
-            -f Dockerfile.swr \
-            --build-arg DIST_PATH=dist \
-            --build-arg DEFAULT_LICENSE_MODE=authority \
-            --build-arg DEFAULT_LICENSE_ENFORCEMENT=disabled \
+            -f license-server/Dockerfile \
             -t "${LICENSE_IMAGE}:${IMAGE_TAG}" \
-            .
+            license-server
           docker push "${LICENSE_IMAGE}:${IMAGE_TAG}"
 
           if [ "${PUSH_LATEST}" = "true" ]; then

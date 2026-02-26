@@ -2,10 +2,10 @@ services:
   web:
     build: .
     ports:
-      - "3000:3000"
+      - "3000:80"
     env_file:
       - .env
     environment:
       NODE_ENV: production
-      PORT: 3000
+      PORT: 80
       RAG_SERVER_URL: http://127.0.0.1:8088

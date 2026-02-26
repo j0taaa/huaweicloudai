@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 FROM debian:bookworm-slim AS runner
 WORKDIR /app
+ARG DIST_PATH=dist
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -9,10 +10,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=80
 
-COPY dist/huaweicloudai-single ./huaweicloudai-single
+COPY ${DIST_PATH}/huaweicloudai-single ./huaweicloudai-single
 RUN chmod 0755 ./huaweicloudai-single
 
-EXPOSE 3000
+EXPOSE 80
 CMD ["./huaweicloudai-single"]

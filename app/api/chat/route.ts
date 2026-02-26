@@ -3,6 +3,7 @@ import { ProxyAgent } from "undici";
 import { getAppConfig } from "@/lib/app-config";
 import { requireApprovedUser } from "@/lib/user-auth";
 import { DEFAULT_SYSTEM_PROMPT } from "./system-prompt";
+import { enforceLicenseForApi } from "@/lib/license-guard";
 
 type ChatMessage = {
   role: "user" | "assistant" | "system" | "tool";
@@ -123,6 +124,8 @@ const buildSystemPrompt = (context: ChatRequest["context"] = {}) => {
 };
 
 export async function POST(request: Request) {
+  const licenseError = await enforceLicenseForApi();
+  if (licenseError) return licenseError;
   const { messages, context, inference } = (await request.json()) as ChatRequest;
 
   if (!Array.isArray(messages) || messages.length === 0) {
