@@ -41,7 +41,17 @@ jobs:
           sudo apt-get install -y build-essential cmake
 
       - name: Build licensed release artifacts
-        run: bun run build:release:licensed
+        run: |
+          if bun -e 'const p=require("./package.json"); process.exit(p.scripts && p.scripts["build:release:licensed"] ? 0 : 1);'; then
+            bun run build:release:licensed
+          elif bun -e 'const p=require("./package.json"); process.exit(p.scripts && p.scripts["build:release"] ? 0 : 1);'; then
+            bun run build:release
+            mkdir -p dist/licensed
+            find dist -mindepth 1 -maxdepth 1 ! -name licensed -exec cp -a {} dist/licensed/ \;
+          else
+            echo "Neither build:release:licensed nor build:release exists in package.json"
+            exit 1
+          fi
 
       - name: Resolve image tag
         id: meta
@@ -83,6 +93,8 @@ jobs:
           docker build \
             -f Dockerfile.swr \
             --build-arg DIST_PATH=dist/licensed \
+            --build-arg DEFAULT_LICENSE_MODE=client \
+            --build-arg DEFAULT_LICENSE_ENFORCEMENT=required \
             -t "${APP_IMAGE}:${IMAGE_TAG}" \
             .
           docker push "${APP_IMAGE}:${IMAGE_TAG}"
