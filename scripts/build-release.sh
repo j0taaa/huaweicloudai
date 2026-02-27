@@ -203,6 +203,9 @@ async function minifyFile(filePath) {
   const ext = path.extname(filePath);
   if (!exts.has(ext)) return false;
   if (minifiedSuffixes.some((suffix) => filePath.endsWith(suffix))) return false;
+  // Avoid touching Next server runtime artifacts. Over-minification here can
+  // break Turbopack chunk loading in the compiled launcher.
+  if (filePath.includes("/.next/server/")) return false;
 
   const original = fs.readFileSync(filePath, "utf8");
   if (!original.trim()) return false;

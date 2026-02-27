@@ -450,6 +450,7 @@ export default function Home() {
   } | null>(null);
   const [compactMenuOpen, setCompactMenuOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const [extensionInstallModalOpen, setExtensionInstallModalOpen] = useState(false);
   const [checklistCollapsed, setChecklistCollapsed] = useState(false);
   const [isDevMode, setIsDevMode] = useState(false);
   const [editingMessageIndex, setEditingMessageIndex] = useState<number | null>(null);
@@ -711,6 +712,19 @@ export default function Home() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [themeMenuOpen]);
+
+  useEffect(() => {
+    if (!extensionInstallModalOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setExtensionInstallModalOpen(false);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [extensionInstallModalOpen]);
 
   useEffect(() => {
     setChecklistCollapsed(false);
@@ -3166,12 +3180,13 @@ export default function Home() {
                 </div>
               ) : null}
             </div>
-            <a
-              href="/api/extension-download"
+            <button
+              type="button"
+              onClick={() => setExtensionInstallModalOpen(true)}
               className="rounded-full border border-white/60 bg-gradient-to-r from-sky-600 via-indigo-600 to-blue-600 px-3 py-1 text-xs font-semibold text-white shadow-md transition hover:from-sky-500 hover:via-indigo-500 hover:to-blue-500 dark:border-white/20"
             >
               Download extension ZIP
-            </a>
+            </button>
             <div className="rounded-full border border-white/70 bg-white/80 px-3 py-1 text-xs font-semibold text-zinc-600 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/70 dark:text-zinc-300">
               {tokenCountLabel}: {tokenFormatter.format(estimatedTokenCount)}
             </div>
@@ -3833,6 +3848,70 @@ export default function Home() {
             <pre className="mt-4 max-h-[60vh] overflow-y-auto rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-xs text-zinc-800 dark:border-white/10 dark:bg-white/5 dark:text-zinc-100">
               {activeToolPreview.code}
             </pre>
+          </div>
+        </div>
+      ) : null}
+
+      {extensionInstallModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-8">
+          <button
+            type="button"
+            className="absolute inset-0"
+            aria-label="Close extension installation instructions"
+            onClick={() => setExtensionInstallModalOpen(false)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="extension-install-title"
+            className="relative w-full max-w-xl rounded-3xl bg-white p-6 shadow-xl dark:bg-zinc-950"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+                  Chrome extension setup
+                </p>
+                <h2
+                  id="extension-install-title"
+                  className="text-xl font-semibold text-zinc-900 dark:text-white"
+                >
+                  Install the extension manually in Chrome
+                </h2>
+              </div>
+              <button
+                className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+                type="button"
+                onClick={() => setExtensionInstallModalOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+            <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-zinc-700 dark:text-zinc-200">
+              <li>Download the ZIP file.</li>
+              <li>Extract it to a folder on your computer.</li>
+              <li>Open Chrome and go to `chrome://extensions`.</li>
+              <li>Turn on Developer mode (top-right).</li>
+              <li>Click Load unpacked and select the extracted folder.</li>
+            </ol>
+            <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">
+              Keep the extracted folder where it is. Moving or deleting it will disable
+              the extension.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-white/10 dark:text-zinc-300 dark:hover:border-white/30 dark:hover:text-white"
+                onClick={() => setExtensionInstallModalOpen(false)}
+              >
+                Not now
+              </button>
+              <a
+                href="/api/extension-download"
+                className="rounded-full bg-gradient-to-r from-sky-600 via-indigo-600 to-blue-600 px-3 py-1 text-xs font-semibold text-white shadow-md transition hover:from-sky-500 hover:via-indigo-500 hover:to-blue-500"
+              >
+                Download ZIP
+              </a>
+            </div>
           </div>
         </div>
       ) : null}

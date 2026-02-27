@@ -60,6 +60,9 @@ export default async function RootLayout({
     <html lang="en">
       <body className="antialiased">
         {children}
+        <div className="pointer-events-none fixed bottom-1 right-1 z-[5] max-w-[40vw] truncate font-mono text-[10px] text-zinc-600/75 dark:text-zinc-300/70 select-none">
+          {license.machineId}
+        </div>
       </body>
     </html>
   );

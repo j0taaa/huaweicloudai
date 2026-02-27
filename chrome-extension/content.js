@@ -363,6 +363,7 @@ if (!existingWidget) {
   let activeServerUrl = DEFAULT_SERVER_URL;
   let storedProjectIds = [];
   let inferenceMode = "default";
+  let builtInInferenceEnabled = null;
   let isDevMode = false;
   let inferenceSettings = {
     baseUrl: "",
@@ -711,10 +712,12 @@ if (!existingWidget) {
         method: "GET",
       });
       loginEnabled = Boolean(configPayload?.loginEnabled);
+      builtInInferenceEnabled = configPayload?.builtInInferenceEnabled !== false;
 
       if (!loginEnabled) {
         isAuthenticated = true;
         authUsername = "";
+        setInferenceMode(inferenceMode);
         updateAuthUi();
         return;
       }
@@ -727,10 +730,12 @@ if (!existingWidget) {
         typeof sessionPayload?.username === "string" ? sessionPayload.username : "";
     } catch {
       loginEnabled = false;
+      builtInInferenceEnabled = false;
       isAuthenticated = true;
       authUsername = "";
     }
 
+    setInferenceMode(inferenceMode);
     updateAuthUi();
   };
 
@@ -1008,10 +1013,10 @@ if (!existingWidget) {
   };
 
   const renderAssistantMessageContent = (content) => {
-    const chartBlockPattern = /```chart\s*([\s\S]*?)```/g;
+    const fencedBlockPattern = /```([^\s`\n]+)?[ \t]*\n?([\s\S]*?)```/g;
     const blocks = [];
     let lastIndex = 0;
-    let match = chartBlockPattern.exec(content);
+    let match = fencedBlockPattern.exec(content);
 
     while (match) {
       const markdownContent = content.slice(lastIndex, match.index).trim();
@@ -1019,17 +1024,32 @@ if (!existingWidget) {
         blocks.push(renderMarkdown(markdownContent));
       }
 
-      const rawChartData = (match[1] || "").trim();
-      const chartData = parseChartData(rawChartData);
+      const language = (match[1] || "").trim();
+      const normalizedLanguage = language.toLowerCase();
+      const rawBlockContent = (match[2] || "").trim();
+      const chartData = parseChartData(rawBlockContent);
+      const isChartFence = normalizedLanguage.startsWith("chart");
+      const isLikelyChartJsonFence =
+        normalizedLanguage === "json" &&
+        /"label"\s*:/.test(rawBlockContent) &&
+        /"value"\s*:/.test(rawBlockContent);
+      const isUnnamedChartPayload =
+        normalizedLanguage === "" &&
+        /"label"\s*:/.test(rawBlockContent) &&
+        /"value"\s*:/.test(rawBlockContent);
 
-      if (chartData) {
+      if (chartData && (isChartFence || isLikelyChartJsonFence || isUnnamedChartPayload)) {
         blocks.push(renderChartBlock(chartData));
+      } else if (isChartFence) {
+        const fencedChartBlock = `\`\`\`${language}\n${rawBlockContent}\n\`\`\``;
+        blocks.push(renderMarkdown(fencedChartBlock));
       } else {
-        blocks.push(renderMarkdown(`\`\`\`chart\n${rawChartData}\n\`\`\``));
+        const fencedCodeBlock = `\`\`\`${language}\n${rawBlockContent}\n\`\`\``;
+        blocks.push(renderMarkdown(fencedCodeBlock));
       }
 
-      lastIndex = chartBlockPattern.lastIndex;
-      match = chartBlockPattern.exec(content);
+      lastIndex = fencedBlockPattern.lastIndex;
+      match = fencedBlockPattern.exec(content);
     }
 
     const remainingContent = content.slice(lastIndex).trim();
@@ -1819,7 +1839,14 @@ if (!existingWidget) {
       const data = await requestServer(
         activeServerUrl,
         "/api/eval",
-        { code: payload.code },
+        {
+          code: payload.code,
+          context: {
+            accessKey: accessKeyInput.value.trim(),
+            secretKey: secretKeyInput.value.trim(),
+            projectIds: storedProjectIds,
+          },
+        },
         { signal },
       );
       return {
@@ -2515,17 +2542,26 @@ if (!existingWidget) {
   });
 
   const setInferenceMode = (mode) => {
-    inferenceMode = mode;
+    const builtInAvailable = builtInInferenceEnabled === true;
+    const resolvedMode =
+      builtInInferenceEnabled === false && mode === "default" ? "custom" : mode;
+    inferenceMode = resolvedMode;
+    inferenceDefaultButton.style.display = builtInAvailable ? "" : "none";
+    if (!builtInAvailable) {
+      inferenceToggle.classList.add("hwc-chat-toggle-group-single");
+    } else {
+      inferenceToggle.classList.remove("hwc-chat-toggle-group-single");
+    }
     inferenceDefaultButton.classList.toggle(
       "hwc-chat-toggle-option-active",
-      mode === "default",
+      resolvedMode === "default",
     );
     inferenceCustomButton.classList.toggle(
       "hwc-chat-toggle-option-active",
-      mode === "custom",
+      resolvedMode === "custom",
     );
-    inferenceFields.style.display = mode === "custom" ? "flex" : "none";
-    storageSet({ [INFERENCE_MODE_STORAGE_KEY]: mode });
+    inferenceFields.style.display = resolvedMode === "custom" ? "flex" : "none";
+    storageSet({ [INFERENCE_MODE_STORAGE_KEY]: resolvedMode });
   };
 
   const updateInferenceSettings = () => {

@@ -37,6 +37,37 @@ const collectFiles = async (dir: string, rootDir: string): Promise<FileEntry[]> 
 };
 
 const DEFAULT_SERVER_URL_PLACEHOLDER = "http://1.178.45.234:3000";
+const DEFAULT_PUBLIC_SERVER_URL =
+  process.env.HUAWEICLOUDAI_PUBLIC_ORIGIN?.trim() || "https://ai.hwctools.site";
+
+const getPublicOrigin = (request: Request): string => {
+  const forwardedHostHeader = request.headers.get("x-forwarded-host");
+  const forwardedProtoHeader = request.headers.get("x-forwarded-proto");
+  const hostHeader = request.headers.get("host");
+
+  const forwardedHost = forwardedHostHeader?.split(",")[0]?.trim() ?? "";
+  const forwardedProto = forwardedProtoHeader?.split(",")[0]?.trim() ?? "";
+  if (forwardedHost) {
+    const protocol = forwardedProto || "https";
+    return `${protocol}://${forwardedHost}`;
+  }
+
+  if (hostHeader) {
+    const originFromHost = `${new URL(request.url).protocol}//${hostHeader}`;
+    const normalizedHost = hostHeader.toLowerCase();
+    if (normalizedHost !== "localhost" && !normalizedHost.startsWith("localhost:")) {
+      return originFromHost;
+    }
+  }
+
+  const requestOrigin = new URL(request.url).origin;
+  const requestHostname = new URL(request.url).hostname.toLowerCase();
+  if (requestHostname !== "localhost" && requestHostname !== "127.0.0.1") {
+    return requestOrigin;
+  }
+
+  return DEFAULT_PUBLIC_SERVER_URL;
+};
 
 const buildExtensionZip = async (defaultServerUrl: string): Promise<ArrayBuffer> => {
   const extensionStats = await fs.stat(EXTENSION_DIR);
@@ -74,7 +105,7 @@ export async function GET(request: Request) {
   const licenseError = await enforceLicenseForApi();
   if (licenseError) return licenseError;
   try {
-    const defaultServerUrl = new URL(request.url).origin;
+    const defaultServerUrl = getPublicOrigin(request);
     const zipData = await buildExtensionZip(defaultServerUrl);
     const zipBlob = new Blob([zipData], { type: "application/zip" });
 
