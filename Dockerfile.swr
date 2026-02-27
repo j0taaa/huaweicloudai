@@ -2,7 +2,7 @@
 # trixie provides newer libstdc++ (GLIBCXX_3.4.32) required by huaweicloudai-single
 FROM debian:trixie-slim AS runner
 WORKDIR /app
-ARG DIST_PATH=dist
+ARG DIST_PATH=dist/licensed
 ARG DEFAULT_LICENSE_MODE=
 ARG DEFAULT_LICENSE_ENFORCEMENT=
 

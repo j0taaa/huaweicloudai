@@ -154,6 +154,9 @@ fs.writeFileSync(runtimePath, patched);
 fi
 
 # Minify shipped JS payload files before sealing monolithic artifact.
+# Set HCAI_SKIP_JS_MINIFY=1 to skip this step when prioritizing build speed
+# or when debugging runtime issues potentially introduced by minification.
+if [ "${HCAI_SKIP_JS_MINIFY:-0}" != "1" ]; then
 bun -e '
 const fs = require("fs");
 const path = require("path");
@@ -255,6 +258,9 @@ async function minifyFile(filePath) {
   console.log(`Minified ${minifiedCount} JS payload files (skipped ${skippedCount})`);
 })();
 ' "$DIST_DIR"
+else
+  echo "Skipping JS payload minification (HCAI_SKIP_JS_MINIFY=1)"
+fi
 
 # Work around Bun compiled-runtime ESM resolver failing to locate bare
 # third-party imports from @xenova/transformers internals.

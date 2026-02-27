@@ -1,6 +1,6 @@
 import Database from "bun:sqlite";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,7 +26,32 @@ const findProjectRoot = () => {
   return process.cwd();
 };
 
-const ADMIN_DB_PATH = process.env.ADMIN_DB_PATH ?? join(findProjectRoot(), "admin.db");
+const resolveAdminDbPath = () => {
+  const envPath = process.env.ADMIN_DB_PATH?.trim();
+  if (envPath) {
+    return envPath;
+  }
+
+  const appRoot = process.env.APP_ROOT?.trim() ?? "";
+  const looksLikeMonolithTmp = appRoot.includes("/tmp/huaweicloudai-monolith-");
+
+  const candidates = looksLikeMonolithTmp
+    ? ["/data/admin.db", join(findProjectRoot(), "admin.db")]
+    : [join(findProjectRoot(), "admin.db")];
+
+  for (const candidate of candidates) {
+    try {
+      mkdirSync(dirname(candidate), { recursive: true });
+      return candidate;
+    } catch {
+      continue;
+    }
+  }
+
+  return join(process.cwd(), "admin.db");
+};
+
+const ADMIN_DB_PATH = resolveAdminDbPath();
 
 const db = new Database(ADMIN_DB_PATH, { create: true, readwrite: true });
 
